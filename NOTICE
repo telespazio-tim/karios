@@ -1,0 +1,11 @@
+Karios
+Copyright 2024 Telespazio France
+
+This product includes software developed at Telespazio France (https://www.telespazio.fr/)
+
+The initial development of Karios is funded by ESA for EDAP project (https://earth.esa.int/eogateway/activities/edap).
+
+The Initial Developer of some parts of kraios/klt_matcher/matcher.py,
+which is copied from, derived from, and inspired by Sen2like (https://github.com/senbox-org/sen2like/ module klt.py),
+is Telespazio France (https://www.telespazio.fr/), and funded by ESA.
+Copyright 2023 ESA.
