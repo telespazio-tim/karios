@@ -18,4 +18,4 @@
 
 
 """version info module."""
-__version__ = "00.00.01"
+__version__ = "1.0.0"
