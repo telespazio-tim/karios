@@ -1,0 +1,4 @@
+FROM continuumio/miniconda3:22.11.1
+
+# python cv2 needs libgl
+RUN apt update && apt install -y libgl1-mesa-glx && apt clean

@@ -1,0 +1,7 @@
+**/__pycache__
+**/.pytest_cache
+.vscode
+results/
+.coverage
+coverage.xml
+junit.xml
