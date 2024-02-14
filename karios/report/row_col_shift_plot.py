@@ -185,7 +185,7 @@ class RowColShiftPlot:
         """line plot dim shift along row (vertical line plot)
 
         Args:
-            ax_col (Axes): matplotlib figure axes to plot in
+            ax_row (Axes): matplotlib figure axes to plot in
             dim (str): name of the series of the `points` dataframe to plot (dx/dy)
         """
         # Compute stats
@@ -206,7 +206,7 @@ class RowColShiftPlot:
             color="grey",
             # edgecolor="grey",
             alpha=0.2,
-            label="KP per col",
+            label="KP per row",
         )
         # show legend
         ax_row.legend(loc="lower right")
