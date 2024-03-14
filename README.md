@@ -16,19 +16,19 @@ To overcome this situation, thanks to funding of  ESA / EDAP [EDAP](https://eart
 
 The KARIOS tool has been designed to analyse geometric deformations within optical / radar images.  For this purpose, the tool performs image matching and generate several key graphical presentations and compute accuracy statistics.
 
-Image matching process does not follow traditional approach because it is based on feature point matching (corner). A [KLT](https://en.wikipedia.org/wiki/Kanade%E2%80%93Lucas%E2%80%93Tomasi_feature_tracker) implementation available in OpenCV library is used in KARIOS. Also, the Candidate point selection is done with GoodFeaturesToTrack function and matching is done  with calcOpticalFlowPyrLK function. 
+Image matching process does not follow traditional approach because it is based on feature point matching (corner). A [KLT](https://en.wikipedia.org/wiki/Kanade%E2%80%93Lucas%E2%80%93Tomasi_feature_tracker) implementation available in OpenCV library is used in KARIOS. Also, the Candidate point selection is done with GoodFeaturesToTrack function and matching is done  with calcOpticalFlowPyrLK function.
 
-As show in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering)  / post-processing (outlier filtering). 
+As show in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering)  / post-processing (outlier filtering).
 
 ![functional representation](docs/images/algorithm.PNG)
 
-Furthermore, KARIOS analyses displacements between the two input image grids both in line and pixel direction outputing, providing user with the three following items: 
+Furthermore, KARIOS analyses displacements between the two input image grids both in line and pixel direction outputing, providing user with the three following items:
 
-- Geometric Error overview  
+- Geometric Error overview
 ![Geometric Error overview](docs/images/error_overview.PNG)
-- Geometric accuracy report  
+- Geometric accuracy report
 ![Geometric accuracy report](docs/images/statistical_report.PNG)
-- Geometric distortion analysis report  
+- Geometric distortion analysis report
 ![Geometric distortion analysis report](docs/images/disparity_map.PNG)
 
 The geometric accuracy report includes the following accuracy metrics, in both directions when relevant:
@@ -50,7 +50,7 @@ To do so, install [conda](https://docs.conda.io/projects/conda/en/stable/user-gu
 conda env create -f environment.yml
 ```
 
-Then activate the env: 
+Then activate the env:
 
 ```bash
 conda activate karios
@@ -64,7 +64,7 @@ KARIOS takes as mandatory inputs :
 
 > Input files shall contain only one layer of data, and the format shall recognized by gdal library.
 
-Sample: 
+Sample:
 
 ```bash
 python karios/karios.py \
@@ -72,12 +72,12 @@ python karios/karios.py \
     /data/References/GRI/T12SYH_20220514T175909_B04.jp2
 ```
 
-### Outputs: 
+### Outputs:
 
 - csv file: list of key points and associated dx/dy deviations
 - png file: visualisation of the deviations
 
-### CLI options : 
+### CLI options :
 
 ```
 usage: karios.py [-h] [--mask MASK] [--conf CONF] [--out OUT] [--resume] [--generate-key-points-mask] [--input-pixel-size PIXEL_SIZE] [--no-log-file] [--debug]
@@ -108,7 +108,7 @@ options:
 
 > Notice that default folder and file path are adapted to your KARIOS install folder.
 
-## Configuration 
+## Configuration
 
 The default configuration is located in [karios/configuration/processing_configuration.json](karios/configuration/processing_configuration.json)
 
@@ -118,18 +118,18 @@ The default configuration is located in [karios/configuration/processing_configu
 - `xStart` : image X margin to apply (margin is skipped by the matcher)
 - `tile_size` : tile size to process by KTL in the input image
 - `laplacian_kernel_size` : Aperture size used to compute the second-derivative filters of Laplacian process
-- 
+-
 The following parameter allows to control how to find the most prominent corners in the
 reference image, as described by the OpenCV documentation goodFeaturesToTrack, after applying Laplacian.
 
 - `minDistance` : Minimum possible Euclidean distance between the returned corners.
 - `blocksize` : Size of an average block for computing a derivative covariation matrix over each pixel neighbourhood.
-- `maxCorners` : Maximum number of corners to extract. If there are more corners than are found, the strongest of them is returned.  
-`maxCorners <= 0` implies that no limit on the maximum is set and all detected corners are returned.
-- `qualityLevel` : Parameter characterizing the minimal accepted quality of image corners.  
-The parameter value is multiplied by the best corner quality measure.  
-The corners with the quality measure less than the product are rejected.  
-For example, if the best corner has the quality measure = 1500, and the qualityLevel=0.01, 
+- `maxCorners` : Maximum number of corners to extract. If there are more corners than are found, the strongest of them is returned.
+`maxCorners = 0` implies that no limit on the maximum is set and all detected corners are returned.
+- `qualityLevel` : Parameter characterizing the minimal accepted quality of image corners.
+The parameter value is multiplied by the best corner quality measure.
+The corners with the quality measure less than the product are rejected.
+For example, if the best corner has the quality measure = 1500, and the qualityLevel=0.01,
 then all the corners with the quality measure less than 15 are rejected.
 - `matching_winsize` : size of the search window during matching corners in the reference and the monitored Laplacian images.
 - `outliers_filtering` : whether to filter or not the outliers points found during the matching.
@@ -138,7 +138,7 @@ Refer to section [KLT param leverage](#klt-param-leverage) for details
 
 ### accuracy_analysis
 
-- `confidence_threshold` : max score for points found by the matcher to use to compute statistics written in correl_res.txt.  
+- `confidence_threshold` : max score for points found by the matcher to use to compute statistics written in correl_res.txt.
 If `None`, not applied.
 
 ### plot_configuration.overview
