@@ -24,8 +24,9 @@ import os
 from dataclasses import dataclass
 
 import numpy as np
-from core.configuration import AccuracyAnalysisConfiguration
 from pandas import DataFrame
+
+from core.configuration import AccuracyAnalysisConfiguration
 
 logger = logging.getLogger()
 

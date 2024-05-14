@@ -24,11 +24,12 @@ from collections.abc import Iterator
 
 import cv2
 import numpy as np
-from core.configuration import KLTConfiguration
-from core.image import GdalRasterImage
 from numpy.typing import NDArray
 from pandas import DataFrame
 from skimage import io
+
+from core.configuration import KLTConfiguration
+from core.image import GdalRasterImage
 
 logger = logging.getLogger()
 

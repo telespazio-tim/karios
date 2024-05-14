@@ -21,15 +21,16 @@ import logging
 from pathlib import Path
 
 import numpy as np
-from accuracy_analysis.accuracy_statistics import GeometricStat
-from core.configuration import CEPlotConfiguration
-from core.image import GdalRasterImage
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from report.commons import add_logo
 from scipy import stats as sp_stats
 from scipy.interpolate import interpn
+
+from accuracy_analysis.accuracy_statistics import GeometricStat
+from core.configuration import CEPlotConfiguration
+from core.image import GdalRasterImage
+from report.commons import add_logo
 
 logger = logging.getLogger()
 

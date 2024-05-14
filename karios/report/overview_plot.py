@@ -20,13 +20,14 @@ import logging
 from pathlib import Path
 
 import numpy as np
-from core.configuration import OverviewPlotConfiguration
-from core.image import GdalRasterImage
 from matplotlib import colors
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from pandas import DataFrame, Series
+
+from core.configuration import OverviewPlotConfiguration
+from core.image import GdalRasterImage
 from report.commons import add_logo
 
 logger = logging.getLogger()
