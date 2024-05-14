@@ -21,7 +21,6 @@
 
 import logging
 import os
-from dataclasses import dataclass
 
 import numpy as np
 from pandas import DataFrame
