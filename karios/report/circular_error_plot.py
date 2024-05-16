@@ -143,16 +143,31 @@ class CircularErrorPlot:
 
         return (hist, bins)
 
-    def _ce_scatter(
-        self,
-        axes: Axes,
-        title=None,
-    ):
-        if title is None:
-            title_figure = " "
-        else:
-            title_figure = title
+    def _set_header(self, axes: Axes):
+        axes.axis("off")
+        text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
+        axes.text(x=0, y=0, s=text, size="12", ha="left", va="top")
 
+        # Add disclaimer
+        if not self._mon_img.get_epsg() or (self._mon_img.get_epsg() != self._ref_img.get_epsg()):
+            axes.text(
+                x=0.5,
+                y=0.5,
+                s="\n".join(
+                    [
+                        "Disclaimer: ",
+                        "Planimetric accuracy results may not be relevant in the case of",
+                        "input images provided without, or not identical map projection",
+                    ]
+                ),
+                # color="orange",
+                size="14",
+                ha="center",
+                va="bottom",
+                bbox={"facecolor": "none", "edgecolor": "red", "pad": 5.0},
+            )
+
+    def _ce_scatter(self, axes: Axes):
         # Computation CE90 2D :
         ce_90 = self._stats.compute_percentile(0.9, self._img_res)
         x = self._stats.v_x_th * self._img_res
@@ -199,7 +214,7 @@ class CircularErrorPlot:
 
         axes.grid()
 
-        axes.set_title(title_figure, fontsize=11)
+        axes.set_title("Circular Error Plot @ 90 percentile", fontsize=11)
 
         return scatter
 
@@ -361,34 +376,11 @@ class CircularErrorPlot:
         ax_col.tick_params(axis="x", labelbottom=False)
         ax_row.tick_params(axis="y", labelleft=False)
 
-        ax_header.axis("off")
-        text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
-        ax_header.text(x=0, y=0, s=text, size="12", ha="left", va="top")
-
-        if not self._mon_img.get_epsg() or (self._mon_img.get_epsg() != self._ref_img.get_epsg()):
-            ax_header.text(
-                x=0.5,
-                y=0.5,
-                s="\n".join(
-                    [
-                        "Disclaimer: ",
-                        "Planimetric accuracy results may not be relevant in the case of",
-                        "input images provided without, or not identical map projection",
-                    ]
-                ),
-                # color="orange",
-                size="14",
-                ha="center",
-                va="bottom",
-                bbox=dict(facecolor="none", edgecolor="red", pad=5.0),
-            )
+        # Add input images name and disclaimer if needed
+        self._set_header(ax_header)
 
         #  Plot Scatter :
-        title_label = "Circular Error Plot @ 90 percentile"
-        scatter_plot = self._ce_scatter(
-            ax_scatter,
-            title=title_label,
-        )
+        scatter_plot = self._ce_scatter(ax_scatter)
 
         # ///////////////////////////////////////
         # plot col
