@@ -327,6 +327,7 @@ class CircularErrorPlot:
             output_file (Path): path to the image output file
         """
         fig = plt.figure(figsize=(self._conf.fig_size * 5 / 3, self._conf.fig_size * 1.2))
+
         fig.suptitle(
             "Geometric Error distribution",
             size="16",
@@ -361,7 +362,25 @@ class CircularErrorPlot:
 
         ax_header.axis("off")
         text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
-        ax_header.text(x=0, y=0.5, s=text, size="12", ha="left", va="center")
+        ax_header.text(x=0, y=0, s=text, size="12", ha="left", va="top")
+
+        if not self._mon_img.get_epsg() or (self._mon_img.get_epsg() != self._ref_img.get_epsg()):
+            ax_header.text(
+                x=0.5,
+                y=0.5,
+                s="\n".join(
+                    [
+                        "Disclaimer: ",
+                        "Planimetric accuracy results may not be relevant in the case of",
+                        "input images provided without, or not identical map projection",
+                    ]
+                ),
+                # color="orange",
+                size="14",
+                ha="center",
+                va="bottom",
+                bbox=dict(facecolor="none", edgecolor="red", pad=5.0),
+            )
 
         #  Plot Scatter :
         title_label = "Circular Error Plot @ 90 percentile"
