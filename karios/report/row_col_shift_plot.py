@@ -23,12 +23,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from core.configuration import ShiftPlotConfiguration
-from core.image import GdalRasterImage
 from matplotlib import colors
 from matplotlib.axes import Axes
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from numpy.typing import NDArray
+
+from core.configuration import ShiftPlotConfiguration
+from core.image import GdalRasterImage
 from report.commons import add_logo
 
 

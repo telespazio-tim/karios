@@ -26,6 +26,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from osgeo import gdal
+
 from accuracy_analysis.accuracy_statistics import GeometricStat
 from argparser import parse_args
 from core.configuration import Configuration
@@ -33,7 +35,6 @@ from core.image import GdalRasterImage, get_image_resolution
 from core.utils import get_filename
 from klt_matcher.matcher import KLT
 from log import configure_logging
-from osgeo import gdal
 from report.circular_error_plot import CircularErrorPlot
 from report.overview_plot import OverviewPlot
 from report.row_col_shift_plot import RowColShiftPlot
