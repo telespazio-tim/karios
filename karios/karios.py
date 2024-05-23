@@ -20,6 +20,7 @@
 """KARIOS entry point module."""
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -312,6 +313,8 @@ def main(argv: list[str]) -> int:
     # do the job
     match_and_plot = MatchAndPlot(conf)
     match_and_plot.process(args.mon, args.ref, args.mask, args.resume)
+
+    shutil.copy(conf.values.configuration, conf.values.output_directory)
 
     return 0
 
