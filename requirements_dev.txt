@@ -9,3 +9,12 @@ pylint==3.0.3
 pyment==0.3.3
 pytest-cov==4.1.0
 setuptools>=77.0
+# doc/sphinx
+sphinx>=7.3.7
+myst-parser>=3.0.1
+# pip:
+    # - ansys-sphinx-theme
+pydata-sphinx-theme>=0.15.2
+sphinx-design>=0.5.0
+# TODO : to install with pip
+sphinxcontrib-images>=0.9.4
