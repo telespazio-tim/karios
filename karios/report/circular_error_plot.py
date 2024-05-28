@@ -141,11 +141,7 @@ class CircularErrorPlot(AbstractPlot):
         self._set_header(ax_header)
 
         #  Plot Scatter :
-        title_label = "Circular Error Plot @ 90 percentile"
-        scatter_plot = self._ce_scatter(
-            ax_scatter,
-            title=title_label,
-        )
+        scatter_plot = self._ce_scatter(ax_scatter)
 
         # ///////////////////////////////////////
         # plot col
