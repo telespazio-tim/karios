@@ -32,6 +32,7 @@ from osgeo import gdal
 from accuracy_analysis.accuracy_statistics import GeometricStat
 from argparser import parse_args
 from core.configuration import Configuration
+from core.errors import KariosException
 from core.image import GdalRasterImage, get_image_resolution
 from core.utils import get_filename
 from klt_matcher.matcher import KLT
@@ -41,6 +42,7 @@ from report.overview_plot import OverviewPlot
 from report.row_col_shift_plot import RowColShiftPlot
 from version import __version__
 
+gdal.UseExceptions()
 logger = logging.getLogger(__name__)
 
 
@@ -288,8 +290,23 @@ class MatchAndPlot:
         monitored_image = GdalRasterImage(mon_file_path)
         reference_image = GdalRasterImage(ref_file_path)
 
+        if not monitored_image.is_compatible_with(reference_image):
+            raise KariosException(
+                f"""Monitored image geo info not compatible with reference image:
+            * Monitored image : {monitored_image.image_information}
+            * Reference image : {reference_image.image_information}
+            """
+            )
+
         if mask_file_path is not None:
             mask = GdalRasterImage(mask_file_path)
+            if not mask.is_compatible_with(reference_image):
+                raise KariosException(
+                    f"""Mask geo info not compatible with reference image:
+                * Monitored image : {mask.image_information}
+                * Reference image : {reference_image.image_information}
+                """
+                )
         else:
             mask = None
 

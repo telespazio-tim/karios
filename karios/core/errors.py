@@ -20,7 +20,11 @@
 """Error/Exceptions classes modules."""
 
 
-class ConfigurationError(Exception):
+class KariosException(Exception):
+    """Base class for KARIOS exception."""
+
+
+class ConfigurationError(KariosException):
     """Base class for Configuration errors."""
 
     def __init__(self, message):

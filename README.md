@@ -75,6 +75,9 @@ KARIOS takes as mandatory inputs :
 
 > Input files shall contain only one layer of data, and the format shall recognized by gdal library.
 
+> **NOTICE**: Inputs images grids should be comparable.  
+> That means geo coded images must have the same footprint, same geo transform information (same EPSG code) and same resolution. Image pixel resolution should also be square (same X,Y) and unit meter.
+
 Sample:
 
 ```bash

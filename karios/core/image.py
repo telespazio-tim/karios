@@ -99,18 +99,50 @@ class GdalRasterImage:
         self._read_header()
         self._array = None
 
+    @property
+    def x_res(self) -> int | float:
+        """X resolution
+
+        Returns:
+            int | float: image X resolution
+        """
+        return self._geo[1]
+
+    @property
+    def y_res(self) -> int | float:
+        """Y resolution
+
+        Returns:
+            int | float: image Y resolution, could be negative depending image SRS
+        """
+        return self._geo[5]
+
+    @property
+    def x_min(self) -> int | float:
+        """UL pixel X coordinate
+
+        Returns:
+            int | float: UL X coordinate in image SRS if any
+        """
+        return self._geo[0]
+
+    @property
+    def y_max(self) -> int | float:
+        """UL pixel Y coordinate
+
+        Returns:
+            int | float: UL Y coordinate in image SRS if any
+        """
+        return self._geo[3]
+
     def _read_header(self):
         # geo information
         dataset = gdal.Open(self.filepath)
-        geo = dataset.GetGeoTransform()
+
+        self._geo = dataset.GetGeoTransform()
         self.x_size = dataset.RasterXSize
         self.y_size = dataset.RasterYSize
 
-        # Spatial Reference System
-        self.x_res = geo[1]
-        self.y_res = geo[5]
-        self.x_min = geo[0]
-        self.y_max = geo[3]
         self.x_max = self.x_min + self.x_size * self.x_res
         self.y_min = self.y_max + self.y_size * self.y_res
         self.projection = dataset.GetProjection()
@@ -204,5 +236,33 @@ class GdalRasterImage:
 
         dataset.FlushCache()
         dataset = None
+
+    def is_compatible_with(self, image: GdalRasterImage) -> bool:
+        """Check that images have same geometric and geographic specifications
+
+        Args:
+            image (GdalRasterImage): image to compare with
+
+        Returns:
+            bool: True images have same geometric and geographic specifications
+        """
+        return (
+            (self.projection == image.projection)
+            and (self._geo == self._geo)
+            and (self.x_size == image.x_size)
+            and (self.y_size == image.y_size)
+        )
+
+    @property
+    def image_information(self) -> str:
+        """
+        Returns:
+            str: Images geometric and geographic specifications info
+        """
+        return f"""Projection: {self.projection}
+        GetGeoTransform: {self._geo}
+        X Size: {self.x_size}
+        Y Size: {self.y_size}
+        """
 
     array: NDArray = property(_get_array, doc="Access to image array (numpy array)")
