@@ -38,6 +38,14 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 - Standard deviation Error
 - Circular Error @90 percentile
 
+> The Circular Error (CE) at the 90% level confidence graphic is used for horizontal accuracy in image products.  
+> This representation is relevant for image expressed within cartographic system grid.  
+> Because, with the CE representation, it is straightforward to evaluate mapping accuracy, considering reference data with known accuracy.
+>
+> Rather, in case of images with no cartographic system grid, the CE graphic representation becomes less informative.  
+> The CE graphic is still generated, and equally spaced sample data is assumed.  
+> This hypothesis is not obvious, when details on image grids are unknown.
+
 This tool is a Python application.
 
 ## Prerequisite
