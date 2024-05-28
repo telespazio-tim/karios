@@ -97,6 +97,7 @@ class GlobalConfiguration:
     mask: str
     configuration: str
     pixel_size: float
+    title_prefix: str
     gen_kp_mask: bool
     gen_delta_raster: bool
 
@@ -123,6 +124,7 @@ class Configuration:
             arguments.mask,
             arguments.conf,
             arguments.pixel_size,
+            arguments.title_prefix,
             arguments.gen_kp_mask,
             arguments.gen_delta_raster,
         )

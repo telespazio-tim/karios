@@ -94,8 +94,6 @@ class GdalRasterImage:
     """Raster class using gdal to read image."""
 
     def __init__(self, filename):
-        if not os.path.exists(filename):
-            raise FileNotFoundError(filename)
         self.filepath = filename
         self.file_name = os.path.basename(self.filepath)
         self._read_header()

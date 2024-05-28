@@ -4,6 +4,7 @@
 
 ### Improvements
 
+- Add processing config to output directory
 - Add disclaimer in Geometric Error distribution figure about planimetric accuracy.
 
 ### Documentation

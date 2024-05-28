@@ -18,11 +18,11 @@
 """circular error plot module"""
 
 import logging
-from pathlib import Path
 
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy import stats as sp_stats
 from scipy.interpolate import interpn
@@ -30,7 +30,7 @@ from scipy.interpolate import interpn
 from accuracy_analysis.accuracy_statistics import GeometricStat
 from core.configuration import CEPlotConfiguration
 from core.image import GdalRasterImage
-from report.commons import add_logo
+from report.commons import AbstractPlot, add_logo
 
 logger = logging.getLogger()
 
@@ -46,7 +46,7 @@ def _rmse(mean, std, img_res=None):
     return np.sqrt(_mean * _mean + _std * _std)
 
 
-class CircularErrorPlot:
+class CircularErrorPlot(AbstractPlot):
     # pylint: disable=too-few-public-methods
     """Class to create circular error plot image. It plots :
     - CE scatter
@@ -62,16 +62,20 @@ class CircularErrorPlot:
         ref_image: GdalRasterImage,
         stats: GeometricStat,
         img_res: int | None,
+        prefix: str | None,
     ):
         """Constructor
 
         Args:
             conf (CEPlotConfiguration): plot config
+            mon_image (GdalRasterImage): image to match
+            ref_image (GdalRasterImage): reference image
             stats (GeometricStat): statistics to plot
             img_res (int | None): image resolution to apply to statistics as factor.
                 if None, consider pixel with value 1, otherwise, consider meter.
+            prefix (str|None): figure title prefix
         """
-
+        super().__init__(prefix, conf.fig_size)
         self._conf = conf
         self._mon_img = mon_image
         self._ref_img = ref_image
@@ -93,6 +97,93 @@ class CircularErrorPlot:
             self._short_unit = "px"
             self._x_scatter_label = "Row displacement (pixel)"
             self._y_scatter_label = "Line displacement (pixel)"
+
+    ####################################################
+    # Abstract implementation
+    #
+
+    @property
+    def _figure_title(self) -> str:
+        return "Geometric Error distribution"
+
+    def _prepare_figure(self, fig_size) -> Figure:
+        return plt.figure(figsize=(fig_size * 5 / 3, fig_size * 1.2))
+
+    def _plot(self):
+
+        grid = self._figure.add_gridspec(
+            4,
+            3,
+            width_ratios=(4, 4, 4),
+            height_ratios=(0.5, 4, 4, 0.5),
+            left=0.15,
+            right=0.9,
+            bottom=0.02,
+            top=0.9,
+            wspace=0.1,
+            hspace=0.3,
+        )
+
+        # Create the Axes for each plot
+        ax_header = self._figure.add_subplot(grid[0, :])
+        ax_scatter = self._figure.add_subplot(grid[2, 0])
+        ax_col = self._figure.add_subplot(grid[1, 0], sharex=ax_scatter)
+        ax_row = self._figure.add_subplot(grid[2, 1], sharey=ax_scatter)
+        ax_text = self._figure.add_subplot(grid[1, 1])
+        ax_ce = self._figure.add_subplot(grid[1, 2])
+        logo_gd = grid[3, :].subgridspec(1, 3)
+
+        # no labels
+        ax_col.tick_params(axis="x", labelbottom=False)
+        ax_row.tick_params(axis="y", labelleft=False)
+
+        # Add input images name and disclaimer if needed
+        self._set_header(ax_header)
+
+        #  Plot Scatter :
+        title_label = "Circular Error Plot @ 90 percentile"
+        scatter_plot = self._ce_scatter(
+            ax_scatter,
+            title=title_label,
+        )
+
+        # ///////////////////////////////////////
+        # plot col
+        self._hist_vector(ax_col, self._stats.v_y_th, "y")
+
+        # ///////////////////////////////////////
+        # plot row
+        self._hist_vector(
+            ax_row,
+            self._stats.v_x_th,
+            "x",
+            orientation="horizontal",
+        )
+
+        # TODO : add cumul (CDF)
+        self._radial_error_plot(ax_ce)
+
+        self._text_box(ax_text)
+
+        # colorbar in gridspec, thanks to this
+        # https://stackoverflow.com/a/57623427
+        cax = inset_axes(
+            ax_scatter,  # here using axis of the scatter
+            width="3%",  # width = 5% of parent_bbox width
+            height="100%",
+            loc="upper left",
+            bbox_to_anchor=(-0.3, 0, 1, 1),
+            bbox_transform=ax_scatter.transAxes,
+            borderpad=0,
+        )
+
+        self._figure.colorbar(scatter_plot, cax=cax, ticklocation="left")
+
+        add_logo(self._figure, logo_gd)
+
+    ####################################################
+    # Local implementation
+    #
 
     def _compute_histogram(self, vect, direction):
         # The number of Bins corresponding to 0.1 pixel :
@@ -335,87 +426,3 @@ class CircularErrorPlot:
 
         logger.info(text)
         axes.text(x=0, y=0, s=text)
-
-    def plot(self, output_file: Path):
-        """Plot in file
-
-        Args:
-            output_file (Path): path to the image output file
-        """
-        fig = plt.figure(figsize=(self._conf.fig_size * 5 / 3, self._conf.fig_size * 1.2))
-
-        fig.suptitle(
-            "Geometric Error distribution",
-            size="16",
-            ha="center",
-        )
-
-        grid = fig.add_gridspec(
-            4,
-            3,
-            width_ratios=(4, 4, 4),
-            height_ratios=(0.5, 4, 4, 0.5),
-            left=0.15,
-            right=0.9,
-            bottom=0.02,
-            top=0.9,
-            wspace=0.1,
-            hspace=0.3,
-        )
-
-        # Create the Axes for each plot
-        ax_header = fig.add_subplot(grid[0, :])
-        ax_scatter = fig.add_subplot(grid[2, 0])
-        ax_col = fig.add_subplot(grid[1, 0], sharex=ax_scatter)
-        ax_row = fig.add_subplot(grid[2, 1], sharey=ax_scatter)
-        ax_text = fig.add_subplot(grid[1, 1])
-        ax_ce = fig.add_subplot(grid[1, 2])
-        logo_gd = grid[3, :].subgridspec(1, 3)
-
-        # no labels
-        ax_col.tick_params(axis="x", labelbottom=False)
-        ax_row.tick_params(axis="y", labelleft=False)
-
-        # Add input images name and disclaimer if needed
-        self._set_header(ax_header)
-
-        #  Plot Scatter :
-        scatter_plot = self._ce_scatter(ax_scatter)
-
-        # ///////////////////////////////////////
-        # plot col
-        self._hist_vector(ax_col, self._stats.v_y_th, "y")
-
-        # ///////////////////////////////////////
-        # plot row
-        self._hist_vector(
-            ax_row,
-            self._stats.v_x_th,
-            "x",
-            orientation="horizontal",
-        )
-
-        # TODO : add cumul (CDF)
-        self._radial_error_plot(ax_ce)
-
-        self._text_box(ax_text)
-
-        # colorbar in gridspec, thanks to this
-        # https://stackoverflow.com/a/57623427
-        cax = inset_axes(
-            ax_scatter,  # here using axis of the scatter
-            width="3%",  # width = 5% of parent_bbox width
-            height="100%",
-            loc="upper left",
-            bbox_to_anchor=(-0.3, 0, 1, 1),
-            bbox_transform=ax_scatter.transAxes,
-            borderpad=0,
-        )
-
-        fig.colorbar(scatter_plot, cax=cax, ticklocation="left")
-
-        add_logo(fig, logo_gd)
-
-        plt.savefig(output_file)
-
-        plt.close()

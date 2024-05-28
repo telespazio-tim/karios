@@ -24,11 +24,16 @@ As show in the following picture, KARIOS makes KLT algorithm compatible with rem
 
 Furthermore, KARIOS analyses displacements between the two input image grids both in line and pixel direction outputing, providing user with the three following items:
 
-- Geometric Error overview
+### Geometric Error overview
+
 ![Geometric Error overview](docs/images/error_overview.PNG)
-- Geometric accuracy report
+
+### Geometric accuracy report
+
 ![Geometric accuracy report](docs/images/statistical_report.PNG)
-- Geometric distortion analysis report
+
+### Geometric distortion analysis report
+
 ![Geometric distortion analysis report](docs/images/disparity_map.PNG)
 
 The geometric accuracy report includes the following accuracy metrics, in both directions when relevant:
@@ -46,11 +51,9 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 > The CE graphic is still generated, and equally spaced sample data is assumed.  
 > This hypothesis is not obvious, when details on image grids are unknown.
 
-This tool is a Python application.
-
 ## Prerequisite
 
-To run the tool you should have a dedicated conda environnement.
+This tool is a Python application, to run it you should have a dedicated conda environnement.
 
 To do so, install [conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [miniconda](https://docs.conda.io/en/latest/miniconda.html), then run the following command to create the _karios_ conda env
 
@@ -88,8 +91,8 @@ python karios/karios.py \
 ### CLI options :
 
 ```
-usage: karios.py [-h] [--mask MASK] [--conf CONF] [--out OUT] [--resume] [--generate-key-points-mask] [--input-pixel-size PIXEL_SIZE] [--no-log-file] [--debug]
-                 [--log-file-path LOG_FILE_PATH]
+usage: karios.py [-h] [--mask MASK] [--conf CONF] [--out OUT] [--resume] [--generate-key-points-mask] [--generate-intermediate-product] [--input-pixel-size PIXEL_SIZE] [--title-prefix TITLE_PREFIX]
+                 [--no-log-file] [--debug] [--log-file-path LOG_FILE_PATH]
                  mon ref
 
 positional arguments:
@@ -108,6 +111,8 @@ options:
                         Generate a two band tiff based on KP with band 1 dx and band 2 dy (default: False)
   --input-pixel-size PIXEL_SIZE, -pxs PIXEL_SIZE
                         Input image pixel size in meter. Ignored if image resolution can be read from input image (default: None)
+  --title-prefix TITLE_PREFIX, -tp TITLE_PREFIX
+                        Add prefix to title of generated output charts (limited to 26 characters) (default: None)
   --no-log-file         Do not log in file (default: False)
   --debug, -d           Enable Debug mode (default: False)
   --log-file-path LOG_FILE_PATH
@@ -121,7 +126,6 @@ options:
 The default configuration is located in [karios/configuration/processing_configuration.json](karios/configuration/processing_configuration.json)
 
 ### klt_matching parameters
-
 
 - `xStart` : image X margin to apply (margin is skipped by the matcher)
 - `tile_size` : tile size to process by KTL in the input image

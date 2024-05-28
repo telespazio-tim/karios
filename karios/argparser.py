@@ -20,10 +20,28 @@
 """Program argument parser module."""
 import argparse
 import os
-from argparse import Namespace
+from argparse import ArgumentTypeError, Namespace
 from pathlib import Path, PurePath
 
 ROOT_DIR = Path(os.path.dirname(__file__))  # .parent.absolute()
+
+
+def _validate_prefix(prefix) -> str:
+    if len(prefix) <= 26:
+        return prefix
+    raise ArgumentTypeError("Title prefix is too long (>26 characters)")
+
+
+def _validate_file(file_path):
+    if not os.path.exists(file_path):
+        # Argparse uses the ArgumentTypeError to give a rejection message like:
+        # error: argument input: x does not exist
+        raise ArgumentTypeError(f"{file_path} does not exist")
+
+    if not os.path.isfile(file_path):
+        raise ArgumentTypeError(f"{file_path} is not a file")
+
+    return file_path
 
 
 def parse_args(argv: list[str]) -> Namespace:
@@ -44,8 +62,12 @@ def parse_args(argv: list[str]) -> Namespace:
     """
     # Parse the command line arguments
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(dest="mon", help="Path to the monitored sensor product")
-    parser.add_argument(dest="ref", help="Path to the reference sensor product")
+    parser.add_argument(
+        dest="mon", help="Path to the monitored sensor product", type=_validate_file
+    )
+    parser.add_argument(
+        dest="ref", help="Path to the reference sensor product", type=_validate_file
+    )
     parser.add_argument("--mask", help="Path to the mask", required=False)
     parser.add_argument(
         "--conf",
@@ -95,6 +117,16 @@ def parse_args(argv: list[str]) -> Namespace:
         default=None,
         required=False,
     )
+    parser.add_argument(
+        "--title-prefix",
+        "-tp",
+        dest="title_prefix",
+        help="Add prefix to title of generated output charts (limited to 26 characters)",
+        type=_validate_prefix,
+        default=None,
+        required=False,
+    )
+
     parser.add_argument(
         "--no-log-file",
         dest="no_log_file",
