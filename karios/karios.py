@@ -205,6 +205,7 @@ class MatchAndPlot:
             monitored_image,
             reference_image,
             points,
+            self._conf.values.title_prefix,
         )
         overview_poster_path = Path(
             os.path.join(self._conf.values.output_directory, "01_overview.png")
@@ -223,15 +224,27 @@ class MatchAndPlot:
             monitored_image,
             reference_image,
             points,
+            "dx",
+            self._conf.values.title_prefix,
         )
 
         # plot dx
         dx_poster_path = Path(os.path.join(self._conf.values.output_directory, "02_dx.png"))
-        row_col_shift_plot.plot("dx", dx_poster_path)
+        row_col_shift_plot.plot(dx_poster_path)
+
+        # plot dx and dy mean profiles:
+        row_col_shift_plot = RowColShiftPlot(
+            self._conf.shift_plot_configuration,
+            monitored_image,
+            reference_image,
+            points,
+            "dy",
+            self._conf.values.title_prefix,
+        )
 
         # plot dy
         dy_poster_path = Path(os.path.join(self._conf.values.output_directory, "03_dy.png"))
-        row_col_shift_plot.plot("dy", dy_poster_path)
+        row_col_shift_plot.plot(dy_poster_path)
 
     def _plot_ce(
         self,
@@ -252,6 +265,7 @@ class MatchAndPlot:
             reference_image,
             stats,
             monitored_image_resolution,
+            self._conf.values.title_prefix,
         )
         circular_error_plot.plot(ce_poster_path)
 
