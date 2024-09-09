@@ -1,5 +1,6 @@
 # The KARIOS Project
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10598329.svg)](https://doi.org/10.5281/zenodo.10598329)
 ![License: Apache2](https://img.shields.io/badge/license-Apache%202-blue.svg?&logo=apache)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?&logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-black.svg?)](https://github.com/psf/black)
