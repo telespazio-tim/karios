@@ -27,8 +27,10 @@ https://sphinx-design.readthedocs.io/en/latest/cards.html#clickable-cards
 Grid works in MD thanks to myst extension colon_fence
 -->
 
-:::::{grid} 2
+<!-- Grid start herer -->
 
+:::::{grid} 2
+<!-- item 1 -->
 ::::{grid-item}
 :::{card} PRISMA
 :link: prisma
@@ -39,7 +41,9 @@ Write short description
 ```
 :::
 ::::
+<!-- EO item 1 -->
 
+<!-- item 2 -->
 ::::{grid-item}
 :::{card} Sen2like
 :link: sen2like
@@ -50,7 +54,9 @@ Write short description
 ```
 :::
 ::::
+<!-- EO item 2 -->
 
+<!-- item 3 -->
 ::::{grid-item}
 :::{card} MSS
 :link: mss
@@ -61,5 +67,7 @@ Write short description
 ```
 :::
 ::::
+<!-- EO item 3 -->
 
 :::::
+<!-- EO Grid -->
