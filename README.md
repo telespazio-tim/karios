@@ -91,6 +91,7 @@ python karios/karios.py \
 
 - csv file: list of key points and associated dx/dy deviations
 - png file: visualisation of the deviations
+- geojson of KP found by co registration process
 
 ### CLI options :
 

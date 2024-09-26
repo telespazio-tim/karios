@@ -100,6 +100,15 @@ class GdalRasterImage:
         self._array = None
 
     @property
+    def geo_transform(self) -> str | None:
+        """Provides EPSG code, e.g. 4326 for example
+
+        Returns:
+            str | None: EPSG code, None if no projection
+        """
+        return self._geo
+
+    @property
     def x_res(self) -> int | float:
         """X resolution
 

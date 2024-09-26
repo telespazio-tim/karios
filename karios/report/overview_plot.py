@@ -33,13 +33,6 @@ from report.commons import AbstractPlot, add_logo
 logger = logging.getLogger()
 
 
-def theta_deg(y: float, x: float):
-    return np.degrees(np.arctan2(y, x))
-
-
-v_theta_deg = np.vectorize(theta_deg)
-
-
 class OverviewPlot(AbstractPlot):
     # pylint: disable=too-few-public-methods
     """Overview plot class. It plots :
@@ -118,8 +111,8 @@ class OverviewPlot(AbstractPlot):
 
         # /////////////////////////////
         # plot radial error
-        dist = np.sqrt(self._points["dx"] ** 2 + self._points["dy"] ** 2)
-        logger.debug("Delta min %s / max %s", np.min(dist), np.min(dist))
+        dist = self._points["dist"]
+        logger.debug("Delta min %s / max %s", dist.min(), dist.max())
 
         # set axes limit
         lim_min = 0
@@ -141,10 +134,9 @@ class OverviewPlot(AbstractPlot):
 
         # /////////////////////////////
         # plot theta error
-        angles = v_theta_deg(self._points["dy"], self._points["dx"])
         self._plot_error(
             theta_err_ax,
-            angles,
+            self._points["angle"],
             "Angle error (deg), East direction CC",
             self._config.theta_colormap,
             [-180, 180],

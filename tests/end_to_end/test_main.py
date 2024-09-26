@@ -30,6 +30,7 @@ class E2ETest(unittest.TestCase):
         csv_result_filename = (
             "KLT_matcher_L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04.csv"
         )
+        geojson_filename = "kp_delta.json"
 
         self.assertEqual(
             karios.main(
@@ -54,6 +55,18 @@ class E2ETest(unittest.TestCase):
                     csv_result_filename,
                 ),
                 os.path.join(ref_data_dir, csv_result_filename),
+                False,
+            )
+        )
+
+        self.assertTrue(
+            filecmp.cmp(
+                os.path.join(
+                    result_dir,
+                    "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
+                    geojson_filename,
+                ),
+                os.path.join(ref_data_dir, geojson_filename),
                 False,
             )
         )

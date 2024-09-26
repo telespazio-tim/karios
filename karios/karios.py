@@ -39,6 +39,7 @@ from klt_matcher.matcher import KLT
 from log import configure_logging
 from report.circular_error_plot import CircularErrorPlot
 from report.overview_plot import OverviewPlot
+from report.product_generator import ProductGenerator
 from report.row_col_shift_plot import RowColShiftPlot
 from version import __version__
 
@@ -66,6 +67,8 @@ class MatchAndPlot:
     def _handle_klt_results(self, results: Iterator[pd.DataFrame], csv_file: Path) -> pd.DataFrame:
         all_frame = pd.DataFrame()
         for dataframe in results:
+            dataframe["dist"] = np.sqrt(dataframe["dx"] ** 2 + dataframe["dy"] ** 2)
+            dataframe["angle"] = np.degrees(np.arctan2(dataframe["dy"], dataframe["dx"]))
             if not csv_file.exists():
                 logger.info("Write to csv %s", str(csv_file))
                 dataframe.to_csv(csv_file, sep=";", index=False)
@@ -120,7 +123,7 @@ class MatchAndPlot:
 
         return stats
 
-    def _do_klt(
+    def _compute_delta(
         self,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
@@ -149,51 +152,15 @@ class MatchAndPlot:
             if csv_file.exists():
                 logger.warning("CSV file exists, will overwrite it: %s", str(csv_file))
                 csv_file.unlink()
-            points = self._do_klt(monitored_image, reference_image, mask, csv_file)
+            points = self._compute_delta(monitored_image, reference_image, mask, csv_file)
         elif not csv_file.exists():
             logger.warning("Cannot resume, CSV file missing, create it : %s", str(csv_file))
-            points = self._do_klt(monitored_image, reference_image, mask, csv_file)
+            points = self._compute_delta(monitored_image, reference_image, mask, csv_file)
         else:
             logger.info("Load CSV : %s", str(csv_file))
             points = pd.read_csv(csv_file, sep=";", index_col=False)
 
         return points
-
-    def _create_mask(self, points: pd.DataFrame, monitored_image: GdalRasterImage):
-        logger.info("Create mask")
-        # Credits Jérôme
-        x_index = points["x0"].to_numpy().astype(int)
-        y_index = points["y0"].to_numpy().astype(int)
-        final_mask = np.zeros([monitored_image.y_size, monitored_image.x_size], dtype=np.uint8)
-        final_mask[y_index, x_index] = 1
-        monitored_image.to_raster(
-            os.path.join(self._conf.values.output_directory, "kp_mask.tif"), final_mask
-        )
-        logger.info("Mask created")
-
-    def _create_intermediate_raster(self, points: pd.DataFrame, monitored_image: GdalRasterImage):
-        logger.info("Create intermediate product")
-
-        x_index = points["x0"].to_numpy().astype(int)
-        y_index = points["y0"].to_numpy().astype(int)
-
-        dx_band_array = np.full(
-            [monitored_image.y_size, monitored_image.x_size], np.nan, dtype=float
-        )
-        dy_band_array = np.full(
-            [monitored_image.y_size, monitored_image.x_size], np.nan, dtype=float
-        )
-
-        dx_band_array[y_index, x_index] = points["dx"]
-        dy_band_array[y_index, x_index] = points["dy"]
-
-        monitored_image.to_raster(
-            os.path.join(self._conf.values.output_directory, "kp_delta.tif"),
-            [dx_band_array, dy_band_array],
-            gdal.GDT_Float32,
-        )
-
-        logger.info("Intermediate product created")
 
     def _plot_overview(
         self,
@@ -312,11 +279,8 @@ class MatchAndPlot:
 
         points = self._get_points(resume, monitored_image, reference_image, mask)
 
-        if self._conf.values.gen_kp_mask:
-            self._create_mask(points, monitored_image)
-
-        if self._conf.values.gen_delta_raster:
-            self._create_intermediate_raster(points, monitored_image)
+        product_generator = ProductGenerator(self._conf.values, points, reference_image)
+        product_generator.generate_products()
 
         self._plot_overview(monitored_image, reference_image, points)
         self._plot_mean_profiles(monitored_image, reference_image, points)
