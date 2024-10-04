@@ -12,6 +12,7 @@
 - Add processing config to output directory
 - Add disclaimer in Geometric Error distribution figure about planimetric accuracy.
 - Add input images geo information verification
+- Refactor configuration by separating processing and plot configuration
 
 ### Documentation
 

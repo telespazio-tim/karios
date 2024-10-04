@@ -157,7 +157,7 @@ Logging arguments (optional):
 
 The default configuration is located in [karios/configuration/processing_configuration.json](karios/configuration/processing_configuration.json)
 
-### klt_matching parameters (Matching processing parameters)
+### `processing_configuration.klt_matching` parameters (Matching processing parameters)
 
 - `xStart` : image X margin to apply (margin is skipped by the matcher)
 - `tile_size` : tile size to process by KTL in the input image
@@ -180,12 +180,12 @@ then all the corners with the quality measure less than 15 are rejected.
 
 Refer to section [KLT param leverage](#klt-param-leverage) for details
 
-### accuracy_analysis
+### `processing_configuration.accuracy_analysis`
 
 - `confidence_threshold` : max score for points found by the matcher to use to compute statistics written in correl_res.txt.
 If `None`, not applied.
 
-### plot_configuration.overview (overview plot parameters)
+### `plot_configuration.overview` (overview plot parameters)
 
 - `fig_size` : Size of the generated figure in inches
 - `shift_colormap` : matplotlib color map name for the KP shift error scatter plot
@@ -193,7 +193,7 @@ If `None`, not applied.
 - `shift_axes_limit` : KP shift error colorbar maximum limit, N/A if `shift_auto_axes_limit` is `true`
 - `theta_colormap` : matplotlib color map name for the KP theta error scatter plot
 
-### plot_configuration.shift (shift by row/col group plot parameters)
+### `plot_configuration.shift` (shift by row/col group plot parameters)
 
 - `fig_size` : Size of the generated figure in inches
 - `scatter_colormap` : matplotlib color map name for the KP shift scatter plot
@@ -202,13 +202,13 @@ If `None`, not applied.
 - `scatter_max_limit` : KP shift scatter plot maximum limit, N/A if `scatter_auto_limit` is `true`
 - `histo_mean_bin_size` : KP shift histogram bin size (number of image row/col for the histogram bin)
 
-### plot_configuration.dem (shift by altitude group plot parameters)
+### `plot_configuration.dem` (shift by altitude group plot parameters)
 
 - `fig_size` : Size of the generated figure in inches
 - `show_fliers` : draw fliers of box plot
 - `histo_mean_bin_size`: KP altitude histogram bin size (altitude ranges size)
 
-### plot_configuration.ce (Circular error plot parameters)
+### `plot_configuration.ce` (Circular error plot parameters)
 - `fig_size` : Height size of the generated figure in inches, width is 5/3 of the height
 - `ce_scatter_colormap` : matplotlib color map name for the KP shift density scatter plot
 

@@ -145,7 +145,7 @@ class Configuration:
         # Read configuration file :
         file_content = self._load_configuration_file(arguments.conf)
 
-        self._load_configuration(file_content["processing_configuration"])
+        self._load_configuration(file_content)
 
         # TODO: Eventualy add these functions if required
         # self.save_configuration()
@@ -158,9 +158,11 @@ class Configuration:
           file_content:
 
         """
-        self.klt_configuration = KLTConfiguration(**proc_config["klt_matching"])
+        self.klt_configuration = KLTConfiguration(
+            **proc_config["processing_configuration"]["klt_matching"]
+        )
         self.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
-            **proc_config["accuracy_analysis"]
+            **proc_config["processing_configuration"]["accuracy_analysis"]
         )
         self.overview_plot_configuration = OverviewPlotConfiguration(
             **proc_config["plot_configuration"]["overview"]

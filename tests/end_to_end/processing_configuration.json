@@ -15,32 +15,32 @@
         },
         "accuracy_analysis": {
             "confidence_threshold" : 0.4
+        }
+    },
+    "plot_configuration": {
+        "overview": {
+            "fig_size": 12,
+            "shift_colormap": "bone_r",
+            "shift_auto_axes_limit": true,
+            "shift_axes_limit": 2.0,
+            "theta_colormap": "twilight_shifted"
         },
-        "plot_configuration": {
-            "overview": {
-                "fig_size": 12,
-                "shift_colormap": "bone_r",
-                "shift_auto_axes_limit": true,
-                "shift_axes_limit": 2.0,
-                "theta_colormap": "twilight_shifted"
-            },
-            "shift": {
-                "fig_size": 12,
-                "scatter_colormap": "Spectral",
-                "scatter_auto_limit": true,
-                "scatter_min_limit": 2.0,
-                "scatter_max_limit": 4.0,
-                "histo_mean_bin_size": 20
-            },
-            "dem": {
-                "fig_size": 12,
-                "show_fliers": false,
-                "histo_mean_bin_size": 100
-            },
-            "ce": {
-                "fig_size": 9,
-                "ce_scatter_colormap": "jet"
-            }
+        "shift": {
+            "fig_size": 12,
+            "scatter_colormap": "Spectral",
+            "scatter_auto_limit": true,
+            "scatter_min_limit": 2.0,
+            "scatter_max_limit": 4.0,
+            "histo_mean_bin_size": 20
+        },
+        "dem": {
+            "fig_size": 12,
+            "show_fliers": false,
+            "histo_mean_bin_size": 100
+        },
+        "ce": {
+            "fig_size": 9,
+            "ce_scatter_colormap": "jet"
         }
     }
 }
