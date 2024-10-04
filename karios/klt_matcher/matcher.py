@@ -174,7 +174,7 @@ class KLT:
         self,
         mon_img: GdalRasterImage,
         ref_img: GdalRasterImage,
-        mask: GdalRasterImage,
+        mask: GdalRasterImage | None,
     ) -> Iterator[DataFrame]:
         # pylint: disable=too-many-arguments
         """Run KLT on the image to monitor against a reference image and write result in csv file.
@@ -182,7 +182,7 @@ class KLT:
         Args:
             mon_img (GdalRasterImage): image to monitor
             ref_img (GdalRasterImage): reference image
-            mask (GdalRasterImage): valid pixel mask of image to match
+            mask (GdalRasterImage | None): valid pixel mask of image to match
 
         Yields:
             Iterator[DataFrame]: dataframe generator

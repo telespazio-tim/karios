@@ -19,6 +19,7 @@
 
 """KARIOS entry point module."""
 import logging
+import math
 import os
 import shutil
 import sys
@@ -30,7 +31,7 @@ import pandas as pd
 from osgeo import gdal
 
 from accuracy_analysis.accuracy_statistics import GeometricStat
-from argparser import parse_args
+from argparser import KariosArgumentParser
 from core.configuration import Configuration
 from core.errors import KariosException
 from core.image import GdalRasterImage, get_image_resolution
@@ -40,7 +41,8 @@ from log import configure_logging
 from report.circular_error_plot import CircularErrorPlot
 from report.overview_plot import OverviewPlot
 from report.product_generator import ProductGenerator
-from report.row_col_shift_plot import RowColShiftPlot
+from report.shift_by_alt_plot import MeanShiftByAltitudeGroupPlot
+from report.shift_by_row_col_plot import MeanShiftByRowColGroupPlot
 from version import __version__
 
 gdal.UseExceptions()
@@ -67,7 +69,7 @@ class MatchAndPlot:
     def _handle_klt_results(self, results: Iterator[pd.DataFrame], csv_file: Path) -> pd.DataFrame:
         all_frame = pd.DataFrame()
         for dataframe in results:
-            dataframe["dist"] = np.sqrt(dataframe["dx"] ** 2 + dataframe["dy"] ** 2)
+            dataframe["radial error"] = np.sqrt(dataframe["dx"] ** 2 + dataframe["dy"] ** 2)
             dataframe["angle"] = np.degrees(np.arctan2(dataframe["dy"], dataframe["dx"]))
             if not csv_file.exists():
                 logger.info("Write to csv %s", str(csv_file))
@@ -95,7 +97,7 @@ class MatchAndPlot:
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
         points: pd.DataFrame,
-        mask: GdalRasterImage,
+        mask: GdalRasterImage | None,
     ) -> GeometricStat:
         # prepare stats - select only points above confidence threshold
         acc_config = self._conf.accuracy_analysis_configuration
@@ -127,8 +129,8 @@ class MatchAndPlot:
         self,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
-        mask: GdalRasterImage,
-        csv_file: str,
+        mask: GdalRasterImage | None,
+        csv_file: Path,
     ):
         dataframe_gen = self._klt.match(monitored_image, reference_image, mask)
         points = self._handle_klt_results(dataframe_gen, csv_file)
@@ -139,7 +141,7 @@ class MatchAndPlot:
         resume: bool,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
-        mask: GdalRasterImage,
+        mask: GdalRasterImage | None,
     ) -> pd.DataFrame:
         # pylint: disable=too-many-arguments
         """Get points by running KLT or reading CSV file"""
@@ -181,14 +183,14 @@ class MatchAndPlot:
         )
         overview_plot.plot(overview_poster_path)
 
-    def _plot_mean_profiles(
+    def _plot_mean_shift_by_row_col_group(
         self,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
         points: pd.DataFrame,
     ):
-        # plot dx and dy mean profiles:
-        row_col_shift_plot = RowColShiftPlot(
+        # plot dx mean profiles:
+        shift_by_row_col_plot = MeanShiftByRowColGroupPlot(
             self._conf.shift_plot_configuration,
             monitored_image,
             reference_image,
@@ -196,13 +198,11 @@ class MatchAndPlot:
             "dx",
             self._conf.values.title_prefix,
         )
-
-        # plot dx
         dx_poster_path = Path(os.path.join(self._conf.values.output_directory, "02_dx.png"))
-        row_col_shift_plot.plot(dx_poster_path)
+        shift_by_row_col_plot.plot(dx_poster_path)
 
-        # plot dx and dy mean profiles:
-        row_col_shift_plot = RowColShiftPlot(
+        # plot dy mean profiles:
+        shift_by_row_col_plot = MeanShiftByRowColGroupPlot(
             self._conf.shift_plot_configuration,
             monitored_image,
             reference_image,
@@ -210,10 +210,8 @@ class MatchAndPlot:
             "dy",
             self._conf.values.title_prefix,
         )
-
-        # plot dy
         dy_poster_path = Path(os.path.join(self._conf.values.output_directory, "03_dy.png"))
-        row_col_shift_plot.plot(dy_poster_path)
+        shift_by_row_col_plot.plot(dy_poster_path)
 
     def _plot_ce(
         self,
@@ -238,14 +236,90 @@ class MatchAndPlot:
         )
         circular_error_plot.plot(ce_poster_path)
 
-    def process(self, mon_file_path: str, ref_file_path: str, mask_file_path: str, resume: bool):
+    def _plot_dem(
+        self,
+        dem: GdalRasterImage,
+        points: pd.DataFrame,
+        monitored_image: GdalRasterImage,
+        reference_image: GdalRasterImage,
+    ):
+        x_index = points["x0"].to_numpy().astype(int)
+        y_index = points["y0"].to_numpy().astype(int)
+        points["alt"] = dem.array[y_index, x_index]
+
+        conf = self._conf.dem_plot_configuration
+
+        # compute min and max for shift axis to use the same for each plots
+        maxi = math.ceil(max(points["dx"].max(), points["dy"].max(), points["radial error"].max()))
+        mini = math.floor(min(points["dx"].min(), points["dy"].min(), points["radial error"].min()))
+        report = MeanShiftByAltitudeGroupPlot(
+            conf,
+            monitored_image,
+            reference_image,
+            dem,
+            points,
+            "dx",
+            self._conf.values.title_prefix,
+            self._conf.values.dem_description,
+            mini,
+            maxi,
+        )
+        poster_path = Path(os.path.join(self._conf.values.output_directory, "dem_dx.png"))
+        report.plot(poster_path)  # nosec B108
+
+        report = MeanShiftByAltitudeGroupPlot(
+            conf,
+            monitored_image,
+            reference_image,
+            dem,
+            points,
+            "dy",
+            self._conf.values.title_prefix,
+            self._conf.values.dem_description,
+            mini,
+            maxi,
+        )
+        poster_path = Path(os.path.join(self._conf.values.output_directory, "dem_dy.png"))
+        report.plot(poster_path)  # nosec B108
+
+        report = MeanShiftByAltitudeGroupPlot(
+            conf,
+            monitored_image,
+            reference_image,
+            dem,
+            points,
+            "radial error",
+            self._conf.values.title_prefix,
+            self._conf.values.dem_description,
+            mini,
+            maxi,
+        )
+        poster_path = Path(os.path.join(self._conf.values.output_directory, "dem_dist.png"))
+        report.plot(poster_path)  # nosec B108
+
+    def _get_dem(self, reference_image: GdalRasterImage) -> GdalRasterImage | None:
+
+        if self._conf.values.dem_file_path:
+            dem = GdalRasterImage(self._conf.values.dem_file_path)
+            if not dem.is_compatible_with(reference_image):
+                raise KariosException(
+                    f"""DEM geo info not compatible with reference image shape or resolution:
+                * DEM image : {dem.image_information}
+                * Reference image : {reference_image.image_information}
+                """
+                )
+        else:
+            dem = None
+
+        return dem
+
+    def process(self, mon_file_path: str, ref_file_path: str, resume: bool):
         """Orchestrates job to do.
         Process to matching, create plot and csv stat file.
 
         Args:
             mon_file_path (str): path to image to monitor
             ref_file_path (str): path to reference image used to monitor
-            mask_file_path (str): path to masque to apply
             resume (bool): Resume or not previous process. if 'True', then KLT is not run
         """
         logger.info("Process %s", mon_file_path)
@@ -265,8 +339,8 @@ class MatchAndPlot:
             """
             )
 
-        if mask_file_path is not None:
-            mask = GdalRasterImage(mask_file_path)
+        if self._conf.values.mask_file_path:
+            mask = GdalRasterImage(self._conf.values.mask_file_path)
             if not mask.is_compatible_with(reference_image):
                 raise KariosException(
                     f"""Mask geo info not compatible with reference image:
@@ -283,7 +357,13 @@ class MatchAndPlot:
         product_generator.generate_products()
 
         self._plot_overview(monitored_image, reference_image, points)
-        self._plot_mean_profiles(monitored_image, reference_image, points)
+        self._plot_mean_shift_by_row_col_group(monitored_image, reference_image, points)
+
+        dem = self._get_dem(reference_image)
+        if dem:
+            self._plot_dem(dem, points, monitored_image, reference_image)
+        else:
+            logger.info("No DEM file provided, will not plot deviation regarding DEM")
 
         stats = self._compute_stats(monitored_image, reference_image, points, mask)
         self._plot_ce(monitored_image, reference_image, stats)
@@ -300,14 +380,18 @@ def main(argv: list[str]) -> int:
       - 0 OK
 
     """
-    args = parse_args(argv)
+    arg_parser = KariosArgumentParser()
+    args = arg_parser.parse_args(argv)
     configure_logging(args.debug, not args.no_log_file, args.log_file_path)
+
+    arg_parser.verify_arguments()
+
     logger.info("Start KARIOS %s with Python %s", __version__, sys.version)
     # set up configuration :
     conf = Configuration(args)
     # do the job
     match_and_plot = MatchAndPlot(conf)
-    match_and_plot.process(args.mon, args.ref, args.mask, args.resume)
+    match_and_plot.process(args.mon, args.ref, args.resume)
 
     shutil.copy(conf.values.configuration, conf.values.output_directory)
 

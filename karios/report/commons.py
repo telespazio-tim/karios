@@ -17,12 +17,17 @@
 # limitations under the License.
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 
 import imageio.v2 as imageio
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpecFromSubplotSpec
+from numpy.typing import NDArray
+from pandas import DataFrame, Series
+from pandas.core.groupby.generic import SeriesGroupBy
 
 TPZ = imageio.imread(os.path.join(os.path.dirname(__file__), "TPZ_logo.png"))
 EDAP = imageio.imread(os.path.join(os.path.dirname(__file__), "EDAP_logo.png"))
@@ -42,6 +47,50 @@ def add_logo(figure: Figure, logo_gd: GridSpecFromSubplotSpec):
     ax_esa.axis("off")
     ax_edap.axis("off")
     ax_tpz.axis("off")
+
+
+@dataclass
+class MeanProfile:
+    groups_positions: NDArray
+    mean_values: Series
+    nb_pos: Series
+    values_std: Series
+    grouped_values: SeriesGroupBy
+
+    def compute_std_min_max(self):
+        y_err = self.values_std * np.sqrt(
+            1 / len(self.groups_positions)
+            + (self.groups_positions - self.groups_positions.mean()) ** 2
+            / np.sum((self.groups_positions - self.groups_positions.mean()) ** 2)
+        )
+        std_min = self.mean_values - y_err
+        std_max = self.mean_values + y_err
+        return (std_min, std_max)
+
+
+def mean_profile(values: Series, positions: Series, bin_size: int = 20) -> MeanProfile:
+    """Compute mean and std values for each columns or rows.
+    Possible to do stack several lines or columns (see bin_size) in order
+    to increase number of points that is taken into account
+
+    Args:
+        values (Series): values
+        positions (Series): values position on one axis, for example, X coordinates of the values
+        bin_size (int, optional): bin size to group values by position group. Defaults to 20.
+
+    Returns:
+        MeanProfile: computed mean profiles
+    """
+    position_group = np.floor_divide(positions, bin_size)
+    dic = {"val": values, "po": position_group}
+    df = DataFrame.from_dict(dic)
+    group = df.groupby("po")
+    groups_positions = np.uint16(group["po"].mean() * bin_size + bin_size / 2)
+    nb_pos = group["val"].count()
+    mean_values = group["val"].mean()
+    values_std = group["val"].std()
+
+    return MeanProfile(groups_positions, mean_values, nb_pos, values_std, group["val"])
 
 
 class AbstractPlot(ABC):

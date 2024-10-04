@@ -111,7 +111,7 @@ class OverviewPlot(AbstractPlot):
 
         # /////////////////////////////
         # plot radial error
-        dist = self._points["dist"]
+        dist = self._points["radial error"]
         logger.debug("Delta min %s / max %s", dist.min(), dist.max())
 
         # set axes limit

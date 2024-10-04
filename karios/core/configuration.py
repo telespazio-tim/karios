@@ -62,13 +62,22 @@ class OverviewPlotConfiguration:
 
 @dataclass
 class ShiftPlotConfiguration:
-    """Shift Plot module configuration class"""
+    """Shift by Row Col Plot module configuration class"""
 
     fig_size: int
     scatter_colormap: str
     scatter_auto_limit: bool
     scatter_min_limit: float
     scatter_max_limit: float
+    histo_mean_bin_size: int
+
+
+@dataclass
+class DemPlotConfiguration:
+    """Shift by DEM Plot module configuration class"""
+
+    fig_size: int
+    show_fliers: bool
     histo_mean_bin_size: int
 
 
@@ -94,12 +103,14 @@ class GlobalConfiguration:
     output_directory: str
     working_image: str
     reference_image: str
-    mask: str
+    mask_file_path: str
     configuration: str
     pixel_size: float
     title_prefix: str
     gen_kp_mask: bool
     gen_delta_raster: bool
+    dem_file_path: str
+    dem_description: str
 
 
 class Configuration:
@@ -121,12 +132,14 @@ class Configuration:
             ),
             arguments.mon,
             arguments.ref,
-            arguments.mask,
+            arguments.mask_file_path,
             arguments.conf,
             arguments.pixel_size,
             arguments.title_prefix,
             arguments.gen_kp_mask,
             arguments.gen_delta_raster,
+            arguments.dem_file_path,
+            arguments.dem_description,
         )
 
         # Read configuration file :
@@ -154,6 +167,9 @@ class Configuration:
         )
         self.shift_plot_configuration = ShiftPlotConfiguration(
             **proc_config["plot_configuration"]["shift"]
+        )
+        self.dem_plot_configuration = DemPlotConfiguration(
+            **proc_config["plot_configuration"]["dem"]
         )
         self.ce_plot_configuration = CEPlotConfiguration(**proc_config["plot_configuration"]["ce"])
 

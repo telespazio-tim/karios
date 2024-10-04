@@ -32,6 +32,11 @@
                 "scatter_max_limit": 4.0,
                 "histo_mean_bin_size": 20
             },
+            "dem": {
+                "fig_size": 12,
+                "show_fliers": false,
+                "histo_mean_bin_size": 100
+            },
             "ce": {
                 "fig_size": 9,
                 "ce_scatter_colormap": "jet"

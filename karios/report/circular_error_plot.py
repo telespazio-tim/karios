@@ -61,7 +61,7 @@ class CircularErrorPlot(AbstractPlot):
         mon_image: GdalRasterImage,
         ref_image: GdalRasterImage,
         stats: GeometricStat,
-        img_res: int | None,
+        img_res: float | None,
         prefix: str | None,
     ):
         """Constructor
@@ -71,7 +71,7 @@ class CircularErrorPlot(AbstractPlot):
             mon_image (GdalRasterImage): image to match
             ref_image (GdalRasterImage): reference image
             stats (GeometricStat): statistics to plot
-            img_res (int | None): image resolution to apply to statistics as factor.
+            img_res (float | None): image resolution to apply to statistics as factor.
                 if None, consider pixel with value 1, otherwise, consider meter.
             prefix (str|None): figure title prefix
         """

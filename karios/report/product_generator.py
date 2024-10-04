@@ -139,7 +139,7 @@ class ProductGenerator:
             _to_feature,
             axis=1,
             geo_transform=self._reference_image.geo_transform,
-            properties=["dx", "dy", "score", "dist", "angle"],
+            properties=["dx", "dy", "score", "radial error", "angle"],
         )
 
         feature_collection = {

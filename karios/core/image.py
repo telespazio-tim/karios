@@ -33,7 +33,7 @@ def get_image_resolution(
     mon_img: GdalRasterImage,
     ref_img: GdalRasterImage,
     default_value: float | None = None,
-) -> float:
+) -> float | None:
     """Get the monitored image resolution.
     - If monitored image is not geo ref, it does not have a "real" pixel size.
         Use 'default_value' if provided, otherwise '1.0'
@@ -48,7 +48,8 @@ def get_image_resolution(
             Defaults to None.
 
     Returns:
-        float: the image resolution /pixel size to consider.
+        float: the image resolution /pixel size to consider,
+        None if no default value and image does not have resolution information.
     """
     if not mon_img.have_pixel_resolution():
         if default_value is None:
@@ -206,7 +207,7 @@ class GdalRasterImage:
             dst = None
         return self._array
 
-    def to_raster(self, file_path: str, data: NDArray | list(NDArray), e_type=gdal.GDT_Byte):
+    def to_raster(self, file_path: str, data: NDArray | list[NDArray], e_type=gdal.GDT_Byte):
         """Creates a raster file using input image size and res
 
         Args:
