@@ -2,12 +2,16 @@
 
 ## NEXT VERSION [FILL ME]
 
+### New features
+
+- Add shift by altitude groups plot
+- Add KP geojson output
+
 ### Improvements
 
 - Add processing config to output directory
 - Add disclaimer in Geometric Error distribution figure about planimetric accuracy.
 - Add input images geo information verification
-- Add shift by altitude groups plot
 
 ### Documentation
 
