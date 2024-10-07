@@ -198,6 +198,19 @@ class KariosArgumentParser(argparse.ArgumentParser):
             required=False,
         )
 
+        # DEM argument group section
+        experimental_features_args = self.add_argument_group("Experimental (optional)")
+
+        experimental_features_args.add_argument(
+            "--enable-large-shift-detection",
+            dest="enable_large_shift_detection",
+            help="""If enabled, KARIOS looks for large pixel shift between reference and monitored image.
+            When a significant shift is detected, KARIOS shifts the monitored image according 
+            to the offsets it computes and then process to the matching""",
+            default=False,
+            action="store_true",
+        )
+
         # Logging argument group section
         logging_args = self.add_argument_group("Logging arguments (optional)")
 

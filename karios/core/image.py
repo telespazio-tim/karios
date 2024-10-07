@@ -23,10 +23,45 @@ from __future__ import annotations
 import logging
 import os
 
+import numpy as np
 from numpy.typing import NDArray
 from osgeo import gdal, osr
 
 logger = logging.getLogger()
+
+
+def shift_image(img: NDArray, y_off=0, x_off=0) -> NDArray:
+    """Apply x and y offset to the given image array.
+    Keep img shape, fill with zero blank cell
+
+    Args:
+        img (NDArray): image array to shift
+        y_off (int, optional): y offset to apply. Defaults to 0.
+        x_off (int, optional): x offset to apply. Defaults to 0.
+
+    Returns:
+        NDArray: shifted img array
+    """
+
+    y_off = int(round(y_off))
+    x_off = int(round(x_off))
+    # simple shift image, at pixel precision
+    img_new = np.zeros(img.shape, img.dtype)
+    if x_off > 0:
+        img_new[:, :-x_off] = img[:, x_off:]
+    elif x_off < 0:
+        img_new[:, -x_off:] = img[:, :x_off]
+    if x_off != 0:
+        img = img_new
+        img_new = np.zeros(img.shape, img.dtype)
+    if y_off > 0:
+        img_new[:-y_off, :] = img[y_off:, :]
+    elif y_off < 0:
+        img_new[-y_off:, :] = img[:y_off, :]
+    if y_off != 0:
+        img = img_new
+
+    return img
 
 
 def get_image_resolution(

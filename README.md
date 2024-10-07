@@ -23,6 +23,12 @@ As show in the following picture, KARIOS makes KLT algorithm compatible with rem
 
 ![functional representation](docs/images/algorithm.PNG)
 
+> As an optional and experimental feature, KARIOS have the capability to detect large shift between images. If a large shift is detected, the monitored image is shifted according to the offsets it found, and then apply the KLT matching.
+>
+> To enable large shift detection, use `--enable-large-shift-detection` program argument.
+>
+> NOTICE that it could use lots of memory in case of large image such as Sentinel2 B04 (11GB)
+
 Furthermore, KARIOS analyses displacements between the two input image grids both in line and pixel direction outputing, providing user with the three following items:
 
 ### Geometric Error overview
@@ -111,7 +117,7 @@ python karios/karios.py \
 
 ```
 usage: karios.py [-h] [--conf CONF] [--resume] [--mask MASK_FILE_PATH] [--input-pixel-size PIXEL_SIZE] [--out OUT] [--generate-key-points-mask] [--generate-intermediate-product] [--title-prefix TITLE_PREFIX]
-                 [--dem-file-path DEM_FILE_PATH] [--dem-description DEM_DESCRIPTION] [--no-log-file] [--debug] [--log-file-path LOG_FILE_PATH]
+                 [--dem-file-path DEM_FILE_PATH] [--dem-description DEM_DESCRIPTION] [--enable-large-shift-detection] [--no-log-file] [--debug] [--log-file-path LOG_FILE_PATH]
                  MONITORED_IMAGE_PATH REFERENCE_IMAGE_PATH
 
 options:
@@ -144,6 +150,11 @@ DEM arguments (optional):
   --dem-description DEM_DESCRIPTION
                         DEM source name. It is added in "shift mean by altitude group plot" DEM source (example: COPERNICUS DEM resample to 10m). Ignored if --dem-file-path is not given (default: None)
 
+Experimental (optional):
+  --enable-large-shift-detection
+                        If enabled, KARIOS looks for large pixel shift between reference and monitored image. When a significant shift is detected, KARIOS shifts the monitored image according to the offsets it computes
+                        and then process to the matching (default: False)
+
 Logging arguments (optional):
   --no-log-file         Do not log in file (default: False)
   --debug, -d           Enable Debug mode (default: False)
@@ -156,6 +167,10 @@ Logging arguments (optional):
 ## Configuration
 
 The default configuration is located in [karios/configuration/processing_configuration.json](karios/configuration/processing_configuration.json)
+
+### `processing_configuration.shift_image_processing` parameters (Large Shift Matching processing parameters)
+
+- `bias_correction_min_threshold`: number of pixel threshold from which large shift is applied.
 
 ### `processing_configuration.klt_matching` parameters (Matching processing parameters)
 

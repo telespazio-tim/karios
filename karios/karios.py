@@ -24,6 +24,7 @@ import os
 import shutil
 import sys
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -34,10 +35,11 @@ from accuracy_analysis.accuracy_statistics import GeometricStat
 from argparser import KariosArgumentParser
 from core.configuration import Configuration
 from core.errors import KariosException
-from core.image import GdalRasterImage, get_image_resolution
+from core.image import GdalRasterImage, get_image_resolution, shift_image
 from core.utils import get_filename
-from klt_matcher.matcher import KLT
 from log import configure_logging
+from matcher.klt import KLT
+from matcher.large_offset import LargeOffsetMatcher
 from report.circular_error_plot import CircularErrorPlot
 from report.overview_plot import OverviewPlot
 from report.product_generator import ProductGenerator
@@ -47,6 +49,18 @@ from version import __version__
 
 gdal.UseExceptions()
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ShiftedImage:
+    """Describe a shifted image"""
+
+    image: GdalRasterImage
+    """shifted image"""
+    x_offset: int
+    """X/col offset compared to original image in pixel"""
+    y_offset: int
+    """Y/row offset compared to original image in pixel"""
 
 
 class MatchAndPlot:
@@ -143,7 +157,6 @@ class MatchAndPlot:
         reference_image: GdalRasterImage,
         mask: GdalRasterImage | None,
     ) -> pd.DataFrame:
-        # pylint: disable=too-many-arguments
         """Get points by running KLT or reading CSV file"""
 
         filename = f"KLT_matcher_{get_filename(monitored_image.filepath)}_{get_filename(reference_image.filepath)}"
@@ -252,53 +265,41 @@ class MatchAndPlot:
         # compute min and max for shift axis to use the same for each plots
         maxi = math.ceil(max(points["dx"].max(), points["dy"].max(), points["radial error"].max()))
         mini = math.floor(min(points["dx"].min(), points["dy"].min(), points["radial error"].min()))
-        report = MeanShiftByAltitudeGroupPlot(
-            conf,
-            monitored_image,
-            reference_image,
-            dem,
-            points,
-            "dx",
-            self._conf.values.title_prefix,
-            self._conf.values.dem_description,
-            mini,
-            maxi,
-        )
-        poster_path = Path(os.path.join(self._conf.values.output_directory, "dem_dx.png"))
-        report.plot(poster_path)  # nosec B108
 
-        report = MeanShiftByAltitudeGroupPlot(
-            conf,
-            monitored_image,
-            reference_image,
-            dem,
-            points,
-            "dy",
-            self._conf.values.title_prefix,
-            self._conf.values.dem_description,
-            mini,
-            maxi,
-        )
-        poster_path = Path(os.path.join(self._conf.values.output_directory, "dem_dy.png"))
-        report.plot(poster_path)  # nosec B108
+        for dimension in ["dx", "dy", "radial error"]:
 
-        report = MeanShiftByAltitudeGroupPlot(
-            conf,
-            monitored_image,
-            reference_image,
-            dem,
-            points,
-            "radial error",
-            self._conf.values.title_prefix,
-            self._conf.values.dem_description,
-            mini,
-            maxi,
-        )
-        poster_path = Path(os.path.join(self._conf.values.output_directory, "dem_dist.png"))
-        report.plot(poster_path)  # nosec B108
+            report = MeanShiftByAltitudeGroupPlot(
+                conf,
+                monitored_image,
+                reference_image,
+                dem,
+                points,
+                dimension,
+                self._conf.values.title_prefix,
+                self._conf.values.dem_description,
+                mini,
+                maxi,
+            )
+            poster_path = Path(
+                os.path.join(
+                    self._conf.values.output_directory, f"dem_{dimension}.png".replace(" ", "_")
+                )
+            )
+            report.plot(poster_path)
 
     def _get_dem(self, reference_image: GdalRasterImage) -> GdalRasterImage | None:
+        """Get DEM as GdalRasterImage and check its compatibility with reference image.
+        Notice that DEM path is in this object config.
 
+        Args:
+            reference_image (GdalRasterImage): reference image
+
+        Raises:
+            KariosException: if DEM is not compatible with reference image
+
+        Returns:
+            GdalRasterImage | None: DEM if present in conf and compatible with reference image.
+        """
         if self._conf.values.dem_file_path:
             dem = GdalRasterImage(self._conf.values.dem_file_path)
             if not dem.is_compatible_with(reference_image):
@@ -312,6 +313,115 @@ class MatchAndPlot:
             dem = None
 
         return dem
+
+    @staticmethod
+    def _get_images(
+        ref_file_path: str, mon_file_path: str
+    ) -> tuple[GdalRasterImage, GdalRasterImage]:
+        """Build GdalRasterImage of images denoted by their file path and check compatibility.
+
+        Args:
+            ref_file_path (str): file path to reference image
+            mon_file_path (str): file path to monitored image
+
+        Raises:
+            KariosException: if monitored image is not compatible with reference image
+
+        Returns:
+            tuple[GdalRasterImage, GdalRasterImage]: reference image and monitored image
+        """
+        monitored_image = GdalRasterImage(mon_file_path)
+        reference_image = GdalRasterImage(ref_file_path)
+
+        if not monitored_image.is_compatible_with(reference_image):
+            raise KariosException(
+                f"""Monitored image geo info not compatible with reference image:
+            * Monitored image : {monitored_image.image_information}
+            * Reference image : {reference_image.image_information}
+            """
+            )
+        return reference_image, monitored_image
+
+    def _get_mask(self, reference_image: GdalRasterImage) -> GdalRasterImage | None:
+        """Get mask as GdalRasterImage and check its compatibility with reference image.
+        Notice that mask is in this object config.
+
+        Args:
+            reference_image (GdalRasterImage): reference image
+
+        Raises:
+            KariosException: if mask is not compatible with reference image
+
+        Returns:
+            GdalRasterImage | None: Mask if present in conf and compatible with reference image.
+        """
+
+        if self._conf.values.mask_file_path:
+            mask = GdalRasterImage(self._conf.values.mask_file_path)
+            if not mask.is_compatible_with(reference_image):
+                raise KariosException(
+                    f"""Mask geo info not compatible with reference image:
+                * Mask image : {mask.image_information}
+                * Reference image : {reference_image.image_information}
+                """
+                )
+        else:
+            mask = None
+
+        return mask
+
+    def _preprocess_large_offset(
+        self, reference_image: GdalRasterImage, monitored_image: GdalRasterImage
+    ) -> ShiftedImage | None:
+        """Computes large offset. Uses `LargeOffsetMatcher`
+        to get offsets between reference and monitored image.
+        Applies shift on monitored image on X and Y axes independently of each other
+        if their offset is higher than a threshold.
+
+        Args:
+            reference_image (GdalRasterImage): the reference image to compute offset
+            monitored_image (GdalRasterImage): the image to compute the offset
+
+        Returns:
+            ShiftedImage | None: the shifted monitored image if shift applied, otherwise None.
+        """
+        # Compute large offset
+        large_offset_matcher = LargeOffsetMatcher(reference_image, monitored_image)
+        offsets = large_offset_matcher.match()
+        logging.info("Large offset found: %s", offsets)
+
+        offset_threshold = (
+            self._conf.shift_image_processing_configuration.bias_correction_min_threshold
+        )
+        if abs(offsets[1]) < offset_threshold:
+            offsets[1] = 0  # do not shift on this axis
+        else:
+            logger.info("Will apply X offset %s", offsets[1])
+
+        if abs(offsets[0]) < offset_threshold:
+            offsets[0] = 0  # do not shift on this axis
+        else:
+            logger.info("Will apply Y offset %s", offsets[0])
+
+        # apply shift if needed
+        if offsets[0] != offsets[1] != 0:
+            logger.info("Do shift for large offset")
+            new_monitored_array = shift_image(
+                monitored_image.array, x_off=offsets[1], y_off=offsets[0]
+            )
+            mon_filename = os.path.basename(monitored_image.file_name)
+            extension = os.path.splitext(mon_filename)[1]
+            shifted_image = f"{os.path.splitext(mon_filename)[0]}_shifted"
+
+            shifted_image_path = os.path.join(
+                self._conf.values.output_directory, "".join([shifted_image, extension])
+            )
+            monitored_image.to_raster(shifted_image_path, new_monitored_array)
+            shifted_monitored_image = GdalRasterImage(shifted_image_path)
+
+            return ShiftedImage(shifted_monitored_image, offsets[1], offsets[0])
+
+        return None
 
     def process(self, mon_file_path: str, ref_file_path: str, resume: bool):
         """Orchestrates job to do.
@@ -327,31 +437,25 @@ class MatchAndPlot:
         # Prepare output dir
         self._check_output_dir()
 
-        # Prepare input images
-        monitored_image = GdalRasterImage(mon_file_path)
-        reference_image = GdalRasterImage(ref_file_path)
+        # Prepare inputs
+        reference_image, monitored_image = self._get_images(ref_file_path, mon_file_path)
+        mask = self._get_mask(reference_image)
 
-        if not monitored_image.is_compatible_with(reference_image):
-            raise KariosException(
-                f"""Monitored image geo info not compatible with reference image:
-            * Monitored image : {monitored_image.image_information}
-            * Reference image : {reference_image.image_information}
-            """
-            )
+        if self._conf.values.enable_large_shift_detection:
+            logger.warning("Large shift detection enable, this is an experimental feature.")
+            shifted_image = self._preprocess_large_offset(reference_image, monitored_image)
 
-        if self._conf.values.mask_file_path:
-            mask = GdalRasterImage(self._conf.values.mask_file_path)
-            if not mask.is_compatible_with(reference_image):
-                raise KariosException(
-                    f"""Mask geo info not compatible with reference image:
-                * Monitored image : {mask.image_information}
-                * Reference image : {reference_image.image_information}
-                """
-                )
+            if shifted_image:
+                monitored_image = shifted_image.image
+                logger.info("Switch monitored image to %s", monitored_image.filepath)
+
+            points = self._get_points(resume, monitored_image, reference_image, mask)
+            if shifted_image:
+                logger.info("Apply offset to KLT matcher result")
+                points["dx"] = points["dx"] + shifted_image.x_offset
+                points["dy"] = points["dy"] + shifted_image.y_offset
         else:
-            mask = None
-
-        points = self._get_points(resume, monitored_image, reference_image, mask)
+            points = self._get_points(resume, monitored_image, reference_image, mask)
 
         product_generator = ProductGenerator(self._conf.values, points, reference_image)
         product_generator.generate_products()

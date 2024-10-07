@@ -6,6 +6,7 @@
 
 - Add shift by altitude groups plot
 - Add KP geojson output
+- Large shift detection (Experimental, know issue: use 11Go with 2 S2 at 10m resolution as reference and monitored image)
 
 ### Improvements
 

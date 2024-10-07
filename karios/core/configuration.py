@@ -97,6 +97,13 @@ class AccuracyAnalysisConfiguration:
 
 
 @dataclass
+class ShiftConfiguration:
+    """Large shift image preprocessing configuration"""
+
+    bias_correction_min_threshold: int
+
+
+@dataclass
 class GlobalConfiguration:
     """Global configuration"""
 
@@ -111,6 +118,7 @@ class GlobalConfiguration:
     gen_delta_raster: bool
     dem_file_path: str
     dem_description: str
+    enable_large_shift_detection: bool
 
 
 class Configuration:
@@ -140,6 +148,7 @@ class Configuration:
             arguments.gen_delta_raster,
             arguments.dem_file_path,
             arguments.dem_description,
+            arguments.enable_large_shift_detection,
         )
 
         # Read configuration file :
@@ -160,6 +169,9 @@ class Configuration:
         """
         self.klt_configuration = KLTConfiguration(
             **proc_config["processing_configuration"]["klt_matching"]
+        )
+        self.shift_image_processing_configuration = ShiftConfiguration(
+            **proc_config["processing_configuration"]["shift_image_processing"]
         )
         self.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
             **proc_config["processing_configuration"]["accuracy_analysis"]
