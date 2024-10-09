@@ -234,7 +234,13 @@ class GdalRasterImage:
         dst = None
         return data
 
-    def _get_array(self) -> NDArray:
+    @property
+    def array(self) -> NDArray:
+        """Access to image array
+
+        Returns:
+            NDArray: image pixel array
+        """
         if self._array is None:
             dst = gdal.Open(self.filepath)
             band = dst.GetRasterBand(1)
@@ -309,5 +315,3 @@ class GdalRasterImage:
         X Size: {self.x_size}
         Y Size: {self.y_size}
         """
-
-    array: NDArray = property(_get_array, doc="Access to image array (numpy array)")
