@@ -16,3 +16,13 @@ Custom CSS are located in `source/_static/css/custom.css`
 Most of the pages are in MD, except main page (index) which is RST
 
 There is a workaround for https://github.com/pydata/pydata-sphinx-theme/issues/1662 to hide left sidebar on some pages in `source/conf.py`. See attribute `html_sidebars` in [`source/conf.py`](source/conf.py).
+
+## Build the site
+
+```console
+make html
+```
+
+The result is located in a folder named `build`
+
+open build/index.html in a web browser to see the result
