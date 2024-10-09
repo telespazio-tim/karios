@@ -18,7 +18,7 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements.txt && pip install setuptools==75.1.0
       - name: Sphinx build
         run: |
           make html
