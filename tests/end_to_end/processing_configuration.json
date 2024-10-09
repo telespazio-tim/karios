@@ -2,6 +2,9 @@
     "processing_configuration": {
         "input_products": "testing",
         "cloud_mask": null,
+        "shift_image_processing": {
+            "bias_correction_min_threshold": 2
+        },
         "klt_matching":{
             "minDistance": 10,
             "blocksize": 15,
