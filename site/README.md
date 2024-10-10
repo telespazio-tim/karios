@@ -53,6 +53,8 @@ The KARIOS website is automatically deployed to github pages : https://telespazi
 
 It is driven by the github workflow defined in [.github/workflows/site.yml](../.github/workflows/site.yml)
 
+It is inspired by https://coderefinery.github.io/documentation/gh_workflow/
+
 ## Editing
 
 TODO
