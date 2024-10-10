@@ -4,11 +4,11 @@ on:
   push:
     paths:
       - 'site/**'
-      - 'site/README.md'
+      - '!site/README.md'
   pull_request:
     paths:
       - 'site/**'
-      - 'site/README.md'
+      - '!site/README.md'
   workflow_dispatch:
 
 permissions:
