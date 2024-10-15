@@ -4,7 +4,7 @@ it works in MD with myst_parser by enabling myst extension fieldlist
 -->
 :html_theme.sidebar_secondary.remove:
 
-# Case study
+# Case studies
 
 ```{toctree}
 :hidden:
