@@ -101,3 +101,7 @@ KARIOS tries follows clean architecture principles with clear separation of conc
 - **Reusability**: Same configuration can process multiple image pairs
 - **Type Safety**: Comprehensive type hints throughout the codebase
 - **Clean Interfaces**: Clear dataclasses for inputs and outputs
+
+## Contribute to KARIOS website
+
+See [dedicated Readme of the website](site/README.md)
