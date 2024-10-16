@@ -76,3 +76,7 @@ PYTHONPATH=karios \
 ```
 
 For reports options take a look at this : https://pytest-cov.readthedocs.io/en/latest/reporting.html
+
+## Contribute to KARIOS website
+
+See [dedicated Readme of the website](site/README.md)
