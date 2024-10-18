@@ -1,0 +1,774 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" data-theme="light">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Getting started &#8212; KARIOS 1.0.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "light";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinxcontrib-images/LightBox2/lightbox2/dist/css/lightbox.css?v=5c84f910" />
+    <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=0b4f26b6" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/sphinxcontrib-images/LightBox2/lightbox2/dist/js/lightbox-plus-jquery.min.js?v=ffc8af2d"></script>
+    <script src="_static/sphinxcontrib-images/LightBox2/lightbox2-customize/jquery-noconflict.js?v=12818e64"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'quickstart';</script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Cookbook" href="cookbook/index.html" />
+    <link rel="prev" title="Welcome to Karios’s documentation!" href="index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="light">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+    
+    
+    
+    <img src="_static/logo.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="_static/logo.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">KARIOS</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    Getting started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="cookbook/index.html">
+    Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="case_study/index.html">
+    Case studies
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="references.html">
+    References
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/telespazio-tim/karios/" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    Getting started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="cookbook/index.html">
+    Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="case_study/index.html">
+    Case studies
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="references.html">
+    References
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/telespazio-tim/karios/" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Getting started</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="getting-started">
+<h1>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading">#</a></h1>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
+<section id="prerequisite">
+<h3>Prerequisite<a class="headerlink" href="#prerequisite" title="Link to this heading">#</a></h3>
+<p>As KARIOS is Python application it needs to have a Python environment with its dependencies.</p>
+<p>To configure the environment you need to install conda or miniconda.</p>
+<p>We recommend <a class="reference external" href="https://docs.anaconda.com/free/miniconda/miniconda-install/">miniconda</a>.</p>
+</section>
+<section id="get-karios">
+<h3>Get KARIOS<a class="headerlink" href="#get-karios" title="Link to this heading">#</a></h3>
+<p>Download KARIOS sources <a class="reference external" href="https://github.com/telespazio-tim/karios/releases">from github</a>
+or clone the KARIOS github repository:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/telespazio-tim/karios.git
+</pre></div>
+</div>
+</section>
+<section id="create-python-environment">
+<h3>Create Python environment<a class="headerlink" href="#create-python-environment" title="Link to this heading">#</a></h3>
+<p>Create the <code class="docutils literal notranslate"><span class="pre">karios</span></code> conda environment</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-y<span class="w"> </span>-f<span class="w"> </span>environment.yml
+</pre></div>
+</div>
+<p>Then activate the environment:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>activate<span class="w"> </span>karios
+</pre></div>
+</div>
+<p>You are ready to run KARIOS.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The conda environment stay active until you close your terminal session. You need to activate it every time you start a new session and want to use KARIOS in the terminal session.</p>
+</div>
+</section>
+</section>
+<section id="run-karios">
+<h2>Run KARIOS<a class="headerlink" href="#run-karios" title="Link to this heading">#</a></h2>
+<section id="usage">
+<h3>Usage<a class="headerlink" href="#usage" title="Link to this heading">#</a></h3>
+<p>To print KARIOS CLI help and see options parameters run the following command:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>karios/karios.py<span class="w"> </span>--help
+</pre></div>
+</div>
+<p>For details, <a class="reference internal" href="#cli-options"><span class="xref myst">see below</span></a></p>
+<p>KARIOS takes as mandatory inputs :</p>
+<ul class="simple">
+<li><p>monitored sensor image file</p></li>
+<li><p>reference sensor image file</p></li>
+</ul>
+<p>Run KARIOS:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>karios/karios.py<span class="w"> </span>&lt;Image<span class="w"> </span>to<span class="w"> </span>match&gt;<span class="w"> </span>&lt;Reference<span class="w"> </span>image&gt;
+</pre></div>
+</div>
+</section>
+<section id="simple-example">
+<h3>Simple example<a class="headerlink" href="#simple-example" title="Link to this heading">#</a></h3>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>karios/karios.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/data/12SYH/LS9_OLIL2F_20220824T175017_N0403_R035_T12SYH_20230214T164934.SAFE/GRANULE/L2F_T12SYH_A000000_20220824T175017_LS9_R035/IMG_DATA/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/data/References/GRI/T12SYH_20220514T175909_B04.jp2
+</pre></div>
+</div>
+<p>With DEM:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>karios/karios.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--dem-file-path<span class="w"> </span>/data/12SYH/dem10.tiff<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--dem-description<span class="w"> </span><span class="s2">&quot;Copernicus DSM_30 resample from 90m to 10m&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/data/12SYH/LS9_OLIL2F_20220824T175017_N0403_R035_T12SYH_20230214T164934.SAFE/GRANULE/L2F_T12SYH_A000000_20220824T175017_LS9_R035/IMG_DATA/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/data/References/GRI/T12SYH_20220514T175909_B04.jp2
+</pre></div>
+</div>
+</section>
+<section id="input-data-prerequisite-and-limitations">
+<h3>Input data prerequisite and limitations<a class="headerlink" href="#input-data-prerequisite-and-limitations" title="Link to this heading">#</a></h3>
+<p>Input image files shall contain only one layer of data, and the format shall recognized by gdal library.</p>
+<p>Inputs images grids should be comparable. <strong>The user should take care of its data preparation</strong>.</p>
+<p>That means geo coded images must have the same footprint, same geo transform information (same EPSG code) and same resolution. Image pixel resolution should also be square (same X,Y) and unit meter.</p>
+<p>These constraints are also applicable to the DEM file provided with the option <code class="docutils literal notranslate"><span class="pre">--dem-file-path</span></code>.</p>
+</section>
+<section id="cli-options">
+<h3>CLI Options<a class="headerlink" href="#cli-options" title="Link to this heading">#</a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">karios</span><span class="o">.</span><span class="n">py</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">conf</span> <span class="n">CONF</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">resume</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mask</span> <span class="n">MASK_FILE_PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">input</span><span class="o">-</span><span class="n">pixel</span><span class="o">-</span><span class="n">size</span> <span class="n">PIXEL_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">out</span> <span class="n">OUT</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">generate</span><span class="o">-</span><span class="n">key</span><span class="o">-</span><span class="n">points</span><span class="o">-</span><span class="n">mask</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">generate</span><span class="o">-</span><span class="n">intermediate</span><span class="o">-</span><span class="n">product</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">title</span><span class="o">-</span><span class="n">prefix</span> <span class="n">TITLE_PREFIX</span><span class="p">]</span>
+                 <span class="p">[</span><span class="o">--</span><span class="n">dem</span><span class="o">-</span><span class="n">file</span><span class="o">-</span><span class="n">path</span> <span class="n">DEM_FILE_PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">dem</span><span class="o">-</span><span class="n">description</span> <span class="n">DEM_DESCRIPTION</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">enable</span><span class="o">-</span><span class="n">large</span><span class="o">-</span><span class="n">shift</span><span class="o">-</span><span class="n">detection</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">log</span><span class="o">-</span><span class="n">file</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">debug</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">file</span><span class="o">-</span><span class="n">path</span> <span class="n">LOG_FILE_PATH</span><span class="p">]</span>
+                 <span class="n">MONITORED_IMAGE_PATH</span> <span class="n">REFERENCE_IMAGE_PATH</span>
+
+<span class="n">options</span><span class="p">:</span>
+  <span class="o">-</span><span class="n">h</span><span class="p">,</span> <span class="o">--</span><span class="n">help</span>            <span class="n">show</span> <span class="n">this</span> <span class="n">help</span> <span class="n">message</span> <span class="ow">and</span> <span class="n">exit</span>
+
+<span class="n">Mandatory</span> <span class="n">arguments</span><span class="p">:</span>
+  <span class="n">MONITORED_IMAGE_PATH</span>  <span class="n">Path</span> <span class="n">to</span> <span class="n">the</span> <span class="n">monitored</span> <span class="n">sensor</span> <span class="n">product</span>
+  <span class="n">REFERENCE_IMAGE_PATH</span>  <span class="n">Path</span> <span class="n">to</span> <span class="n">the</span> <span class="n">reference</span> <span class="n">sensor</span> <span class="n">product</span>
+
+<span class="n">Processing</span> <span class="n">options</span><span class="p">:</span>
+  <span class="o">--</span><span class="n">conf</span> <span class="n">CONF</span>           <span class="n">Configuration</span> <span class="n">file</span> <span class="n">path</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="o">/</span><span class="n">opt</span><span class="o">/</span><span class="n">karios</span><span class="o">/</span><span class="n">karios</span><span class="o">/</span><span class="n">configuration</span><span class="o">/</span><span class="n">processing_configuration</span><span class="o">.</span><span class="n">json</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">resume</span>              <span class="n">Do</span> <span class="ow">not</span> <span class="n">run</span> <span class="n">KLT</span> <span class="n">matcher</span><span class="p">,</span> <span class="n">only</span> <span class="n">accuracy</span> <span class="n">analysis</span> <span class="ow">and</span> <span class="n">report</span> <span class="n">generation</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">mask</span> <span class="n">MASK_FILE_PATH</span>
+                        <span class="n">Path</span> <span class="n">to</span> <span class="n">the</span> <span class="n">mask</span> <span class="n">to</span> <span class="n">apply</span> <span class="n">to</span> <span class="n">the</span> <span class="n">reference</span> <span class="n">image</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+  <span class="o">--</span><span class="nb">input</span><span class="o">-</span><span class="n">pixel</span><span class="o">-</span><span class="n">size</span> <span class="n">PIXEL_SIZE</span><span class="p">,</span> <span class="o">-</span><span class="n">pxs</span> <span class="n">PIXEL_SIZE</span>
+                        <span class="n">Input</span> <span class="n">image</span> <span class="n">pixel</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">meter</span><span class="o">.</span> <span class="n">Ignored</span> <span class="k">if</span> <span class="n">image</span> <span class="n">resolution</span> <span class="n">can</span> <span class="n">be</span> <span class="n">read</span> <span class="kn">from</span> <span class="nn">input</span> <span class="n">image</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+
+<span class="n">Output</span> <span class="n">options</span><span class="p">:</span>
+  <span class="o">--</span><span class="n">out</span> <span class="n">OUT</span>             <span class="n">Output</span> <span class="n">results</span> <span class="n">folder</span> <span class="n">path</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="o">/</span><span class="n">opt</span><span class="o">/</span><span class="n">karios</span><span class="o">/</span><span class="n">results</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">generate</span><span class="o">-</span><span class="n">key</span><span class="o">-</span><span class="n">points</span><span class="o">-</span><span class="n">mask</span><span class="p">,</span> <span class="o">-</span><span class="n">kpm</span>
+                        <span class="n">Generate</span> <span class="n">a</span> <span class="n">tiff</span> <span class="n">mask</span> <span class="n">based</span> <span class="n">on</span> <span class="n">KP</span> <span class="kn">from</span> <span class="nn">KTL</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">generate</span><span class="o">-</span><span class="n">intermediate</span><span class="o">-</span><span class="n">product</span><span class="p">,</span> <span class="o">-</span><span class="n">gip</span>
+                        <span class="n">Generate</span> <span class="n">a</span> <span class="n">two</span> <span class="n">band</span> <span class="n">tiff</span> <span class="n">based</span> <span class="n">on</span> <span class="n">KP</span> <span class="k">with</span> <span class="n">band</span> <span class="mi">1</span> <span class="n">dx</span> <span class="ow">and</span> <span class="n">band</span> <span class="mi">2</span> <span class="n">dy</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">title</span><span class="o">-</span><span class="n">prefix</span> <span class="n">TITLE_PREFIX</span><span class="p">,</span> <span class="o">-</span><span class="n">tp</span> <span class="n">TITLE_PREFIX</span>
+                        <span class="n">Add</span> <span class="n">prefix</span> <span class="n">to</span> <span class="n">title</span> <span class="n">of</span> <span class="n">generated</span> <span class="n">output</span> <span class="n">charts</span> <span class="p">(</span><span class="n">limited</span> <span class="n">to</span> <span class="mi">26</span> <span class="n">characters</span><span class="p">)</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+
+<span class="n">DEM</span> <span class="n">arguments</span> <span class="p">(</span><span class="n">optional</span><span class="p">):</span>
+  <span class="o">--</span><span class="n">dem</span><span class="o">-</span><span class="n">file</span><span class="o">-</span><span class="n">path</span> <span class="n">DEM_FILE_PATH</span>
+                        <span class="n">DEM</span> <span class="n">file</span> <span class="n">path</span><span class="o">.</span> <span class="n">If</span> <span class="n">given</span><span class="p">,</span> <span class="s2">&quot;shift mean by altitude group plot&quot;</span> <span class="ow">is</span> <span class="n">generated</span><span class="o">.</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">dem</span><span class="o">-</span><span class="n">description</span> <span class="n">DEM_DESCRIPTION</span>
+                        <span class="n">DEM</span> <span class="n">source</span> <span class="n">name</span><span class="o">.</span> <span class="n">It</span> <span class="ow">is</span> <span class="n">added</span> <span class="ow">in</span> <span class="s2">&quot;shift mean by altitude group plot&quot;</span> <span class="n">DEM</span> <span class="n">source</span> <span class="p">(</span><span class="n">example</span><span class="p">:</span> <span class="n">COPERNICUS</span> <span class="n">DEM</span> <span class="n">resample</span> <span class="n">to</span> <span class="mi">10</span><span class="n">m</span><span class="p">)</span><span class="o">.</span> <span class="n">Ignored</span> <span class="k">if</span> <span class="o">--</span><span class="n">dem</span><span class="o">-</span><span class="n">file</span><span class="o">-</span><span class="n">path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">given</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+
+<span class="n">Experimental</span> <span class="p">(</span><span class="n">optional</span><span class="p">):</span>
+  <span class="o">--</span><span class="n">enable</span><span class="o">-</span><span class="n">large</span><span class="o">-</span><span class="n">shift</span><span class="o">-</span><span class="n">detection</span>
+                        <span class="n">If</span> <span class="n">enabled</span><span class="p">,</span> <span class="n">KARIOS</span> <span class="n">looks</span> <span class="k">for</span> <span class="n">large</span> <span class="n">pixel</span> <span class="n">shift</span> <span class="n">between</span> <span class="n">reference</span> <span class="ow">and</span> <span class="n">monitored</span> <span class="n">image</span><span class="o">.</span> <span class="n">When</span> <span class="n">a</span> <span class="n">significant</span> <span class="n">shift</span> <span class="ow">is</span> <span class="n">detected</span><span class="p">,</span> <span class="n">KARIOS</span> <span class="n">shifts</span> <span class="n">the</span> <span class="n">monitored</span> <span class="n">image</span> <span class="n">according</span> <span class="n">to</span> <span class="n">the</span> <span class="n">offsets</span> <span class="n">it</span> <span class="n">computes</span>
+                        <span class="ow">and</span> <span class="n">then</span> <span class="n">process</span> <span class="n">to</span> <span class="n">the</span> <span class="n">matching</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+
+<span class="n">Logging</span> <span class="n">arguments</span> <span class="p">(</span><span class="n">optional</span><span class="p">):</span>
+  <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">log</span><span class="o">-</span><span class="n">file</span>         <span class="n">Do</span> <span class="ow">not</span> <span class="n">log</span> <span class="ow">in</span> <span class="n">file</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">debug</span><span class="p">,</span> <span class="o">-</span><span class="n">d</span>           <span class="n">Enable</span> <span class="n">Debug</span> <span class="n">mode</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+  <span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">file</span><span class="o">-</span><span class="n">path</span> <span class="n">LOG_FILE_PATH</span>
+                        <span class="n">Log</span> <span class="n">file</span> <span class="n">path</span> <span class="p">(</span><span class="n">default</span><span class="p">:</span> <span class="o">/</span><span class="n">opt</span><span class="o">/</span><span class="n">karios</span><span class="o">/</span><span class="n">karios</span><span class="o">.</span><span class="n">log</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+<section id="configuration">
+<h1>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h1>
+<section id="configuration-file">
+<h2>Configuration file<a class="headerlink" href="#configuration-file" title="Link to this heading">#</a></h2>
+<p>The default configuration is located in <a class="reference external" href="https://github.com/telespazio-tim/karios/tree/develop/karios/configuration/processing_configuration.json">karios/configuration/processing_configuration.json</a></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;processing_configuration&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;input_products&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;testing&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;cloud_mask&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;shift_image_processing&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;bias_correction_min_threshold&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;klt_matching&quot;</span><span class="p">:{</span>
+<span class="w">            </span><span class="nt">&quot;minDistance&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;blocksize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">15</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;maxCorners&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20000</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;matching_winsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">25</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;qualityLevel&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.1</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;xStart&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;tile_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20000</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;laplacian_kernel_size&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;outliers_filtering&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;accuracy_analysis&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;confidence_threshold&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mf">0.4</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;plot_configuration&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;overview&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;shift_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bone_r&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;shift_auto_axes_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;shift_axes_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;theta_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;twilight_shifted&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;shift&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Spectral&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_auto_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_min_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_max_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">4.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;histo_mean_bin_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;dem&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;show_fliers&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;histo_mean_bin_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;ce&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">9</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;ce_scatter_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;jet&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">processing_configuration.shift_image_processing</span></code> parameters (Large Shift Matching processing parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">bias_correction_min_threshold</span></code>: number of pixel threshold from which large shift is applied.</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">processing_configuration.klt_matching</span></code> parameters (Matching processing parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">xStart</span></code> : image X margin to apply (margin is skipped by the matcher)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tile_size</span></code> : tile size to process by KTL in the input image</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">laplacian_kernel_size</span></code> : Aperture size used to compute the second-derivative filters of Laplacian process</p></li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<div><p>The next parameters allow to control how to find the most prominent corners in the reference image, as described by the OpenCV documentation <code class="docutils literal notranslate"><span class="pre">goodFeaturesToTrack</span></code>, after applying the Laplacian operator.</p>
+</div></blockquote>
+<ul class="simple">
+<li><ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">minDistance</span></code> : Minimum possible Euclidean distance between the returned corners.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">blocksize</span></code> : Size of an average block for computing a derivative covariation matrix over each pixel neighbourhood.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">maxCorners</span></code> : Maximum number of corners to extract. If there are more corners than are found, the strongest of them is returned.
+<code class="docutils literal notranslate"><span class="pre">maxCorners</span> <span class="pre">=</span> <span class="pre">0</span></code> implies that no limit on the maximum is set and all detected corners are returned.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">qualityLevel</span></code> : Parameter characterizing the minimal accepted quality of image corners.
+The parameter value is multiplied by the best corner quality measure.
+The corners with the quality measure less than the product are rejected.
+For example, if the best corner has the quality measure = 1500, and the qualityLevel=0.01,
+then all the corners with the quality measure less than 15 are rejected.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">matching_winsize</span></code> : size of the search window during matching corners in the reference and the monitored Laplacian images.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">outliers_filtering</span></code> : whether to filter or not the outliers points found during the matching.</p></li>
+</ul>
+</li>
+</ul>
+<p>Refer to section <a class="reference internal" href="#klt-param-leverage"><span class="xref myst">KLT param leverage</span></a> for details</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">processing_configuration.accuracy_analysis</span></code></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">confidence_threshold</span></code> : max score for points found by the matcher to use to compute statistics written in correl_res.txt.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code>, not applied.</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.overview</span></code> (overview plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Size of the generated figure in inches</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shift_colormap</span></code> : matplotlib color map name for the KP shift error scatter plot</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shift_auto_axes_limit</span></code> : auto compute KP shift error colorbar scale</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shift_axes_limit</span></code> : KP shift error colorbar maximum limit, N/A if <code class="docutils literal notranslate"><span class="pre">shift_auto_axes_limit</span></code> is <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">theta_colormap</span></code> : matplotlib color map name for the KP theta error scatter plot</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.shift</span></code> (shift by row/col group plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Size of the generated figure in inches</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_colormap</span></code> : matplotlib color map name for the KP shift scatter plot</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_auto_limit</span></code> : auto compute KP shift scatter plot limit</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_min_limit</span></code> : KP shift scatter plot minimum limit, N/A if <code class="docutils literal notranslate"><span class="pre">scatter_auto_limit</span></code> is <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_max_limit</span></code> : KP shift scatter plot maximum limit, N/A if <code class="docutils literal notranslate"><span class="pre">scatter_auto_limit</span></code> is <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">histo_mean_bin_size</span></code> : KP shift histogram bin size (number of image row/col for the histogram bin)</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.dem</span></code> (shift by altitude group plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Size of the generated figure in inches</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">show_fliers</span></code> : draw fliers of box plot</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">histo_mean_bin_size</span></code>: KP altitude histogram bin size (altitude ranges size)</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.ce</span></code> (Circular error plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Height size of the generated figure in inches, width is 5/3 of the height</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ce_scatter_colormap</span></code> : matplotlib color map name for the KP shift density scatter plot</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="klt-param-leverage">
+<h2>KLT param leverage<a class="headerlink" href="#klt-param-leverage" title="Link to this heading">#</a></h2>
+<section id="maxcorners-tile-size">
+<h3>maxCorners &amp; tile_size<a class="headerlink" href="#maxcorners-tile-size" title="Link to this heading">#</a></h3>
+<p>In order to have a lower memory usage during KLT process, it is possible to define a tile size to process for KLT.</p>
+<p>For example, a tile_size of 10000 for an image having a size of 20000x20000 pixels will result of 4 tiles to process.</p>
+<p>In this context, the KLT process will look in each tiles for <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code>.</p>
+<p>While an image of 20000x20000 pixels results of 4 equals tiles, an image of 20000x15000 pixels also result of 4 tiles, but with different size, two of 10000x10000 pixels and two of 10000x5000 pixels.</p>
+<p>The consequence is that the density for matching point will not be the same each tiles, the bigger tiles will have a lower matching point than the smallest.</p>
+<p>You may also consider that the image can content empty parts where KLT will not find any matching point. So tiles having a large empty parts will also results to a bigger matching point density.</p>
+<p>In order to avoid density difference in the final result, you can define a <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> largest than the image with an hight <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code>, or a small <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> and <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code> in order to have tiles with almost same size.</p>
+<p>For example, for image of 20000x15000 pixels, you should consider a <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> of 20000 (1 tile), or 5000 (12 equal tiles)</p>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Welcome to Karios’s documentation!</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="cookbook/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Cookbook</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Getting started</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisite">Prerequisite</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#get-karios">Get KARIOS</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#create-python-environment">Create Python environment</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-karios">Run KARIOS</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-example">Simple example</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#input-data-prerequisite-and-limitations">Input data prerequisite and limitations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#cli-options">CLI Options</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-file">Configuration file</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#klt-param-leverage">KLT param leverage</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#maxcorners-tile-size">maxCorners &amp; tile_size</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2023-2024, Telespazio.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.4.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
