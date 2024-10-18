@@ -4,21 +4,32 @@
 
 ### Prerequisite
 
-You need to install conda or miniconda.
+As KARIOS is Python application it needs to have a Python environment with its dependencies.
+
+To configure the environment you need to install conda or miniconda.
 
 We recommend [miniconda](https://docs.anaconda.com/free/miniconda/miniconda-install/).
+
+### Get KARIOS
+
+Download KARIOS sources [from github](https://github.com/telespazio-tim/karios/releases)
+or clone the KARIOS github repository: 
+
+```shell
+git clone https://github.com/telespazio-tim/karios.git
+```
 
 ### Create Python environment 
 
 Create the `karios` conda environment
 
-```bash
+```shell
 conda env create -y -f environment.yml
 ```
 
 Then activate the environment: 
 
-```bash
+```shell
 conda activate karios
 ```
 
@@ -34,7 +45,7 @@ The conda environment stay active until you close your terminal session. You nee
 
 To print KARIOS CLI help and see options parameters run the following command: 
 
-```bash
+```shell
 python karios/karios.py --help
 ```
 
@@ -46,13 +57,13 @@ KARIOS takes as mandatory inputs :
 
 Run KARIOS: 
 
-```bash
+```shell
 python karios/karios.py <Image to match> <Reference image>
 ```
 
 ### Simple example
 
-```bash
+```shell
 python karios/karios.py \
     /data/12SYH/LS9_OLIL2F_20220824T175017_N0403_R035_T12SYH_20230214T164934.SAFE/GRANULE/L2F_T12SYH_A000000_20220824T175017_LS9_R035/IMG_DATA/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF \
     /data/References/GRI/T12SYH_20220514T175909_B04.jp2
@@ -60,7 +71,7 @@ python karios/karios.py \
 
 With DEM:
 
-```bash
+```shell
 python karios/karios.py \
     --dem-file-path /data/12SYH/dem10.tiff \
     --dem-description "Copernicus DSM_30 resample from 90m to 10m" \
