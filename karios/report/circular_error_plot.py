@@ -145,14 +145,14 @@ class CircularErrorPlot(AbstractPlot):
 
         # ///////////////////////////////////////
         # plot col
-        self._hist_vector(ax_col, self._stats.v_y_th, "y")
+        self._hist_vector(ax_col, self._stats.v_x_th, "x")
 
         # ///////////////////////////////////////
         # plot row
         self._hist_vector(
             ax_row,
-            self._stats.v_x_th,
-            "x",
+            self._stats.v_y_th,
+            "y",
             orientation="horizontal",
         )
 
@@ -283,7 +283,7 @@ class CircularErrorPlot(AbstractPlot):
         x, y, z = x[idx], y[idx], z[idx]
 
         # PLOT scatter
-        scatter = axes.scatter(y, x, c=z, cmap=self._conf.ce_scatter_colormap)
+        scatter = axes.scatter(x, y, c=z, cmap=self._conf.ce_scatter_colormap)
 
         # Plot in the graphic Cicrular error circle :
         u = range(0, 110, 1)
@@ -391,18 +391,18 @@ class CircularErrorPlot(AbstractPlot):
             f"Percentage of Confident Pixels : {self._stats.percentage_of_pixel:.2f}%",
             "",
             f"{self._x_scatter_label}:",
-            f"\tMin : {self._stats.min_y*self._img_res:.2f} {self._short_unit}",
-            f"\tMax : {self._stats.max_y*self._img_res:.2f} {self._short_unit}",
-            f"\tMean : {self._stats.mean_y*self._img_res:.2f} {self._short_unit}",
-            f"\tSigma : {self._stats.std_y*self._img_res:.2f} {self._short_unit}",
-            f"\tRMSE : {y_rmse:.2f} {self._short_unit}",
-            "",
-            f"{self._y_scatter_label}:",
             f"\tMin : {self._stats.min_x*self._img_res:.2f} {self._short_unit}",
             f"\tMax : {self._stats.max_x*self._img_res:.2f} {self._short_unit}",
             f"\tMean : {self._stats.mean_x*self._img_res:.2f} {self._short_unit}",
             f"\tSigma : {self._stats.std_x*self._img_res:.2f} {self._short_unit}",
             f"\tRMSE : {x_rmse:.2f} {self._short_unit}",
+            "",
+            f"{self._y_scatter_label}:",
+            f"\tMin : {self._stats.min_y*self._img_res:.2f} {self._short_unit}",
+            f"\tMax : {self._stats.max_y*self._img_res:.2f} {self._short_unit}",
+            f"\tMean : {self._stats.mean_y*self._img_res:.2f} {self._short_unit}",
+            f"\tSigma : {self._stats.std_y*self._img_res:.2f} {self._short_unit}",
+            f"\tRMSE : {y_rmse:.2f} {self._short_unit}",
             "",
             f"Global RMSE : {_rmse(x_rmse, y_rmse):.2f} {self._short_unit}",
             f"CE @90 the percentile : {self._stats.compute_percentile(0.9, self._img_res):.2f} {self._short_unit}",

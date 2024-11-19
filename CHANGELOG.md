@@ -2,6 +2,10 @@
 
 ## NEXT VERSION [FILL ME]
 
+### Fix
+
+- Fix northing reverse in statistics calculations and statistics usages in error distribution plot.
+
 ### New features
 
 - Add shift by altitude groups plot

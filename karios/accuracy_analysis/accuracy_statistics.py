@@ -57,10 +57,10 @@ class GeometricStat:
         self.mean_y = ""
         self.std_y = ""
         self.v_x = points["dx"]  # vector of dx displacements
-        # reverse x (line/northing) if image have SRS (carto representation)
-        if carto:
-            self.v_x = -self.v_x
         self.v_y = points["dy"]  # vector of dy displacements
+        # reverse y (line/northing) if image have SRS (carto representation)
+        if carto:
+            self.v_y = -self.v_y
         self.v_c = points["score"]  # vector of dc displacements
         self.total_match = (self.v_x).shape[0]  # All pixels as input
         self.vx_th = np.array(self.v_x.shape).astype(float)
