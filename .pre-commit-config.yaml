@@ -4,14 +4,14 @@ repos:
   hooks:
    - id: fix-encoding-pragma
    - id: check-docstring-first
-- repo: https://github.com/johann-petrak/licenseheaders.git
-  rev: '8e2d6f944aea639d62c8d26cd99dab4003c3904d'
-  hooks:
-    - id: licenseheaders
-      pass_filenames: false # avoid files to be passed to pytest as args
-      entry: licenseheaders
-      args: ["-cy", "-o", "Telespazio France", "-n", "KARIOS", "-t", "apache-2.tmpl", "-u", "https://github.com/telespazio-tim/karios", "-d", "karios"]
-      require_serial: true
+# - repo: https://github.com/johann-petrak/licenseheaders.git
+#   rev: '8e2d6f944aea639d62c8d26cd99dab4003c3904d'
+#   hooks:
+#     - id: licenseheaders
+#       pass_filenames: false # avoid files to be passed to pytest as args
+#       entry: licenseheaders
+#       args: ["-cy", "-o", "Telespazio France", "-n", "KARIOS", "-t", "apache-2.tmpl", "-u", "https://github.com/telespazio-tim/karios", "-d", "karios"]
+#       require_serial: true
 - repo: local
   hooks:
    - id: env
