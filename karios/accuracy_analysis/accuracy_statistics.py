@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -172,8 +172,8 @@ class GeometricStat:
         ]
 
         logger.info("Accuracy analysis: \n")
-        logger.info(" DX (line)        : %s", " ".join(chx))
-        logger.info(" DY (px(column))  : %s", " ".join(chy))
+        logger.info(" DX (px(column)) : %s", " ".join(chx))
+        logger.info(" DY (line)       : %s", " ".join(chy))
 
     def get_string_block(self, scale_factor, direction="x"):
         """
