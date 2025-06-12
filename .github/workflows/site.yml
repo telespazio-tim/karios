@@ -1,0 +1,51 @@
+name: Build and deploy website
+
+on: 
+  push:
+    branches:
+      - main
+    paths:
+      - 'site/**'
+      - '!site/README.md'
+  pull_request:
+    paths:
+      - 'site/**'
+      - '!site/README.md'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Build and Release Package"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    # Only run if the release workflow completed successfully (for tags)
+    if: |
+      github.event.workflow_run.conclusion == 'success'
+    defaults:
+      run:
+        working-directory: ./site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install setuptools==75.1.0
+      - name: Sphinx build
+        run: |
+          make html
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        with:
+          publish_branch: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site/build/html
+          force_orphan: true
