@@ -28,10 +28,10 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from skimage import io
 
-from core.configuration import KLTConfiguration
-from core.image import GdalRasterImage
+from karios.core.configuration import KLTConfiguration
+from karios.core.image import GdalRasterImage
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def __filter_outliers(x0, y0, x1, y1, score):
@@ -157,7 +157,10 @@ class KLT:
     """Class to execute KLT matcher"""
 
     def __init__(
-        self, conf: KLTConfiguration, gen_laplacian: bool = False, out_dir: str | None = None
+        self,
+        conf: KLTConfiguration,
+        gen_laplacian: bool = False,
+        out_dir: str | None = None,
     ):
         """Constructor
 
@@ -224,11 +227,17 @@ class KLT:
         ref_box = ref_img.read(1, x_off, y_off, x_size, y_size)
         img_box = mon_img.read(1, x_off, y_off, x_size, y_size)
 
-        logger.info("mask...")
         # mask_box = np.ones((ySize, xSize), np.uint8)
         # mask_box[img_box == 0] = 0
         # mask_box[ref_box == 0] = 0
         if mask:
+            logger.info(
+                "Read mask at offset x %s, y %s, with tile size %s, %s",
+                x_off,
+                y_off,
+                x_size,
+                y_size,
+            )
             mask_box = mask.read(1, x_off, y_off, x_size, y_size)
         else:
             mask_box = (img_box != 0) & (ref_box != 0) & np.isfinite(ref_box) & np.isfinite(img_box)
@@ -248,11 +257,17 @@ class KLT:
 
         if self._gen_laplacian:
             io.imsave(
-                os.path.join(self._out_dir, f"mon_laplacian_{x_off}_{y_off}_{x_size}_{y_size}.tif"),
+                os.path.join(
+                    self._out_dir,
+                    f"mon_laplacian_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                ),
                 img_box,
             )
             io.imsave(
-                os.path.join(self._out_dir, f"ref_laplacian_{x_off}_{y_off}_{x_size}_{y_size}.tif"),
+                os.path.join(
+                    self._out_dir,
+                    f"ref_laplacian_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                ),
                 ref_box,
             )
 
@@ -263,9 +278,18 @@ class KLT:
             self._conf,
         )
 
+        # clean large dataset
+        ref_box = None
+        img_box = None
+        mask_box = None
+
         if not results:
             logger.warning(
-                "No result for tile %s %s (%s %s)", x_off, y_off, mon_img.x_size, mon_img.y_size
+                "No result for tile %s %s (%s %s)",
+                x_off,
+                y_off,
+                mon_img.x_size,
+                mon_img.y_size,
             )
             return None
 

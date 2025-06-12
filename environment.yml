@@ -8,3 +8,4 @@ dependencies:
   - pandas=2.1.4
   - python=3.12
   - scikit-image=0.22.0
+  - rich-click=1.8.9

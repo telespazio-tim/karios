@@ -31,7 +31,7 @@ class UTCLoggingFormatter(logging.Formatter):
     converter = time.gmtime
 
 
-_LOG_FORMAT = "[%(levelname)-7s] [%(asctime)s] %(module)s.%(name)-10s - %(message)s"
+_LOG_FORMAT = "[%(levelname)-7s] [%(asctime)s] %(name)-10s - %(message)s"
 _LOG_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,

@@ -15,38 +15,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-import imageio.v2 as imageio
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
-from matplotlib.gridspec import GridSpecFromSubplotSpec
 from numpy.typing import NDArray
 from pandas import DataFrame, Series
 from pandas.core.groupby.generic import SeriesGroupBy
-
-TPZ = imageio.imread(os.path.join(os.path.dirname(__file__), "TPZ_logo.png"))
-EDAP = imageio.imread(os.path.join(os.path.dirname(__file__), "EDAP_logo.png"))
-ESA = imageio.imread(os.path.join(os.path.dirname(__file__), "ESA_logo_2020_Deep.png"))
-
-
-# TODO: add to AbstractPlot class and call in AbstractPlot.plot()
-def add_logo(figure: Figure, logo_gd: GridSpecFromSubplotSpec):
-    ax_esa = figure.add_subplot(logo_gd[0, 0])
-    ax_edap = figure.add_subplot(logo_gd[0, 1])
-    ax_tpz = figure.add_subplot(logo_gd[0, 2])
-
-    ax_esa.imshow(ESA)
-    ax_edap.imshow(EDAP)
-    ax_tpz.imshow(TPZ)
-
-    ax_esa.axis("off")
-    ax_edap.axis("off")
-    ax_tpz.axis("off")
 
 
 @dataclass
@@ -85,7 +63,7 @@ def mean_profile(values: Series, positions: Series, bin_size: int = 20) -> MeanP
     dic = {"val": values, "po": position_group}
     df = DataFrame.from_dict(dic)
     group = df.groupby("po")
-    groups_positions = np.uint16(group["po"].mean() * bin_size + bin_size / 2)
+    groups_positions = np.int16(group["po"].mean() * bin_size + bin_size / 2)
     nb_pos = group["val"].count()
     mean_values = group["val"].mean()
     values_std = group["val"].std()

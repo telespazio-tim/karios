@@ -8,12 +8,14 @@ https://docs.python-guide.org/writing/structure/#structure-of-the-repository
 
 ## Development environment
 
-Create conda env as explain in [README.md](README.md#prerequisite)
+Create conda env and install **for development** as explain in [README.md](README.md#environment-setup)
 
 ### Additional dependencies
 
 ```bash
+conda activate karios
 conda install -n karios -c conda-forge --file requirements_dev.txt
+pip install build # to build wheel
 ```
 
 It installs: 
@@ -24,6 +26,7 @@ It installs:
 - `pytest-cov`: pytest with code coverage support
 - `pycodestyle`: check docstring
 - `pre-commit`: pre commit hook engine : https://pre-commit.com/
+- `setuptools` : for packaging
 
 ### Deploy pre-commit hook
 
@@ -56,7 +59,7 @@ As an alternative, you can configure your IDE to let it do it for you.
 **Use linter to check code quality**:
 
 ```bash
-PYTHONPATH=karios pylint karios/
+pylint karios/
 ```
 
 ### Run tests
@@ -70,9 +73,31 @@ PYTHONPATH=karios pylint karios/
 **Run tests before push**:
 
 ```bash
-PYTHONPATH=karios \
-    pytest -s --cov=karios --cov-report html:cov_html tests; \
+pytest -s --cov=karios --cov-report html:cov_html tests; \
     python -c 'import webbrowser; webbrowser.open_new_tab("./cov_html/index.html")'
 ```
 
 For reports options take a look at this : https://pytest-cov.readthedocs.io/en/latest/reporting.html
+
+
+## Architecture
+
+KARIOS tries follows clean architecture principles with clear separation of concerns:
+
+### Core Components
+
+- **Configuration Layer**: Manages processing parameters and runtime settings
+- **Core Layer**: Image handling, geometric operations, error definitions
+- **Matcher Layer**: KLT feature tracking and large offset detection
+- **Analysis Layer**: Statistical accuracy computation
+- **Report Layer**: Visualization and product generation
+- **API Layer**: Clean interface for library usage
+- **CLI Layer**: Command-line interface
+
+### Design Principles
+
+- **Separation of Concerns**: Configuration defines "how to process", input parameters define "what to process"
+- **Dependency Injection**: Components receive their dependencies rather than creating them
+- **Reusability**: Same configuration can process multiple image pairs
+- **Type Safety**: Comprehensive type hints throughout the codebase
+- **Clean Interfaces**: Clear dataclasses for inputs and outputs

@@ -19,7 +19,7 @@
 
 from skimage.registration import phase_cross_correlation
 
-from core.image import GdalRasterImage
+from karios.core.image import GdalRasterImage
 
 
 class LargeOffsetMatcher:

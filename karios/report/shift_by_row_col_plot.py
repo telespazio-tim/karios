@@ -25,9 +25,9 @@ from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from pandas import DataFrame
 
-from core.configuration import ShiftPlotConfiguration
-from core.image import GdalRasterImage
-from report.commons import AbstractPlot, add_logo, mean_profile
+from karios.core.configuration import ShiftPlotConfiguration
+from karios.core.image import GdalRasterImage
+from karios.report.commons import AbstractPlot, mean_profile
 
 
 class MeanShiftByRowColGroupPlot(AbstractPlot):
@@ -82,13 +82,13 @@ class MeanShiftByRowColGroupPlot(AbstractPlot):
         # Add a gridspec with two rows and two columns and a ratio of 1 to 4 between
         # the size of the marginal axes and the main axes in both directions.
         grid = self._figure.add_gridspec(
-            4,
+            3,
             2,
             width_ratios=(4, 1),
-            height_ratios=(0.5, 1, 4, 0.25),
+            height_ratios=(0.3, 1, 4),
             left=0.15,
             right=0.95,
-            bottom=0.01,
+            bottom=0.05,
             top=0.95,
             wspace=0.1,
             hspace=0.2,
@@ -99,8 +99,6 @@ class MeanShiftByRowColGroupPlot(AbstractPlot):
         ax_scatter = self._figure.add_subplot(grid[2, 0])
         ax_col = self._figure.add_subplot(grid[1, 0], sharex=ax_scatter)
         ax_row = self._figure.add_subplot(grid[2, 1], sharey=ax_scatter)
-
-        logo_gd = grid[3, :].subgridspec(1, 3)
 
         ax_header.axis("off")
         text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
@@ -134,8 +132,6 @@ class MeanShiftByRowColGroupPlot(AbstractPlot):
         )
 
         self._figure.colorbar(scatter, cax=cax, ticklocation="left")
-
-        add_logo(self._figure, logo_gd)
 
     ####################################################
     # Local implementation

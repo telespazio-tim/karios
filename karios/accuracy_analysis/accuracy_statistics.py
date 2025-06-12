@@ -25,9 +25,9 @@ import os
 import numpy as np
 from pandas import DataFrame
 
-from core.configuration import AccuracyAnalysisConfiguration
+from karios.core.configuration import AccuracyAnalysisConfiguration
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class GeometricStat:

@@ -10,16 +10,15 @@ KLT-based Algorithm for Registration of Images from Observing Systems (KARIOS)
 
 ## Introduction
 
-In general, quality assessment process are fundamental to appreciate how well data fit for Earth Observation application purposes.
-Those assessment dedicated to geometric accuracy are rarely opened to community. As consequence, it is always difficult to inter compare data based on the same process and it is always difficult to compare results based on harmonized mapping accuracy metrics.
+In general, quality assessment processes are fundamental to appreciate how well data fit for Earth Observation application purposes. Those assessments dedicated to geometric accuracy are rarely opened to community. As consequence, it is always difficult to inter compare data based on the same process and it is always difficult to compare results based on harmonized mapping accuracy metrics.
 
-To overcome this situation, thanks to funding of  ESA / EDAP [EDAP](https://earth.esa.int/eogateway/activities/edap) project, the KARIOS initiative has been promoted and a user tool is now available.
+To overcome this situation, thanks to funding of ESA / EDAP [EDAP](https://earth.esa.int/eogateway/activities/edap) project, the KARIOS initiative has been promoted and a user tool is now available.
 
-The KARIOS tool has been designed to analyse geometric deformations within optical / radar images.  For this purpose, the tool performs image matching and generate several key graphical presentations and compute accuracy statistics.
+The KARIOS tool has been designed to analyse geometric deformations within optical / radar images. For this purpose, the tool performs image matching and generate several key graphical presentations and compute accuracy statistics.
 
-Image matching process does not follow traditional approach because it is based on feature point matching (corner). A [KLT](https://en.wikipedia.org/wiki/Kanade%E2%80%93Lucas%E2%80%93Tomasi_feature_tracker) implementation available in OpenCV library is used in KARIOS. Also, the Candidate point selection is done with GoodFeaturesToTrack function and matching is done  with calcOpticalFlowPyrLK function.
+Image matching process does not follow traditional approach because it is based on feature point matching (corner). A [KLT](https://en.wikipedia.org/wiki/Kanade%E2%80%93Lucas%E2%80%93Tomasi_feature_tracker) implementation available in OpenCV library is used in KARIOS. Also, the Candidate point selection is done with GoodFeaturesToTrack function and matching is done with calcOpticalFlowPyrLK function.
 
-As show in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering)  / post-processing (outlier filtering).
+As show in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering) / post-processing (outlier filtering).
 
 ![functional representation](docs/images/algorithm.PNG)
 
@@ -58,149 +57,350 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 > The CE graphic is still generated, and equally spaced sample data is assumed.  
 > This hypothesis is not obvious, when details on image grids are unknown.
 
-## Prerequisite
+## Installation
+
+### Prerequisites
 
 This tool is a Python application, to run it you should have a dedicated conda environnement.
 
-To do so, install [conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [miniconda](https://docs.conda.io/en/latest/miniconda.html), then run the following command to create the _karios_ conda env
+- Python 3.12+
+- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+- **libGL**: you need libGL for linux, depending on your distribution it can be libgl1-mesa-glx, mesa-libGL or another. Install it if you don't have it yet.
+
+Get KARIOS:
 
 ```bash
-conda env create -f environment.yml
+git clone https://github.com/telespazio-tim/karios.git
 ```
 
-Then activate the env:
+Then goes to KARIOS dir:
+
+```bash
+cd karios
+```
+
+### Environment Setup
+
+1. **Create the conda environment:**
+   ```bash
+   conda env create -f environment.yml
+   ```
+
+2. **Activate the environment:**
+   ```bash
+   conda activate karios
+   ```
+
+3. **Install KARIOS**
+
+  For runtime :
+
+   ```bash
+   pip install .
+   ```
+
+   For development
+   ```bash
+   pip install -e .
+   ```
+
+   Karios is now installed in its conda envronement.
+
+### Verify Installation
+
+```bash
+python -m karios --help
+```
+
+or
+
+```bash
+karios --help
+```
+
+## Usage
+
+KARIOS can be used both as a command-line tool and as a Python library.
+
+> Always activate the environment before using the command-line
 
 ```bash
 conda activate karios
 ```
 
-## Usage
+### Input Requirements and recommendations
 
-KARIOS takes as mandatory inputs :
-- monitored sensor image file
-- reference sensor image file
+KARIOS takes as inputs:
+- **Monitored image** (mandatory): The image to analyze for shifts/changes
+- **Reference image** (mandatory): The stable reference image for comparison
+- **Mask file** (optional): Exclude pixels from matching (compatible with monitored image)
+- **DEM file** (optional): Enable altitude-based analysis (compatible with reference image)
 
-> Input files shall contain only one layer of data, and the format shall recognized by gdal library.
+Requirements:
 
-> **NOTICE**: Inputs images grids should be comparable. **The user should take care of its data preparation**.
-> That means geo coded images must have the same footprint, same geo transform information (same EPSG code) and same resolution. Image pixel resolution should also be square (same X,Y) and unit meter.
+- Input images grids should be comparable. **The user should take care of data preparation**.  
+  That means geo coded images must have the same footprint, same geo transform information (same EPSG code) and same resolution.
+- Image pixel resolution should also be square (same X,Y) and unit meter.
 
-> **This is also applicable** to DEM for `--dem-file-path` option
+> **This is also applicable** to DEM and mask files for compatibility requirements.
 
-Examples:
+Recommendation:
+- **Avoid monitored and reference having float values between 0 and 1**
+- Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.
 
-- Without DEM: 
+## CLI Usage
+
+> :warning: **All commands below suppose that the karios conda environment is activated**
+
+### Command Structure
 
 ```bash
-python karios/karios.py \
-    /data/12SYH/LS9_OLIL2F_20220824T175017_N0403_R035_T12SYH_20230214T164934.SAFE/GRANULE/L2F_T12SYH_A000000_20220824T175017_LS9_R035/IMG_DATA/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF \
-    /data/References/GRI/T12SYH_20220514T175909_B04.jp2
+karios process MONITORED_IMAGE REFERENCE_IMAGE [MASK_FILE] [DEM_FILE] [OPTIONS]
 ```
 
-- With DEM:
+### Arguments
 
+- `MONITORED_IMAGE`: Path to the image to analyze for shifts/changes
+- `REFERENCE_IMAGE`: Path to the stable reference image for comparison
+- `MASK_FILE`: Optional mask file to exclude pixels from matching (use '-' to skip)
+- `DEM_FILE`: Optional DEM file for altitude-based analysis
+
+### Examples
+
+#### Basic Processing
 ```bash
-python karios/karios.py \
-    --dem-file-path /data/12SYH/dem10.tiff \
-    --dem-description "Copernicus DSM_30 resample from 90m to 10m" \
-    /data/12SYH/LS9_OLIL2F_20220824T175017_N0403_R035_T12SYH_20230214T164934.SAFE/GRANULE/L2F_T12SYH_A000000_20220824T175017_LS9_R035/IMG_DATA/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF \
-    /data/References/GRI/T12SYH_20220514T175909_B04.jp2
+karios process monitored.tif reference.tif
 ```
 
-### Outputs:
-
-- csv file: list of key points and associated dx/dy deviations
-- png file: visualisation of the deviations
-- geojson of KP found by co registration process
-
-### CLI options :
-
+#### With Mask
+```bash
+karios process monitored.tif reference.tif mask.tif
 ```
-usage: karios.py [-h] [--conf CONF] [--resume] [--mask MASK_FILE_PATH] [--input-pixel-size PIXEL_SIZE] [--out OUT] [--generate-key-points-mask] [--generate-intermediate-product] [--title-prefix TITLE_PREFIX]
-                 [--dem-file-path DEM_FILE_PATH] [--dem-description DEM_DESCRIPTION] [--enable-large-shift-detection] [--no-log-file] [--debug] [--log-file-path LOG_FILE_PATH]
-                 MONITORED_IMAGE_PATH REFERENCE_IMAGE_PATH
 
-options:
-  -h, --help            show this help message and exit
+#### With Mask and DEM
+```bash
+karios process monitored.tif reference.tif mask.tif dem.tif \
+  --dem-description "SRTM 30m resample to 10m"
+```
 
-Mandatory arguments:
-  MONITORED_IMAGE_PATH  Path to the monitored sensor product
-  REFERENCE_IMAGE_PATH  Path to the reference sensor product
+#### DEM Only (No Mask)
+```bash
+karios process monitored.tif reference.tif - dem.tif \
+  --dem-description "Copernicus DEM 30m"
+```
 
-Processing options:
-  --conf CONF           Configuration file path (default: /opt/karios/karios/configuration/processing_configuration.json)
-  --resume              Do not run KLT matcher, only accuracy analysis and report generation (default: False)
-  --mask MASK_FILE_PATH
-                        Path to the mask to apply to the reference image (default: None)
-  --input-pixel-size PIXEL_SIZE, -pxs PIXEL_SIZE
-                        Input image pixel size in meter. Ignored if image resolution can be read from input image (default: None)
-
-Output options:
-  --out OUT             Output results folder path (default: /opt/karios/results)
-  --generate-key-points-mask, -kpm
-                        Generate a tiff mask based on KP from KTL (default: False)
-  --generate-intermediate-product, -gip
-                        Generate a two band tiff based on KP with band 1 dx and band 2 dy (default: False)
-  --title-prefix TITLE_PREFIX, -tp TITLE_PREFIX
-                        Add prefix to title of generated output charts (limited to 26 characters) (default: None)
-
-DEM arguments (optional):
-  --dem-file-path DEM_FILE_PATH
-                        DEM file path. If given, "shift mean by altitude group plot" is generated. (default: None)
-  --dem-description DEM_DESCRIPTION
-                        DEM source name. It is added in "shift mean by altitude group plot" DEM source (example: COPERNICUS DEM resample to 10m). Ignored if --dem-file-path is not given (default: None)
-
-Experimental (optional):
+#### Full Workflow with Options
+```bash
+karios process monitored.tif reference.tif mask.tif dem.tif \
+  --out ./results \
+  --generate-key-points-mask \
+  --generate-intermediate-product \
+  --title-prefix "MyAnalysis" \
+  --dem-description "SRTM 30m" \
   --enable-large-shift-detection
-                        If enabled, KARIOS looks for large pixel shift between reference and monitored image. When a significant shift is detected, KARIOS shifts the monitored image according to the offsets it computes
-                        and then process to the matching (default: False)
-
-Logging arguments (optional):
-  --no-log-file         Do not log in file (default: False)
-  --debug, -d           Enable Debug mode (default: False)
-  --log-file-path LOG_FILE_PATH
-                        Log file path (default: /opt/karios/karios.log)
 ```
 
-> Notice that default folder and file path are adapted to your KARIOS install folder.
+#### Resume Previous Analysis
+```bash
+karios process monitored.tif reference.tif mask.tif dem.tif \
+  --resume \
+  --out ./existing_results
+```
+
+### CLI Options
+
+
+#### Processing Options
+
+| Option | Type | Decription |
+|--------|------|------------|
+| `--conf` | FILE | Configuration file path. Default is the built-in configuration. [default: PWD/karios/configuration/processing_configuration.json] |
+| `--resume` | Flag | Do not run KLT matcher, only accuracy analysis and report generation |
+| `--input-pixel-size`, `-pxs` | FLOAT | Input image pixel size in meter. Ignored if image resolution can be read from input image |
+
+#### Output Options
+
+| Option | Type | Decription |
+|--------|------|------------|
+| `--out` | PATH | Output results folder path [default: results] |
+| `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts (limited to 26 characters) |
+| `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
+| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two band tiff based on KP with band 1 dx and band 2 dy |
+| `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resample to 10m") |
+
+#### Advanced Options
+
+| Option | Type | Decription |
+|--------|------|------------|
+| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts |
+
+#### Logging Options
+
+| Option | Type | Decription |
+|--------|------|------------|
+| `--debug`, `-d` | FLAG | Enable Debug mode |
+| `--no-log-file` | FLAG | Do not log in file (not compatible with `--log-file-path`) |
+| `--log-file-path` | PATH | Log file path [default: karios.log] |
+
+## Library Usage
+
+KARIOS can be used as a Python library in your own applications by providing an API that separates processing configuration from input data.
+
+> :warning: **Your code should run in a Python environment having KARIOS dependencies installed**
+
+### Prerequisite
+
+Activate **your project conda environment**, then install KARIOS in this environment.
+
+From the karios directory run :
+
+```bash
+pip install .
+```
+
+Verify with
+
+```bash
+karios --help
+```
+
+### Basic Example
+
+```python
+from karios.api import KariosAPI, RuntimeConfiguration
+from karios.core.configuration import ProcessingConfiguration
+
+# Load processing configuration
+processing_config = ProcessingConfiguration.from_file("config.json")
+
+# Create runtime configuration (how to process)
+runtime_config = RuntimeConfiguration(
+    output_directory="./results",
+    gen_kp_mask=True,
+    gen_delta_raster=True,
+    pixel_size=10.0,  # meters
+    enable_large_shift_detection=False
+)
+
+# Initialize API
+api = KariosAPI(processing_config, runtime_config)
+
+# Process images (what to process) and generates plots
+match_result, accuracy, reports = api.process(
+    monitored_image_path="monitored.tif",
+    reference_image_path="reference.tif",
+    mask_file_path="mask.tif",        # Optional
+    dem_file_path="dem.tif"           # Optional
+)
+
+# Access results
+print(f"CE90: {accuracy.ce90:.3f}")
+print(f"Mean shift X: {accuracy.mean_x:.3f} pixels")
+print(f"Generated reports: {reports.overview_plot}")
+```
+
+### Batch Processing Example
+
+```python
+# Same configuration, multiple image pairs
+image_pairs = [
+    ("mon1.tif", "ref1.tif", "mask1.tif", "dem.tif"),
+    ("mon2.tif", "ref2.tif", "mask2.tif", "dem.tif"),
+    ("mon3.tif", "ref3.tif", None, "dem.tif")  # No mask for this pair
+]
+
+results = []
+for monitored, reference, mask, dem in image_pairs:
+    match, accuracy, reports = api.process(monitored, reference, mask, dem)
+    results.append({
+        'pair': (monitored, reference),
+        'ce90': accuracy.ce90,
+        'mean_shift': (accuracy.mean_x, accuracy.mean_y)
+    })
+    # ... other statements 
+
+    # clean memory
+    match = None
+    accuracy = None
+    reports = None
+    monitored = None
+    reference = None
+    mask = None
+    dem = None
+
+    # or eventually use gc.collect()
+```
+
+### API Components
+
+- **ProcessingConfiguration**: KLT parameters, accuracy thresholds, plot settings
+- **RuntimeConfiguration**: Output settings, processing flags, optional descriptions
+- **KariosAPI**: Main processing interface
+- **MatchResult**: Key point matches and image metadata
+- **AccuracyAnalysis**: Statistical metrics (CE90, RMSE, etc.)
+- **ReportPaths**: Generated visualization and product file paths
 
 ## Configuration
 
-The default configuration is located in [karios/configuration/processing_configuration.json](karios/configuration/processing_configuration.json)
+KARIOS uses two types of configuration:
 
-### `processing_configuration.shift_image_processing` parameters (Large Shift Matching processing parameters)
+### Processing Configuration
 
-- `bias_correction_min_threshold`: number of pixel threshold from which large shift is applied.
+The processing configuration defines algorithm parameters and is loaded from JSON files. The default configuration is located in [karios/configuration/processing_configuration.json](karios/configuration/processing_configuration.json).
 
-### `processing_configuration.klt_matching` parameters (Matching processing parameters)
+This configuration includes:
+- **KLT matching parameters**: Corner detection, window sizes, quality thresholds
+- **Accuracy analysis settings**: Confidence thresholds for statistical calculations  
+- **Plot configurations**: Figure sizes, color maps, axis limits
+- **Large shift detection**: Bias correction thresholds
 
-- `xStart` : image X margin to apply (margin is skipped by the matcher)
-- `tile_size` : tile size to process by KTL in the input image
-- `laplacian_kernel_size` : Aperture size used to compute the second-derivative filters of Laplacian process
--
+### Runtime Configuration (API)
+
+The runtime configuration defines how processing should be performed and where outputs should be saved. It can be created programmatically when using KARIOS as a library:
+
+```python
+runtime_config = RuntimeConfiguration(
+    output_directory="./results",
+    pixel_size=10.0,              # Optional pixel size override
+    title_prefix="MyAnalysis",    # Optional chart title prefix
+    gen_kp_mask=True,             # Generate key point mask
+    gen_delta_raster=True,        # Generate displacement raster
+    dem_description="SRTM 30m",   # Optional DEM description for plots
+    enable_large_shift_detection=False
+)
+```
+
+When using the CLI, runtime configuration is automatically created from command-line arguments.
+
+### Parameter Details
+
+#### `processing_configuration.shift_image_processing` (Large Shift Matching processing parameters)
+- `bias_correction_min_threshold`: Pixel threshold for applying large shift correction
+
+#### `processing_configuration.klt_matching` (Matching processing parameters)
+- `xStart`: X margin to skip during matching
+- `tile_size`: Tile size for memory-efficient processing
+- `laplacian_kernel_size`: Aperture size for Laplacian filtering
+
 The following parameter allows to control how to find the most prominent corners in the
 reference image, as described by the OpenCV documentation goodFeaturesToTrack, after applying Laplacian.
 
-- `minDistance` : Minimum possible Euclidean distance between the returned corners.
-- `blocksize` : Size of an average block for computing a derivative covariation matrix over each pixel neighbourhood.
-- `maxCorners` : Maximum number of corners to extract. If there are more corners than are found, the strongest of them is returned.
-`maxCorners = 0` implies that no limit on the maximum is set and all detected corners are returned.
-- `qualityLevel` : Parameter characterizing the minimal accepted quality of image corners.
-The parameter value is multiplied by the best corner quality measure.
-The corners with the quality measure less than the product are rejected.
-For example, if the best corner has the quality measure = 1500, and the qualityLevel=0.01,
-then all the corners with the quality measure less than 15 are rejected.
-- `matching_winsize` : size of the search window during matching corners in the reference and the monitored Laplacian images.
-- `outliers_filtering` : whether to filter or not the outliers points found during the matching.
+- `minDistance`: Minimum distance between detected corners
+- `blocksize`: Block size for derivative computation
+- `maxCorners`: Maximum corners to extract per tile. `0` implies that no limit on the maximum is set and all detected corners are returned.
+- `qualityLevel`: Minimum corner quality threshold
+- `matching_winsize`: Search window size during matching
+- `outliers_filtering`: Enable/disable outlier filtering
 
 Refer to section [KLT param leverage](#klt-param-leverage) for details
 
-### `processing_configuration.accuracy_analysis`
+#### `processing_configuration.accuracy_analysis`
+- `confidence_threshold`: Minimum confidence score for statistical analysis. If `None`, not applied.
 
-- `confidence_threshold` : max score for points found by the matcher to use to compute statistics written in correl_res.txt.
-If `None`, not applied.
 
-### `plot_configuration.overview` (overview plot parameters)
+Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots control figure sizes, color maps, and axis limits.
+
+#### `plot_configuration.overview` (overview plot parameters)
 
 - `fig_size` : Size of the generated figure in inches
 - `shift_colormap` : matplotlib color map name for the KP shift error scatter plot
@@ -208,7 +408,7 @@ If `None`, not applied.
 - `shift_axes_limit` : KP shift error colorbar maximum limit, N/A if `shift_auto_axes_limit` is `true`
 - `theta_colormap` : matplotlib color map name for the KP theta error scatter plot
 
-### `plot_configuration.shift` (shift by row/col group plot parameters)
+#### `plot_configuration.shift` (shift by row/col group plot parameters)
 
 - `fig_size` : Size of the generated figure in inches
 - `scatter_colormap` : matplotlib color map name for the KP shift scatter plot
@@ -217,15 +417,38 @@ If `None`, not applied.
 - `scatter_max_limit` : KP shift scatter plot maximum limit, N/A if `scatter_auto_limit` is `true`
 - `histo_mean_bin_size` : KP shift histogram bin size (number of image row/col for the histogram bin)
 
-### `plot_configuration.dem` (shift by altitude group plot parameters)
+#### `plot_configuration.dem` (shift by altitude group plot parameters)
 
 - `fig_size` : Size of the generated figure in inches
 - `show_fliers` : draw fliers of box plot
 - `histo_mean_bin_size`: KP altitude histogram bin size (altitude ranges size)
 
-### `plot_configuration.ce` (Circular error plot parameters)
+#### `plot_configuration.ce` (Circular error plot parameters)
 - `fig_size` : Height size of the generated figure in inches, width is 5/3 of the height
 - `ce_scatter_colormap` : matplotlib color map name for the KP shift density scatter plot
+
+### Outputs
+
+KARIOS generates several types of outputs:
+
+#### Statistical Files
+- **CSV file**: Key points with dx/dy deviations and confidence scores
+- **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
+
+#### Visualizations
+- **01_overview.png**: Error distribution overview with image thumbnails
+- **02_dx.png**: X-direction displacement analysis by row/column
+- **03_dy.png**: Y-direction displacement analysis by row/column  
+- **04_ce.png**: Circular error analysis with statistical summaries
+- **dem_*.png**: DEM-based altitude analysis (if DEM provided)
+
+#### Products (Optional)
+- **kp_mask.tif**: Binary mask of key point locations (if `--generate-key-points-mask`)
+- **kp_delta.tif**: Two-band raster with dx/dy displacement values (if `--generate-intermediate-product`)
+- **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced)
+
+#### Configuration
+- Copy of the processing configuration used
 
 ## KLT param leverage
 
@@ -263,3 +486,119 @@ flier             <----------->            fliers
 ```
 
 > credits https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.boxplot.html
+
+## Input Data Relationships
+
+Understanding how input files relate to each other:
+
+### Image Compatibility
+- **Monitored** and **Reference** images must be compatible:
+  - Same footprint and resolution
+  - Same coordinate system (EPSG)
+  - Same pixel grid alignment
+
+### Mask Usage
+- **Mask** file must be compatible with the **monitored image**
+- Used to exclude pixels from KLT feature detection
+- Typical use cases: exclude water bodies, clouds, or invalid data areas
+- Pixel value 0 = exclude from matching, non-zero = include
+
+### DEM Usage  
+- **DEM** file must be compatible with the **reference image**
+- Used to extract altitude values at key point locations
+- Enables analysis of geometric errors vs terrain elevation
+- Helps identify elevation-dependent systematic errors
+
+## Troubleshooting
+
+### Common Issues
+
+#### Image Compatibility Errors
+
+```
+KariosException: Monitored image geo info not compatible with reference image
+```
+
+**Solution**: Ensure both images have:
+- Same coordinate system (EPSG code)
+- Same pixel resolution
+- Same geographic extent
+- Same grid alignment
+
+#### Mask or DEM Compatibility Errors
+
+```
+KariosException: Mask geo info not compatible with monitored image
+```
+
+**Solution**: Ensure mask has same geometry as monitored image
+
+### Performance Optimization
+
+#### For Large Images
+
+- Use smaller `tile_size` (e.g., 5000-10000 pixels)
+- Reduce `maxCorners` per tile
+- Enable `outliers_filtering: false` for faster processing
+
+#### For High Accuracy
+
+- Increase `maxCorners` for more key points
+- Use smaller `matching_winsize` for precise matching
+- Increase `qualityLevel` for better corner quality
+
+## Advanced Features
+
+### Large Shift Detection
+
+When enabled with `--enable-large-shift-detection`, KARIOS can detect and compensate for large pixel offsets between images:
+
+```bash
+karios process monitored.tif reference.tif --enable-large-shift-detection
+```
+
+**Use cases**:
+
+- Images with significant misalignment
+- Coarse co-registration before fine matching
+- Detection of systematic offsets
+
+**Warning**: Experimental feature that may use significant memory for large images.
+
+### Resume Functionality
+
+Skip KLT matching and reuse previous results:
+
+```bash
+karios process monitored.tif reference.tif --resume --out ./existing_results
+```
+
+**Requirements**:
+- Previous KLT CSV results must exist in output directory
+- Same image pair and configuration
+
+## License
+
+Apache License 2.0 - see LICENSE file for details.
+
+## Citation
+
+If you use KARIOS in your research, please cite:
+
+```bibtex
+@software{karios2024,
+  author = {{KARIOS Development Team}},
+  title = {KARIOS: KLT-based Algorithm for Registration of Images from Observing Systems},
+  url = {https://github.com/telespazio-tim/karios},
+  doi = {10.5281/zenodo.10598329},
+  year = {2024}
+}
+```
+
+## Acknowledgments
+
+This project has been funded by ESA/EDAP ([European Space Agency Earth Observation Data Assessment Pilot](https://earth.esa.int/eogateway/activities/edap)).
+
+---
+
+For more information, issues, or contributions, please visit the project repository.

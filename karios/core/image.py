@@ -22,12 +22,49 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
+from typing import Iterator
 
 import numpy as np
 from numpy.typing import NDArray
 from osgeo import gdal, osr
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
+
+
+class GdalError(Exception):
+    """
+    Custom exception for GDAL-related errors.
+
+    This exception is raised when GDAL operations fail, providing more
+    specific error information than generic exceptions.
+    """
+
+
+@contextmanager
+def open_gdal_dataset(dataset_path: str) -> Iterator[gdal.Dataset]:
+    """
+    Context manager for safely opening and closing GDAL datasets.
+
+    This function provides a context manager that ensures proper resource cleanup
+    when working with GDAL datasets, even when exceptions occur.
+
+    Args:
+        dataset_path (str): Path to the dataset
+
+    Yields:
+        gdal.Dataset: Opened GDAL dataset
+
+    Raises:
+        GdalError: If the dataset cannot be opened
+    """
+    ds = gdal.Open(dataset_path)
+    if ds is None:
+        raise GdalError(f"Failed to open dataset: {dataset_path}")
+    try:
+        yield ds
+    finally:
+        ds = None  # Close dataset to free resources
 
 
 def shift_image(img: NDArray, y_off=0, x_off=0) -> NDArray:
@@ -182,17 +219,14 @@ class GdalRasterImage:
 
     def _read_header(self):
         # geo information
-        dataset = gdal.Open(self.filepath)
+        with open_gdal_dataset(self.filepath) as dataset:
+            self._geo = dataset.GetGeoTransform()
+            self.x_size = dataset.RasterXSize
+            self.y_size = dataset.RasterYSize
 
-        self._geo = dataset.GetGeoTransform()
-        self.x_size = dataset.RasterXSize
-        self.y_size = dataset.RasterYSize
-
-        self.x_max = self.x_min + self.x_size * self.x_res
-        self.y_min = self.y_max + self.y_size * self.y_res
-        self.projection = dataset.GetProjection()
-
-        dataset = None
+            self.x_max = self.x_min + self.x_size * self.x_res
+            self.y_min = self.y_max + self.y_size * self.y_res
+            self.projection = dataset.GetProjection()
 
     def have_pixel_resolution(self) -> bool:
         """Indicate if the image have a pixel size
@@ -228,11 +262,11 @@ class GdalRasterImage:
         Returns:
           NDArray: extracted box in the image.
         """
-        dst = gdal.Open(self.filepath)
-        band = dst.GetRasterBand(band_id)
-        data = band.ReadAsArray(x_off, y_off, x_size, y_size)
-        dst = None
-        return data
+        with open_gdal_dataset(self.filepath) as dataset:
+            band = dataset.GetRasterBand(band_id)
+            data = band.ReadAsArray(x_off, y_off, x_size, y_size)
+            band = None  # Explicitly release the band object
+            return data
 
     @property
     def array(self) -> NDArray:
@@ -242,10 +276,12 @@ class GdalRasterImage:
             NDArray: image pixel array
         """
         if self._array is None:
-            dst = gdal.Open(self.filepath)
-            band = dst.GetRasterBand(1)
-            self._array = band.ReadAsArray()
-            dst = None
+
+            with open_gdal_dataset(self.filepath) as dataset:
+                band = dataset.GetRasterBand(1)
+                self._array = band.ReadAsArray()
+                band = None  # Explicitly release the band object
+
         return self._array
 
     def to_raster(self, file_path: str, data: NDArray | list[NDArray], e_type=gdal.GDT_Byte):
@@ -315,3 +351,8 @@ class GdalRasterImage:
         X Size: {self.x_size}
         Y Size: {self.y_size}
         """
+
+    def clear_cache(self):
+        """Clear the cached array to free memory."""
+        if self._array is not None:
+            self._array = None

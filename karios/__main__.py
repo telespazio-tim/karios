@@ -15,10 +15,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""KARIOS - KLT Algorithm for Registration of Images from Observing Systems.
+"""Main entry point for KARIOS CLI."""
 
-A tool for comparing and matching images using KLT feature tracking.
-"""
-from karios.api.config import RuntimeConfiguration
-from karios.api.core import KariosAPI
-from karios.version import __version__
+import sys
+from pathlib import Path
+
+# Add the parent directory to Python's path so it can find the karios package
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from karios.cli.commands import cli
+
+if __name__ == "__main__":
+    sys.exit(cli())

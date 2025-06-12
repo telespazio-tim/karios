@@ -23,8 +23,8 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from pandas import DataFrame
 
-from core.image import GdalRasterImage
-from report.commons import AbstractPlot, add_logo, mean_profile
+from karios.core.image import GdalRasterImage
+from karios.report.commons import AbstractPlot, mean_profile
 
 
 class MeanShiftByAltitudeGroupPlot(AbstractPlot):
@@ -93,13 +93,13 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
         # Add a gridspec with two rows and two columns and a ratio of 1 to 4 between
         # the size of the marginal axes and the main axes in both directions.
         grid = self._figure.add_gridspec(
-            3,
+            2,
             1,
             #     width_ratios=(4, 1),
-            height_ratios=(0.5, 4, 0.25),
+            height_ratios=(0.3, 4),
             #     left=0.15,
             #     right=0.95,
-            bottom=0.01,
+            bottom=0.05,
             top=0.95,
             wspace=0.1,
             hspace=0.2,
@@ -108,7 +108,6 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
         # Create the Axes.
         ax_header = self._figure.add_subplot(grid[0, :])
         ax_plot = self._figure.add_subplot(grid[1, :])
-        logo_gd = grid[2, :].subgridspec(1, 3)
 
         dem_title = self._dem_img.file_name
         if self._dem_desc:
@@ -120,8 +119,6 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
 
         # do main plot
         self._plot_alt(ax_plot)
-
-        add_logo(self._figure, logo_gd)
 
     ####################################################
     # Local implementation
@@ -182,7 +179,11 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
 
         std_min, std_max = profile.compute_std_min_max()
         axis_right.fill_between(
-            profile.groups_positions, std_min, std_max, alpha=0.2, label=f"STD {dim} deviation"
+            profile.groups_positions,
+            std_min,
+            std_max,
+            alpha=0.2,
+            label=f"STD {dim} deviation",
         )
 
         axis_right.plot(

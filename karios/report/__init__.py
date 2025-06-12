@@ -15,10 +15,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""KARIOS - KLT Algorithm for Registration of Images from Observing Systems.
-
-A tool for comparing and matching images using KLT feature tracking.
-"""
-from karios.api.config import RuntimeConfiguration
-from karios.api.core import KariosAPI
-from karios.version import __version__

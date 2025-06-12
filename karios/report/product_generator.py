@@ -27,8 +27,8 @@ import numpy as np
 from osgeo import gdal
 from pandas import DataFrame, Series
 
-from core.configuration import GlobalConfiguration
-from core.image import GdalRasterImage
+from karios.api.config import RuntimeConfiguration
+from karios.core.image import GdalRasterImage
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +71,12 @@ class ProductGenerator:
     """
 
     def __init__(
-        self, config: GlobalConfiguration, points: DataFrame, reference_image: GdalRasterImage
+        self,
+        config: RuntimeConfiguration,
+        points: DataFrame,
+        reference_image: GdalRasterImage,
     ):
-        self._config: GlobalConfiguration = config
+        self._config: RuntimeConfiguration = config
         self._points: DataFrame = points
         self._reference_image: GdalRasterImage = reference_image
 
@@ -101,10 +104,14 @@ class ProductGenerator:
         y_index = self._points["y0"].to_numpy().astype(int)
 
         dx_band_array = np.full(
-            [self._reference_image.y_size, self._reference_image.x_size], np.nan, dtype=float
+            [self._reference_image.y_size, self._reference_image.x_size],
+            np.nan,
+            dtype=float,
         )
         dy_band_array = np.full(
-            [self._reference_image.y_size, self._reference_image.x_size], np.nan, dtype=float
+            [self._reference_image.y_size, self._reference_image.x_size],
+            np.nan,
+            dtype=float,
         )
 
         dx_band_array[y_index, x_index] = self._points["dx"]

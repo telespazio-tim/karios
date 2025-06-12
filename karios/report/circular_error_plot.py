@@ -27,12 +27,12 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy import stats as sp_stats
 from scipy.interpolate import interpn
 
-from accuracy_analysis.accuracy_statistics import GeometricStat
-from core.configuration import CEPlotConfiguration
-from core.image import GdalRasterImage
-from report.commons import AbstractPlot, add_logo
+from karios.accuracy_analysis.accuracy_statistics import GeometricStat
+from karios.core.configuration import CEPlotConfiguration
+from karios.core.image import GdalRasterImage
+from karios.report.commons import AbstractPlot
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def _rmse(mean, std, img_res=None):
@@ -112,13 +112,13 @@ class CircularErrorPlot(AbstractPlot):
     def _plot(self):
 
         grid = self._figure.add_gridspec(
-            4,
+            3,
             3,
             width_ratios=(4, 4, 4),
-            height_ratios=(0.5, 4, 4, 0.5),
+            height_ratios=(0.3, 3, 3),
             left=0.15,
             right=0.9,
-            bottom=0.02,
+            bottom=0.05,
             top=0.9,
             wspace=0.1,
             hspace=0.3,
@@ -131,7 +131,6 @@ class CircularErrorPlot(AbstractPlot):
         ax_row = self._figure.add_subplot(grid[2, 1], sharey=ax_scatter)
         ax_text = self._figure.add_subplot(grid[1, 1])
         ax_ce = self._figure.add_subplot(grid[1, 2])
-        logo_gd = grid[3, :].subgridspec(1, 3)
 
         # no labels
         ax_col.tick_params(axis="x", labelbottom=False)
@@ -174,8 +173,6 @@ class CircularErrorPlot(AbstractPlot):
         )
 
         self._figure.colorbar(scatter_plot, cax=cax, ticklocation="left")
-
-        add_logo(self._figure, logo_gd)
 
     ####################################################
     # Local implementation
