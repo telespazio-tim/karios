@@ -1,0 +1,88 @@
+name: Build and Release Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build setuptools wheel
+          
+      - name: Build wheel
+        run: |
+          python -m build --wheel
+          
+      - name: Get tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        
+      - name: Create release package
+        run: |
+          mkdir -p release_package
+          
+          # Copy the wheel file
+          cp dist/*.whl release_package/
+          
+          # Copy README.md (keep original name)
+          cp README.md release_package/
+          
+          # Copy environment.yml (keep original name)
+          if [ -f environment.yml ]; then
+            cp environment.yml release_package/
+          else
+            echo "# No environment.yml found - please create one for proper dependency management" > release_package/environment.yml
+          fi
+          
+          # Create the zip file
+          cd release_package
+          zip -r ../karios-dist-${{ steps.tag.outputs.TAG_NAME }}.zip .
+          cd ..
+          
+      - name: Create GitHub Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            karios-dist-${{ steps.tag.outputs.TAG_NAME }}.zip
+          name: Release ${{ steps.tag.outputs.TAG_NAME }}
+          body: |
+            ## Release ${{ steps.tag.outputs.TAG_NAME }}
+            
+            ---
+            **Note**: This is an automatically generated draft release. Please review and edit the description before publishing.
+            ---
+
+            This release contains:
+            - Python wheel package
+            - README documentation  
+            - Environment configuration (environment.yml)
+            - Complete release package as ZIP
+            
+            Please refer to the README.md for installation instructions.
+            
+          draft: true
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          

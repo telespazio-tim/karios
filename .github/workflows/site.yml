@@ -2,6 +2,8 @@ name: Build and deploy website
 
 on: 
   push:
+    branches:
+      - main
     paths:
       - 'site/**'
       - '!site/README.md'
@@ -10,6 +12,10 @@ on:
       - 'site/**'
       - '!site/README.md'
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Build and Release Package"]
+    types:
+      - completed
 
 permissions:
   contents: write
@@ -17,6 +23,9 @@ permissions:
 jobs:
   site:
     runs-on: ubuntu-latest
+    # Only run if the release workflow completed successfully (for tags)
+    if: |
+      github.event.workflow_run.conclusion == 'success'
     defaults:
       run:
         working-directory: ./site
@@ -34,7 +43,7 @@ jobs:
           make html
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feature/pages' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         with:
           publish_branch: gh-pages
           github_token: ${{ secrets.GITHUB_TOKEN }}
