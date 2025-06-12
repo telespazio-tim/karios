@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -31,7 +31,7 @@ class UTCLoggingFormatter(logging.Formatter):
     converter = time.gmtime
 
 
-_LOG_FORMAT = "[%(levelname)-7s] [%(asctime)s] %(module)s.%(name)-10s - %(message)s"
+_LOG_FORMAT = "[%(levelname)-7s] [%(asctime)s] %(name)-10s - %(message)s"
 _LOG_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,

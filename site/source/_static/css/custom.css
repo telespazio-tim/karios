@@ -1,0 +1,48 @@
+@font-face {
+    font-family: 'Public Sans Regular';
+    font-style: normal;
+    font-weight: normal;
+    src: url('_fonts/PublicSans-Regular.otf') format('woff');
+}
+
+@font-face {
+    font-family: 'TekneLDO Regular';
+    font-style: normal;
+    font-weight: normal;
+    src: url('_fonts/TekneLDOVariable.ttf') format('woff');
+}
+
+/* @font-face {
+font-family: 'Public Sans Thin';
+font-style: normal;
+font-weight: normal;
+src: local('Public Sans Thin'), url('_static/fonts/PublicSans-Thin.woff') format('woff');
+}
+
+@font-face {
+font-family: 'Public Sans Medium';
+font-style: normal;
+font-weight: normal;
+src: local('Public Sans Medium'), url('_static/fonts/PublicSans-Medium.woff') format('woff');
+} */
+
+
+html {
+    --pst-font-family-base-system: 'Public Sans Regular';
+    --pst-color-primary: #37424a !important;
+    --pst-color-secondary: #6B92B2 !important;
+    --pst-color-text-base: #5E6A71 !important;
+    --pst-color-text-muted: #5E6A71 !important;
+}
+
+.navbar-brand p {
+    /* color: #ddd; */
+    color: var(--pst-color-primary);
+    font-family: 'TekneLDO Regular';
+    font-style: italic;
+    font-weight: bold;
+}
+
+p {
+    text-align: justify;
+}

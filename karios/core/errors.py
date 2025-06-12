@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -20,7 +20,11 @@
 """Error/Exceptions classes modules."""
 
 
-class ConfigurationError(Exception):
+class KariosException(Exception):
+    """Base class for KARIOS exception."""
+
+
+class ConfigurationError(KariosException):
     """Base class for Configuration errors."""
 
     def __init__(self, message):

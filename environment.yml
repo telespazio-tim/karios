@@ -3,8 +3,9 @@ channels:
   - conda-forge
 dependencies:
   - gdal=3.8.1
-  - matplotlib=3.8.2
+  - matplotlib=3.9.2
   - opencv=4.8.1
   - pandas=2.1.4
   - python=3.12
   - scikit-image=0.22.0
+  - rich-click=1.8.9

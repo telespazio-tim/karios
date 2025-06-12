@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -22,18 +22,90 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
+from typing import Iterator
 
+import numpy as np
 from numpy.typing import NDArray
 from osgeo import gdal, osr
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
+
+
+class GdalError(Exception):
+    """
+    Custom exception for GDAL-related errors.
+
+    This exception is raised when GDAL operations fail, providing more
+    specific error information than generic exceptions.
+    """
+
+
+@contextmanager
+def open_gdal_dataset(dataset_path: str) -> Iterator[gdal.Dataset]:
+    """
+    Context manager for safely opening and closing GDAL datasets.
+
+    This function provides a context manager that ensures proper resource cleanup
+    when working with GDAL datasets, even when exceptions occur.
+
+    Args:
+        dataset_path (str): Path to the dataset
+
+    Yields:
+        gdal.Dataset: Opened GDAL dataset
+
+    Raises:
+        GdalError: If the dataset cannot be opened
+    """
+    ds = gdal.Open(dataset_path)
+    if ds is None:
+        raise GdalError(f"Failed to open dataset: {dataset_path}")
+    try:
+        yield ds
+    finally:
+        ds = None  # Close dataset to free resources
+
+
+def shift_image(img: NDArray, y_off=0, x_off=0) -> NDArray:
+    """Apply x and y offset to the given image array.
+    Keep img shape, fill with zero blank cell
+
+    Args:
+        img (NDArray): image array to shift
+        y_off (int, optional): y offset to apply. Defaults to 0.
+        x_off (int, optional): x offset to apply. Defaults to 0.
+
+    Returns:
+        NDArray: shifted img array
+    """
+
+    y_off = int(round(y_off))
+    x_off = int(round(x_off))
+    # simple shift image, at pixel precision
+    img_new = np.zeros(img.shape, img.dtype)
+    if x_off > 0:
+        img_new[:, :-x_off] = img[:, x_off:]
+    elif x_off < 0:
+        img_new[:, -x_off:] = img[:, :x_off]
+    if x_off != 0:
+        img = img_new
+        img_new = np.zeros(img.shape, img.dtype)
+    if y_off > 0:
+        img_new[:-y_off, :] = img[y_off:, :]
+    elif y_off < 0:
+        img_new[-y_off:, :] = img[:y_off, :]
+    if y_off != 0:
+        img = img_new
+
+    return img
 
 
 def get_image_resolution(
     mon_img: GdalRasterImage,
     ref_img: GdalRasterImage,
     default_value: float | None = None,
-) -> float:
+) -> float | None:
     """Get the monitored image resolution.
     - If monitored image is not geo ref, it does not have a "real" pixel size.
         Use 'default_value' if provided, otherwise '1.0'
@@ -48,7 +120,8 @@ def get_image_resolution(
             Defaults to None.
 
     Returns:
-        float: the image resolution /pixel size to consider.
+        float: the image resolution /pixel size to consider,
+        None if no default value and image does not have resolution information.
     """
     if not mon_img.have_pixel_resolution():
         if default_value is None:
@@ -94,30 +167,66 @@ class GdalRasterImage:
     """Raster class using gdal to read image."""
 
     def __init__(self, filename):
-        if not os.path.exists(filename):
-            raise FileNotFoundError(filename)
         self.filepath = filename
         self.file_name = os.path.basename(self.filepath)
         self._read_header()
         self._array = None
 
+    @property
+    def geo_transform(self) -> str | None:
+        """Provides EPSG code, e.g. 4326 for example
+
+        Returns:
+            str | None: EPSG code, None if no projection
+        """
+        return self._geo
+
+    @property
+    def x_res(self) -> int | float:
+        """X resolution
+
+        Returns:
+            int | float: image X resolution
+        """
+        return self._geo[1]
+
+    @property
+    def y_res(self) -> int | float:
+        """Y resolution
+
+        Returns:
+            int | float: image Y resolution, could be negative depending image SRS
+        """
+        return self._geo[5]
+
+    @property
+    def x_min(self) -> int | float:
+        """UL pixel X coordinate
+
+        Returns:
+            int | float: UL X coordinate in image SRS if any
+        """
+        return self._geo[0]
+
+    @property
+    def y_max(self) -> int | float:
+        """UL pixel Y coordinate
+
+        Returns:
+            int | float: UL Y coordinate in image SRS if any
+        """
+        return self._geo[3]
+
     def _read_header(self):
         # geo information
-        dataset = gdal.Open(self.filepath)
-        geo = dataset.GetGeoTransform()
-        self.x_size = dataset.RasterXSize
-        self.y_size = dataset.RasterYSize
+        with open_gdal_dataset(self.filepath) as dataset:
+            self._geo = dataset.GetGeoTransform()
+            self.x_size = dataset.RasterXSize
+            self.y_size = dataset.RasterYSize
 
-        # Spatial Reference System
-        self.x_res = geo[1]
-        self.y_res = geo[5]
-        self.x_min = geo[0]
-        self.y_max = geo[3]
-        self.x_max = self.x_min + self.x_size * self.x_res
-        self.y_min = self.y_max + self.y_size * self.y_res
-        self.projection = dataset.GetProjection()
-
-        dataset = None
+            self.x_max = self.x_min + self.x_size * self.x_res
+            self.y_min = self.y_max + self.y_size * self.y_res
+            self.projection = dataset.GetProjection()
 
     def have_pixel_resolution(self) -> bool:
         """Indicate if the image have a pixel size
@@ -153,21 +262,29 @@ class GdalRasterImage:
         Returns:
           NDArray: extracted box in the image.
         """
-        dst = gdal.Open(self.filepath)
-        band = dst.GetRasterBand(band_id)
-        data = band.ReadAsArray(x_off, y_off, x_size, y_size)
-        dst = None
-        return data
+        with open_gdal_dataset(self.filepath) as dataset:
+            band = dataset.GetRasterBand(band_id)
+            data = band.ReadAsArray(x_off, y_off, x_size, y_size)
+            band = None  # Explicitly release the band object
+            return data
 
-    def _get_array(self) -> NDArray:
+    @property
+    def array(self) -> NDArray:
+        """Access to image array
+
+        Returns:
+            NDArray: image pixel array
+        """
         if self._array is None:
-            dst = gdal.Open(self.filepath)
-            band = dst.GetRasterBand(1)
-            self._array = band.ReadAsArray()
-            dst = None
+
+            with open_gdal_dataset(self.filepath) as dataset:
+                band = dataset.GetRasterBand(1)
+                self._array = band.ReadAsArray()
+                band = None  # Explicitly release the band object
+
         return self._array
 
-    def to_raster(self, file_path: str, data: NDArray | list(NDArray), e_type=gdal.GDT_Byte):
+    def to_raster(self, file_path: str, data: NDArray | list[NDArray], e_type=gdal.GDT_Byte):
         """Creates a raster file using input image size and res
 
         Args:
@@ -207,4 +324,35 @@ class GdalRasterImage:
         dataset.FlushCache()
         dataset = None
 
-    array: NDArray = property(_get_array, doc="Access to image array (numpy array)")
+    def is_compatible_with(self, image: GdalRasterImage) -> bool:
+        """Check that images have same geometric and geographic specifications
+
+        Args:
+            image (GdalRasterImage): image to compare with
+
+        Returns:
+            bool: True images have same geometric and geographic specifications
+        """
+        return (
+            (self.projection == image.projection)
+            and (self._geo == self._geo)
+            and (self.x_size == image.x_size)
+            and (self.y_size == image.y_size)
+        )
+
+    @property
+    def image_information(self) -> str:
+        """
+        Returns:
+            str: Images geometric and geographic specifications info
+        """
+        return f"""Projection: {self.projection}
+        GetGeoTransform: {self._geo}
+        X Size: {self.x_size}
+        Y Size: {self.y_size}
+        """
+
+    def clear_cache(self):
+        """Clear the cached array to free memory."""
+        if self._array is not None:
+            self._array = None

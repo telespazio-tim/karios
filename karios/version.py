@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -18,4 +18,4 @@
 
 
 """version info module."""
-__version__ = "1.0.0"
+__version__ = "2.0.0-pre"

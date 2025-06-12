@@ -6,7 +6,9 @@ import shutil
 import unittest
 from pathlib import Path
 
-import karios
+from click.testing import CliRunner
+
+from karios.cli.commands import process
 
 module_dir_path = os.path.dirname(__file__)
 result_dir = os.path.join(module_dir_path, "test_results")
@@ -30,21 +32,22 @@ class E2ETest(unittest.TestCase):
         csv_result_filename = (
             "KLT_matcher_L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04.csv"
         )
+        geojson_filename = "kp_delta.json"
 
-        self.assertEqual(
-            karios.main(
-                [
-                    "/data/KARIOS/monitored/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF",
-                    "/data/KARIOS/ref/T12SYH_20220514T175909_B04.jp2",
-                    "--out",
-                    result_dir,
-                    "--conf",
-                    config_file_path,
-                    "--no-log-file",
-                ]
-            ),
-            0,
+        runner = CliRunner()
+        result = runner.invoke(
+            process,
+            [
+                "/media/pcanonici/KINGSTON/data/KARIOS/monitored/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF",
+                "/media/pcanonici/KINGSTON/data/KARIOS/ref/T12SYH_20220514T175909_B04.jp2",
+                "--out",
+                result_dir,
+                "--conf",
+                config_file_path,
+            ],
         )
+
+        self.assertEqual(0, result.exit_code)
 
         self.assertTrue(
             filecmp.cmp(
@@ -54,6 +57,18 @@ class E2ETest(unittest.TestCase):
                     csv_result_filename,
                 ),
                 os.path.join(ref_data_dir, csv_result_filename),
+                False,
+            )
+        )
+
+        self.assertTrue(
+            filecmp.cmp(
+                os.path.join(
+                    result_dir,
+                    "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
+                    geojson_filename,
+                ),
+                os.path.join(ref_data_dir, geojson_filename),
                 False,
             )
         )

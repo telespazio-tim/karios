@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -21,13 +21,13 @@
 
 import logging
 import os
-from dataclasses import dataclass
 
 import numpy as np
-from core.configuration import AccuracyAnalysisConfiguration
 from pandas import DataFrame
 
-logger = logging.getLogger()
+from karios.core.configuration import AccuracyAnalysisConfiguration
+
+logger = logging.getLogger(__name__)
 
 
 class GeometricStat:
@@ -57,10 +57,10 @@ class GeometricStat:
         self.mean_y = ""
         self.std_y = ""
         self.v_x = points["dx"]  # vector of dx displacements
-        # reverse x (line/northing) if image have SRS (carto representation)
-        if carto:
-            self.v_x = -self.v_x
         self.v_y = points["dy"]  # vector of dy displacements
+        # reverse y (line/northing) if image have SRS (carto representation)
+        if carto:
+            self.v_y = -self.v_y
         self.v_c = points["score"]  # vector of dc displacements
         self.total_match = (self.v_x).shape[0]  # All pixels as input
         self.vx_th = np.array(self.v_x.shape).astype(float)
@@ -172,8 +172,8 @@ class GeometricStat:
         ]
 
         logger.info("Accuracy analysis: \n")
-        logger.info(" DX (line)        : %s", " ".join(chx))
-        logger.info(" DY (px(column))  : %s", " ".join(chy))
+        logger.info(" DX (px(column)) : %s", " ".join(chx))
+        logger.info(" DY (line)       : %s", " ".join(chy))
 
     def get_string_block(self, scale_factor, direction="x"):
         """

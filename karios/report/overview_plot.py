@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -17,29 +17,22 @@
 # limitations under the License.
 """Module to plot images, radial error and theta error"""
 import logging
-from pathlib import Path
 
 import numpy as np
-from core.configuration import OverviewPlotConfiguration
-from core.image import GdalRasterImage
 from matplotlib import colors
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from matplotlib.figure import Figure
 from pandas import DataFrame, Series
-from report.commons import add_logo
 
-logger = logging.getLogger()
+from karios.core.configuration import OverviewPlotConfiguration
+from karios.core.image import GdalRasterImage
+from karios.report.commons import AbstractPlot
 
-
-def theta_deg(y: float, x: float):
-    return np.degrees(np.arctan2(y, x))
-
-
-v_theta_deg = np.vectorize(theta_deg)
+logger = logging.getLogger(__name__)
 
 
-class OverviewPlot:
+class OverviewPlot(AbstractPlot):
     # pylint: disable=too-few-public-methods
     """Overview plot class. It plots :
     - monitored image
@@ -54,6 +47,7 @@ class OverviewPlot:
         mon_image: GdalRasterImage,
         ref_image: GdalRasterImage,
         points: DataFrame,
+        prefix: str | None,
     ):
         """Constructor
 
@@ -62,31 +56,84 @@ class OverviewPlot:
             mon_image (GdalRasterImage): monitored image
             ref_image (GdalRasterImage): reference image
             points (DataFrame): KP data frame with series x0, y0, dx, dy
+            prefix (str|None): figure title prefix
         """
+        super().__init__(prefix, config.fig_size)
         self._config = config
         self._mon_img = mon_image
         self._ref_img = ref_image
         self._points = points
 
-        # init figure
-        self._figure = plt.figure(figsize=(self._config.fig_size, self._config.fig_size))
-        self._figure.suptitle("Errors overview", y=0.98, size="16")
+    ####################################################
+    # Abstract implementation
+    #
 
-    def _add_image(self, axes: Axes, img: GdalRasterImage, title: str):
-        """Add image overview to figure in the axes
+    @property
+    def _figure_title(self) -> str:
+        return "Errors overview"
 
-        Args:
-            axes (Axes): axes to put image
-            img (GdalRasterImage): image to overview
-            title (str): pot title
-        """
+    def _prepare_figure(self, fig_size) -> Figure:
+        # Calculate figure size
+        fig_width = fig_size * 1.25
+        fig_height = fig_size * 1.2
+
+        return plt.figure(figsize=(fig_width, fig_height))
+
+    def _plot(self):
+        """Plot overview using manual positioning for precise control"""
+
+        # Define precise positions [left, bottom, width, height] in figure coordinates
+
+        # Header area
+        header_pos = [0.05, 0.88, 0.9, 0.08]
+
+        # First row: Monitored image and Radial error
+        mon_img_pos = [0.05, 0.48, 0.4, 0.38]
+        rad_err_pos = [0.5, 0.48, 0.5, 0.38]
+
+        # Second row: Reference image and Theta error
+        ref_img_pos = [0.05, 0.05, 0.4, 0.38]
+        theta_err_pos = [0.5, 0.05, 0.5, 0.38]
+
+        # Create plot axes first
+        header_ax = self._figure.add_axes(header_pos)
+        mon_img_ax = self._figure.add_axes(mon_img_pos)
+        rad_err_ax = self._figure.add_axes(rad_err_pos)
+        ref_img_ax = self._figure.add_axes(ref_img_pos)
+        theta_err_ax = self._figure.add_axes(theta_err_pos)
+
+        # Plot images and errors first
+        self._setup_header(header_ax)
+        self._plot_image(mon_img_ax, self._mon_img, "Monitored")
+        self._plot_image(ref_img_ax, self._ref_img, "Reference")
+
+        # Plot errors with colorbars
+        self._plot_radial_error(rad_err_ax)
+        self._plot_theta_error(theta_err_ax)
+
+    ####################################################
+    # Helper methods
+    #
+
+    def _setup_header(self, axes: Axes) -> None:
+        """Setup the header with image names (reference under monitored)"""
+        axes.axis("off")
+        text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
+        axes.text(x=0, y=0.5, s=text, size="14", ha="left", va="center")
+
+    def _plot_image(self, axes: Axes, img: GdalRasterImage, title: str) -> None:
+        """Plot image with adaptive contrast"""
         axes.set_title(title)
 
-        # Attempt to adapt dynamic
-        mean = np.mean(img.array, where=img.array != 0)
-        std = np.std(img.array, where=img.array != 0)
-        v_min = mean - 4 * std
-        v_max = mean + 4 * std
+        # Adaptive contrast enhancement
+        valid_pixels = img.array[img.array != 0]
+        if len(valid_pixels) > 0:
+            mean_val = np.mean(valid_pixels)
+            std_val = np.std(valid_pixels)
+            v_min = max(0, mean_val - 4 * std_val)
+            v_max = mean_val + 4 * std_val
+        else:
+            v_min, v_max = np.nanmin(img.array), np.nanmax(img.array)
 
         logger.debug(
             "%s : min %s / %s , max %s / %s",
@@ -97,137 +144,62 @@ class OverviewPlot:
             v_max,
         )
 
-        axes.imshow(img.array, cmap="gray", vmin=v_min, vmax=v_max)  # , vmin=0, vmax=800)
+        axes.imshow(img.array, cmap="gray", vmin=v_min, vmax=v_max)
 
-        # new_img = cv2.equalizeHist(img.array.astype(np.uint8))
-        # logger.info("%s : min %s / %s , max %s/ %s", img.filepath, np.min(img.array), np.min(new_img), np.max(img.array), np.max(new_img))
-        # axes.imshow(new_img, cmap="gray")
+    def _plot_radial_error(self, axes: Axes) -> None:
+        """Plot radial error with dedicated colorbar"""
+        dist = self._points["radial error"]
+        logger.debug("Delta min %s / max %s", dist.min(), dist.max())
 
-    def _plot_error(
-        self,
-        axes: Axes,
-        values: Series,
-        title: str,
-        color_map: str,
-        limit: [float, float],
-        div_norm: bool = False,
-        norm_center: float = 0.0,
-    ):
-        """Scatter plot having monitored image size
+        # Calculate limits
+        lim_min = 0
+        if self._config.shift_auto_axes_limit:
+            lim_max = dist.mean() + dist.std() * 3
+            kwargs = {
+                "norm": colors.TwoSlopeNorm(
+                    vmin=lim_min, vcenter=(lim_max - lim_min) / 2, vmax=lim_max
+                )
+            }
+        else:
+            lim_max = self._config.shift_axes_limit
+            kwargs = {"vmin": lim_min, "vmax": lim_max}
 
-        Args:
-            axes (Axes): where to plot the scatter in the figure
-            values (Series): values to plot
-            title (str): plot title
-            color_map (str): colormap to apply
-            limit (float, float]): min and max limit
-            div_norm (bool, optional): normalise or not the colormap with TwoSlopeNorm. Defaults to False.
-            norm_center (float, optional): if `div_norm`, the TwoSlopeNorm center. Defaults to 0.0.
-        """
+        scatter = self._create_error_scatter(
+            axes, dist, "Radial Error (px)", self._config.shift_colormap, **kwargs
+        )
+
+        # Add colorbar
+        self._figure.colorbar(scatter, aspect=35)
+
+    def _plot_theta_error(self, axes: Axes) -> None:
+        """Plot theta error with dedicated colorbar"""
+        angles = self._points["angle"]
+
+        scatter = self._create_error_scatter(
+            axes,
+            angles,
+            "Angle error (deg), East direction CC",
+            self._config.theta_colormap,
+            vmin=-180,
+            vmax=180,
+        )
+
+        # Add colorbar
+        self._figure.colorbar(scatter, aspect=35)
+
+    def _create_error_scatter(
+        self, axes: Axes, values: Series, title: str, colormap: str, **kwargs
+    ) -> plt.cm.ScalarMappable:
+        """Create scatter plot for error visualization"""
         axes.set_title(title)
         axes.set_xlim(0, self._mon_img.x_size)
         axes.set_ylim(self._mon_img.y_size, 0)
         axes.axis("scaled")
-        kwargs = {
-            "vmin": limit[0],
-            "vmax": limit[1],
-        }
-
-        if div_norm:
-            kwargs = {
-                "norm": colors.TwoSlopeNorm(vmin=limit[0], vcenter=norm_center, vmax=limit[1]),
-            }
 
         scatter = axes.scatter(
-            self._points["x0"], self._points["y0"], c=values, cmap=color_map, s=1, **kwargs
+            self._points["x0"], self._points["y0"], c=values, cmap=colormap, s=1, **kwargs
         )
+
         axes.grid()
-        # colorbar in gridspec, thanks to this
-        # https://stackoverflow.com/a/57623427
-        cax = inset_axes(
-            axes,  # here using axis of the scatter
-            width="3%",  # width = 5% of parent_bbox width
-            height="100%",
-            loc="upper left",
-            bbox_to_anchor=(1.02, 0, 1, 1),
-            bbox_transform=axes.transAxes,
-            borderpad=0,
-        )
 
-        self._figure.colorbar(scatter, cax=cax)
-
-    def plot(self, out_image_file: Path):
-        """Plot overview in file
-
-        Args:
-            out_image_file (Path): destination file path
-        """
-
-        grid = self._figure.add_gridspec(
-            4,
-            2,
-            width_ratios=(2, 2),
-            height_ratios=(0.5, 2, 2, 0.25),
-            left=0.01,
-            right=0.99,
-            bottom=0.01,
-            top=0.95,
-            wspace=0.05,
-            hspace=0.2,
-        )
-
-        header_ax = self._figure.add_subplot(grid[0, :])
-        mon_img_ax = self._figure.add_subplot(grid[1, 0])
-        ref_img_ax = self._figure.add_subplot(grid[2, 0])
-        rad_err_ax = self._figure.add_subplot(grid[1, 1])
-        theta_err_ax = self._figure.add_subplot(grid[2, 1])
-        logo_gd = grid[3, :].subgridspec(1, 3)
-
-        header_ax.axis("off")
-        text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
-        header_ax.text(x=0.1, y=0.5, s=text, size="14", ha="left", va="center")
-
-        # /////////////////////////////
-        # plot images
-        self._add_image(mon_img_ax, self._mon_img, "Monitored")
-        self._add_image(ref_img_ax, self._ref_img, "Reference")
-
-        # /////////////////////////////
-        # plot radial error
-        dist = np.sqrt(self._points["dx"] ** 2 + self._points["dy"] ** 2)
-        logger.debug("Delta min %s / max %s", np.min(dist), np.min(dist))
-
-        # set axes limit
-        lim_min = 0
-        if self._config.shift_auto_axes_limit:
-            # lim_max = np.max(dist)
-            lim_max = dist.mean() + dist.std() * 3
-        else:
-            lim_max = self._config.shift_axes_limit
-
-        self._plot_error(
-            rad_err_ax,
-            dist,
-            "Radial Error (px)",
-            self._config.shift_colormap,
-            [lim_min, lim_max],
-            div_norm=self._config.shift_auto_axes_limit,
-            norm_center=(lim_max - lim_min) / 2,
-        )
-
-        # /////////////////////////////
-        # plot theta error
-        angles = v_theta_deg(self._points["dy"], self._points["dx"])
-        self._plot_error(
-            theta_err_ax,
-            angles,
-            "Angle error (deg), East direction CC",
-            self._config.theta_colormap,
-            [-180, 180],
-        )
-
-        add_logo(self._figure, logo_gd)
-
-        # serialize plot
-        plt.savefig(out_image_file)
-        plt.close()
+        return scatter

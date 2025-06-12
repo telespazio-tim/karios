@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -16,7 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """
 Represents the configuration of the application.
 
@@ -26,11 +25,12 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional, Union
 
-from core.errors import ConfigurationError
-from core.utils import get_filename
+from karios.core.errors import ConfigurationError
 
-LOGGER = logging.getLogger()
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -62,13 +62,22 @@ class OverviewPlotConfiguration:
 
 @dataclass
 class ShiftPlotConfiguration:
-    """Shift Plot module configuration class"""
+    """Shift by Row Col Plot module configuration class"""
 
     fig_size: int
     scatter_colormap: str
     scatter_auto_limit: bool
     scatter_min_limit: float
     scatter_max_limit: float
+    histo_mean_bin_size: int
+
+
+@dataclass
+class DemPlotConfiguration:
+    """Shift by DEM Plot module configuration class"""
+
+    fig_size: int
+    show_fliers: bool
     histo_mean_bin_size: int
 
 
@@ -88,82 +97,102 @@ class AccuracyAnalysisConfiguration:
 
 
 @dataclass
-class GlobalConfiguration:
-    """Global configuration"""
+class ShiftConfiguration:
+    """Large shift image preprocessing configuration"""
 
-    output_directory: str
-    working_image: str
-    reference_image: str
-    mask: str
-    configuration: str
-    pixel_size: float
-    gen_kp_mask: bool
-    gen_delta_raster: bool
+    bias_correction_min_threshold: int
 
 
-class Configuration:
+class ProcessingConfiguration:
     """Application configuration."""
 
-    def __init__(self, arguments):
-        """
-        Initialize class and check for configuration files existence.
+    def __init__(self):
+        """Initialize Configuration class."""
+        self.klt_configuration: Optional[KLTConfiguration] = None
+        self.shift_image_processing_configuration: Optional[ShiftConfiguration] = None
+        self.accuracy_analysis_configuration: Optional[AccuracyAnalysisConfiguration] = None
+        self.overview_plot_configuration: Optional[OverviewPlotConfiguration] = None
+        self.shift_plot_configuration: Optional[ShiftPlotConfiguration] = None
+        self.dem_plot_configuration: Optional[DemPlotConfiguration] = None
+        self.ce_plot_configuration: Optional[CEPlotConfiguration] = None
 
-        Load the configuration as a dictionary if it exists.
-            :param self: Instance of the class
-            :param arguments: Arguments parsed from the command line
-            :param output_path: Where to store outputs
-        """
-        self.values: GlobalConfiguration = GlobalConfiguration(
-            os.path.join(
-                arguments.out,
-                f"{get_filename(arguments.mon)}_{get_filename(arguments.ref)}",
-            ),
-            arguments.mon,
-            arguments.ref,
-            arguments.mask,
-            arguments.conf,
-            arguments.pixel_size,
-            arguments.gen_kp_mask,
-            arguments.gen_delta_raster,
-        )
-
-        # Read configuration file :
-        file_content = self._load_configuration_file(arguments.conf)
-
-        self._load_configuration(file_content["processing_configuration"])
-
-        # TODO: Eventualy add these functions if required
-        # self.save_configuration()
-        # self.configure_readers()
-
-    def _load_configuration(self, proc_config):
-        """Retrieve parameters as dict.
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any]) -> "ProcessingConfiguration":
+        """Create configuration from a dictionary.
 
         Args:
-          file_content:
+            config_dict: Dictionary containing configuration
 
+        Returns:
+            ProcessingConfiguration: Configured instance
         """
-        self.klt_configuration = KLTConfiguration(**proc_config["klt_matching"])
+        instance = cls()
+        instance._load_configuration(config_dict)
+        return instance
+
+    @classmethod
+    def from_file(cls, filepath: Union[str, Path]) -> "ProcessingConfiguration":
+        """Load configuration from a file.
+
+        Args:
+            filepath: Path to configuration file
+
+        Returns:
+            ProcessingConfiguration: Configured instance
+        """
+        filepath_str = str(filepath)
+        if not os.path.exists(filepath_str):
+            LOGGER.error("%s does not exist.", filepath_str)
+            raise ConfigurationError(f"{filepath_str} does not exist.")
+
+        try:
+            with open(filepath_str, encoding="utf-8") as json_file:
+                config_dict = json.load(json_file)
+        except json.JSONDecodeError as error:
+            raise ConfigurationError(
+                f"{filepath_str} is not a valid configuration file: {error}"
+            ) from error
+
+        return cls.from_dict(config_dict)
+
+    def _load_configuration(self, config_dict: dict[str, Any]) -> None:
+        """Load configuration from dictionary.
+
+        Args:
+            config_dict: Dictionary containing configuration
+        """
+        self.klt_configuration = KLTConfiguration(
+            **config_dict["processing_configuration"]["klt_matching"]
+        )
+        self.shift_image_processing_configuration = ShiftConfiguration(
+            **config_dict["processing_configuration"]["shift_image_processing"]
+        )
         self.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
-            **proc_config["accuracy_analysis"]
+            **config_dict["processing_configuration"]["accuracy_analysis"]
         )
         self.overview_plot_configuration = OverviewPlotConfiguration(
-            **proc_config["plot_configuration"]["overview"]
+            **config_dict["plot_configuration"]["overview"]
         )
         self.shift_plot_configuration = ShiftPlotConfiguration(
-            **proc_config["plot_configuration"]["shift"]
+            **config_dict["plot_configuration"]["shift"]
         )
-        self.ce_plot_configuration = CEPlotConfiguration(**proc_config["plot_configuration"]["ce"])
+        self.dem_plot_configuration = DemPlotConfiguration(
+            **config_dict["plot_configuration"]["dem"]
+        )
+        self.ce_plot_configuration = CEPlotConfiguration(**config_dict["plot_configuration"]["ce"])
 
-    def _load_configuration_file(self, filepath):
+    def _load_configuration_file(self, filepath: str) -> dict[str, Any]:
         """Check that the provided configuration file exists and is valid.
         And load configuration (json)
 
         Args:
-          filepath: The path of the configuration file.
+            filepath: The path of the configuration file.
 
         Returns:
+            dict[str, Any]: Loaded configuration dictionary
 
+        Raises:
+            ConfigurationError: If file doesn't exist or contains invalid JSON
         """
         if os.path.exists(filepath):
             LOGGER.info("** Checking %s", filepath)
@@ -174,11 +203,8 @@ class Configuration:
                 raise ConfigurationError(
                     f"{filepath} is not a valid configuration file: {error}"
                 ) from error
-
         else:
             LOGGER.error("%s does not exist.", filepath)
             raise ConfigurationError(f"{filepath} does not exist.")
-        return file_content
 
-        # self.save_configuration()
-        # self.configure_readers()
+        return file_content

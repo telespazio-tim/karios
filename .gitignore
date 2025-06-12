@@ -5,3 +5,6 @@ results/
 .coverage
 coverage.xml
 junit.xml
+build
+karios.egg-info
+dist

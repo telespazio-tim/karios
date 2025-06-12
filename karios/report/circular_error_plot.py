@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2024 Telespazio France.
+# Copyright (c) 2025 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -18,20 +18,21 @@
 """circular error plot module"""
 
 import logging
-from pathlib import Path
 
 import numpy as np
-from accuracy_analysis.accuracy_statistics import GeometricStat
-from core.configuration import CEPlotConfiguration
-from core.image import GdalRasterImage
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from report.commons import add_logo
 from scipy import stats as sp_stats
 from scipy.interpolate import interpn
 
-logger = logging.getLogger()
+from karios.accuracy_analysis.accuracy_statistics import GeometricStat
+from karios.core.configuration import CEPlotConfiguration
+from karios.core.image import GdalRasterImage
+from karios.report.commons import AbstractPlot
+
+logger = logging.getLogger(__name__)
 
 
 def _rmse(mean, std, img_res=None):
@@ -45,7 +46,7 @@ def _rmse(mean, std, img_res=None):
     return np.sqrt(_mean * _mean + _std * _std)
 
 
-class CircularErrorPlot:
+class CircularErrorPlot(AbstractPlot):
     # pylint: disable=too-few-public-methods
     """Class to create circular error plot image. It plots :
     - CE scatter
@@ -60,17 +61,21 @@ class CircularErrorPlot:
         mon_image: GdalRasterImage,
         ref_image: GdalRasterImage,
         stats: GeometricStat,
-        img_res: int | None,
+        img_res: float | None,
+        prefix: str | None,
     ):
         """Constructor
 
         Args:
             conf (CEPlotConfiguration): plot config
+            mon_image (GdalRasterImage): image to match
+            ref_image (GdalRasterImage): reference image
             stats (GeometricStat): statistics to plot
-            img_res (int | None): image resolution to apply to statistics as factor.
+            img_res (float | None): image resolution to apply to statistics as factor.
                 if None, consider pixel with value 1, otherwise, consider meter.
+            prefix (str|None): figure title prefix
         """
-
+        super().__init__(prefix, conf.fig_size)
         self._conf = conf
         self._mon_img = mon_image
         self._ref_img = ref_image
@@ -92,6 +97,86 @@ class CircularErrorPlot:
             self._short_unit = "px"
             self._x_scatter_label = "Row displacement (pixel)"
             self._y_scatter_label = "Line displacement (pixel)"
+
+    ####################################################
+    # Abstract implementation
+    #
+
+    @property
+    def _figure_title(self) -> str:
+        return "Geometric Error distribution"
+
+    def _prepare_figure(self, fig_size) -> Figure:
+        return plt.figure(figsize=(fig_size * 5 / 3, fig_size * 1.2))
+
+    def _plot(self):
+
+        grid = self._figure.add_gridspec(
+            3,
+            3,
+            width_ratios=(4, 4, 4),
+            height_ratios=(0.3, 3, 3),
+            left=0.15,
+            right=0.9,
+            bottom=0.05,
+            top=0.9,
+            wspace=0.1,
+            hspace=0.3,
+        )
+
+        # Create the Axes for each plot
+        ax_header = self._figure.add_subplot(grid[0, :])
+        ax_scatter = self._figure.add_subplot(grid[2, 0])
+        ax_col = self._figure.add_subplot(grid[1, 0], sharex=ax_scatter)
+        ax_row = self._figure.add_subplot(grid[2, 1], sharey=ax_scatter)
+        ax_text = self._figure.add_subplot(grid[1, 1])
+        ax_ce = self._figure.add_subplot(grid[1, 2])
+
+        # no labels
+        ax_col.tick_params(axis="x", labelbottom=False)
+        ax_row.tick_params(axis="y", labelleft=False)
+
+        # Add input images name and disclaimer if needed
+        self._set_header(ax_header)
+
+        #  Plot Scatter :
+        scatter_plot = self._ce_scatter(ax_scatter)
+
+        # ///////////////////////////////////////
+        # plot col
+        self._hist_vector(ax_col, self._stats.v_x_th, "x")
+
+        # ///////////////////////////////////////
+        # plot row
+        self._hist_vector(
+            ax_row,
+            self._stats.v_y_th,
+            "y",
+            orientation="horizontal",
+        )
+
+        # TODO : add cumul (CDF)
+        self._radial_error_plot(ax_ce)
+
+        self._text_box(ax_text)
+
+        # colorbar in gridspec, thanks to this
+        # https://stackoverflow.com/a/57623427
+        cax = inset_axes(
+            ax_scatter,  # here using axis of the scatter
+            width="3%",  # width = 5% of parent_bbox width
+            height="100%",
+            loc="upper left",
+            bbox_to_anchor=(-0.3, 0, 1, 1),
+            bbox_transform=ax_scatter.transAxes,
+            borderpad=0,
+        )
+
+        self._figure.colorbar(scatter_plot, cax=cax, ticklocation="left")
+
+    ####################################################
+    # Local implementation
+    #
 
     def _compute_histogram(self, vect, direction):
         # The number of Bins corresponding to 0.1 pixel :
@@ -142,16 +227,31 @@ class CircularErrorPlot:
 
         return (hist, bins)
 
-    def _ce_scatter(
-        self,
-        axes: Axes,
-        title=None,
-    ):
-        if title is None:
-            title_figure = " "
-        else:
-            title_figure = title
+    def _set_header(self, axes: Axes):
+        axes.axis("off")
+        text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
+        axes.text(x=0, y=0, s=text, size="12", ha="left", va="top")
 
+        # Add disclaimer
+        if not self._mon_img.get_epsg() or (self._mon_img.get_epsg() != self._ref_img.get_epsg()):
+            axes.text(
+                x=0.5,
+                y=0.5,
+                s="\n".join(
+                    [
+                        "Disclaimer: ",
+                        "Planimetric accuracy results may not be relevant in the case of",
+                        "input images provided without, or not identical map projection",
+                    ]
+                ),
+                # color="orange",
+                size="14",
+                ha="center",
+                va="bottom",
+                bbox={"facecolor": "none", "edgecolor": "red", "pad": 5.0},
+            )
+
+    def _ce_scatter(self, axes: Axes):
         # Computation CE90 2D :
         ce_90 = self._stats.compute_percentile(0.9, self._img_res)
         x = self._stats.v_x_th * self._img_res
@@ -180,7 +280,7 @@ class CircularErrorPlot:
         x, y, z = x[idx], y[idx], z[idx]
 
         # PLOT scatter
-        scatter = axes.scatter(y, x, c=z, cmap=self._conf.ce_scatter_colormap)
+        scatter = axes.scatter(x, y, c=z, cmap=self._conf.ce_scatter_colormap)
 
         # Plot in the graphic Cicrular error circle :
         u = range(0, 110, 1)
@@ -198,7 +298,7 @@ class CircularErrorPlot:
 
         axes.grid()
 
-        axes.set_title(title_figure, fontsize=11)
+        axes.set_title("Circular Error Plot @ 90 percentile", fontsize=11)
 
         return scatter
 
@@ -288,18 +388,18 @@ class CircularErrorPlot:
             f"Percentage of Confident Pixels : {self._stats.percentage_of_pixel:.2f}%",
             "",
             f"{self._x_scatter_label}:",
-            f"\tMin : {self._stats.min_y*self._img_res:.2f} {self._short_unit}",
-            f"\tMax : {self._stats.max_y*self._img_res:.2f} {self._short_unit}",
-            f"\tMean : {self._stats.mean_y*self._img_res:.2f} {self._short_unit}",
-            f"\tSigma : {self._stats.std_y*self._img_res:.2f} {self._short_unit}",
-            f"\tRMSE : {y_rmse:.2f} {self._short_unit}",
-            "",
-            f"{self._y_scatter_label}:",
             f"\tMin : {self._stats.min_x*self._img_res:.2f} {self._short_unit}",
             f"\tMax : {self._stats.max_x*self._img_res:.2f} {self._short_unit}",
             f"\tMean : {self._stats.mean_x*self._img_res:.2f} {self._short_unit}",
             f"\tSigma : {self._stats.std_x*self._img_res:.2f} {self._short_unit}",
             f"\tRMSE : {x_rmse:.2f} {self._short_unit}",
+            "",
+            f"{self._y_scatter_label}:",
+            f"\tMin : {self._stats.min_y*self._img_res:.2f} {self._short_unit}",
+            f"\tMax : {self._stats.max_y*self._img_res:.2f} {self._short_unit}",
+            f"\tMean : {self._stats.mean_y*self._img_res:.2f} {self._short_unit}",
+            f"\tSigma : {self._stats.std_y*self._img_res:.2f} {self._short_unit}",
+            f"\tRMSE : {y_rmse:.2f} {self._short_unit}",
             "",
             f"Global RMSE : {_rmse(x_rmse, y_rmse):.2f} {self._short_unit}",
             f"CE @90 the percentile : {self._stats.compute_percentile(0.9, self._img_res):.2f} {self._short_unit}",
@@ -319,91 +419,3 @@ class CircularErrorPlot:
 
         logger.info(text)
         axes.text(x=0, y=0, s=text)
-
-    def plot(self, output_file: Path):
-        """Plot in file
-
-        Args:
-            output_file (Path): path to the image output file
-        """
-        fig = plt.figure(figsize=(self._conf.fig_size * 5 / 3, self._conf.fig_size * 1.2))
-        fig.suptitle(
-            "Geometric Error distribution",
-            size="16",
-            ha="center",
-        )
-
-        grid = fig.add_gridspec(
-            4,
-            3,
-            width_ratios=(4, 4, 4),
-            height_ratios=(0.5, 4, 4, 0.5),
-            left=0.15,
-            right=0.9,
-            bottom=0.02,
-            top=0.9,
-            wspace=0.1,
-            hspace=0.3,
-        )
-
-        # Create the Axes for each plot
-        ax_header = fig.add_subplot(grid[0, :])
-        ax_scatter = fig.add_subplot(grid[2, 0])
-        ax_col = fig.add_subplot(grid[1, 0], sharex=ax_scatter)
-        ax_row = fig.add_subplot(grid[2, 1], sharey=ax_scatter)
-        ax_text = fig.add_subplot(grid[1, 1])
-        ax_ce = fig.add_subplot(grid[1, 2])
-        logo_gd = grid[3, :].subgridspec(1, 3)
-
-        # no labels
-        ax_col.tick_params(axis="x", labelbottom=False)
-        ax_row.tick_params(axis="y", labelleft=False)
-
-        ax_header.axis("off")
-        text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
-        ax_header.text(x=0, y=0.5, s=text, size="12", ha="left", va="center")
-
-        #  Plot Scatter :
-        title_label = "Circular Error Plot @ 90 percentile"
-        scatter_plot = self._ce_scatter(
-            ax_scatter,
-            title=title_label,
-        )
-
-        # ///////////////////////////////////////
-        # plot col
-        self._hist_vector(ax_col, self._stats.v_y_th, "y")
-
-        # ///////////////////////////////////////
-        # plot row
-        self._hist_vector(
-            ax_row,
-            self._stats.v_x_th,
-            "x",
-            orientation="horizontal",
-        )
-
-        # TODO : add cumul (CDF)
-        self._radial_error_plot(ax_ce)
-
-        self._text_box(ax_text)
-
-        # colorbar in gridspec, thanks to this
-        # https://stackoverflow.com/a/57623427
-        cax = inset_axes(
-            ax_scatter,  # here using axis of the scatter
-            width="3%",  # width = 5% of parent_bbox width
-            height="100%",
-            loc="upper left",
-            bbox_to_anchor=(-0.3, 0, 1, 1),
-            bbox_transform=ax_scatter.transAxes,
-            borderpad=0,
-        )
-
-        fig.colorbar(scatter_plot, cax=cax, ticklocation="left")
-
-        add_logo(fig, logo_gd)
-
-        plt.savefig(output_file)
-
-        plt.close()
