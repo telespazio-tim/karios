@@ -32,14 +32,14 @@ Prepare your environment to install and run KARIOS.
 
 ::::{grid-item}
 :::{card} {fas}`wrench` Installation
-:link: quickstart.html#installation
+:link: quickstart.html#environment-setup
 
 Install KARIOS.
 :::
 ::::
 
 ::::{grid-item}
-:::{card} {fas}`rocket` Usage
+:::{card} {fas}`rocket` Launch
 :link: quickstart.html#usage
 
 A sample of how to run KARIOS.
