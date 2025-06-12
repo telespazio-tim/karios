@@ -16,6 +16,8 @@
         .bd-header-article{display: none;} /* hide breadcrumbs*/
     </style>
 
+.. important::
+    Site under construction
 
 .. This title is not displayed due to custom css above (h1)
 
