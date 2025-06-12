@@ -32,6 +32,8 @@ From the `site` folder run :
 conda install -n karios -c conda-forge --file requirements.txt
 ```
 
+`make` command should be installed.
+
 ### Build command
 
 To build the KARIOS website, open a Terminal and run the following command from `site` folder
