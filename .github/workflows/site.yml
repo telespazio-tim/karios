@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
     paths:
       - 'site/**'
       - '!site/README.md'
@@ -23,8 +24,9 @@ permissions:
 jobs:
   site:
     runs-on: ubuntu-latest
-    # Only run if the release workflow completed successfully (for tags)
+    # Only run if the release workflow completed successfully (for tags) or if it's a regular push/PR
     if: |
+      github.event_name != 'workflow_run' || 
       github.event.workflow_run.conclusion == 'success'
     defaults:
       run:
@@ -43,7 +45,9 @@ jobs:
           make html
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         with:
           publish_branch: gh-pages
           github_token: ${{ secrets.GITHUB_TOKEN }}
