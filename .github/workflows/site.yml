@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - develop
+      # - develop
     paths:
       - 'site/**'
       - '!site/README.md'
