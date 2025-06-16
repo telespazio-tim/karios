@@ -4,7 +4,7 @@
 
 ### Prerequisite
 
-As KARIOS is a Python application, to run it you should have a dedicated conda environnement.
+As KARIOS is a Python application for which you need a dedicated conda environnement.
 
 - Python 3.12+
 - [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html). We recommend Miniconda.
@@ -78,8 +78,8 @@ KARIOS takes as inputs:
 Requirements:
 
 - Input images grids should be comparable. **The user should take care of data preparation**.  
-  That means geo coded images must have the same footprint, same geo transform information (same EPSG code) and same resolution.
-- Image pixel resolution should also be square (same X,Y) and unit meter.
+  That means geo coded images must have the same footprint, same geotransform information (same cartographic projection, i.e. EPSG code) and same resolution.
+- Image pixel resolution should also be square (same X, Y) and unit meter.
 
 :::{note}
 **This is also applicable** to DEM and mask files for compatibility requirements.
@@ -155,7 +155,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 
 #### Processing Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--conf` | FILE | Configuration file path. Default is the built-in configuration.<br>[default: <INSTALL_DIR>/karios/configuration/processing_configuration.json] |
 | `--resume` | Flag | Do not run KLT matcher, only accuracy analysis and report generation |
@@ -163,23 +163,23 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 
 #### Output Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--out` | PATH | Output results folder path [default: results] |
 | `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts.<br>(limited to 26 characters) |
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
-| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two band tiff based on KP with band 1 dx and band 2 dy |
+| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots.<br>Example: "COPERNICUS DEM resample to 10m" |
 
 #### Advanced Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts |
 
 #### Logging Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--debug`, `-d` | FLAG | Enable Debug mode |
 | `--no-log-file` | FLAG | Do not log in file (not compatible with `--log-file-path`) |
@@ -285,23 +285,23 @@ KARIOS generates several types of outputs:
 
 In order to have a lower memory usage during KLT process, it is possible to define a tile size to process for KLT.
 
-For example, a tile_size of 10000 for an image having a size of 20000x20000 pixels will result of 4 tiles to process.
+For example, a tile_size of 10000 for an image having a size of 20000 x 20000 pixels will result in 4 tiles to process.
 
-In this context, the KLT process will look in each tiles for `maxCorners`.
+In this context, the KLT process will look in each tile for `maxCorners`.
 
-While an image of 20000x20000 pixels results of 4 equals tiles, an image of 20000x15000 pixels also result of 4 tiles, but with different size, two of 10000x10000 pixels and two of 10000x5000 pixels.
+While an image of 20000 x 20000 pixels results in 4 equals tiles, an image of 20000 x 15000 pixels will also result in 4 tiles, but with different size, two of 10000 x 10000 pixels and two of 10000 x 5000 pixels.
 
-The consequence is that the density for matching point will not be the same each tiles, the bigger tiles will have a lower matching point than the smallest.
+The consequence is that the density for matching point will not be the same each tile, the bigger tiles will have a lower matching point density than the smallest.
 
-You may also consider that the image can content empty parts where KLT will not find any matching point. So tiles having a large empty parts will also results to a bigger matching point density.
+You should also consider that the image can contain empty parts where KLT will not find any matching point. So tiles having large empty parts will also results in a higher matching point density.
 
-In order to avoid density difference in the final result, you can define a `tile_size` largest than the image with an hight `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost same size.
+In order to avoid density differences in the final result, you can define a `tile_size` larger than the image with a high `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost same size.
 
-For example, for image of 20000x15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
+For example, for image of 20000 x 15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
 
 ## About shift by altitude plot
 
-This output use box plot to show statistics of KP on altitudes groups.
+This output uses box plot to show statistics of KP on altitudes groups.
 
 _The box extends from the first quartile (Q1) to the third quartile (Q3) of the data, with a line at the median. The whiskers extend from the box to the farthest data point lying within 1.5x the inter-quartile range (IQR) from the box. Flier points are those past the end of the whiskers. See https://en.wikipedia.org/wiki/Box_plot for reference._
 
@@ -360,7 +360,7 @@ KariosException: Monitored image geo info not compatible with reference image
 KariosException: Mask geo info not compatible with monitored image
 ```
 
-**Solution**: Ensure mask has same geometry as monitored image
+**Solution**: Ensure mask has the same geometry as monitored image
 
 ### Performance Optimization
 
@@ -406,4 +406,4 @@ karios process monitored.tif reference.tif --resume --out ./existing_results
 
 **Requirements**:
 - Previous KLT CSV results must exist in output directory
-- Same image pair and configuration
+- Same images pair and configuration
