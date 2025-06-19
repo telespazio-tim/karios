@@ -133,7 +133,7 @@ conda activate karios
 KARIOS takes as inputs:
 - **Monitored image** (mandatory): The image to analyze for shifts/changes
 - **Reference image** (mandatory): The stable reference image for comparison
-- **Mask file** (optional): Exclude pixels from matching (compatible with monitored image)
+- **Mask file** (optional): Exclude pixels from matching (co-registered the monitored image, having byte values, 0 are excluded while 1 are considered has valid for process)
 - **DEM file** (optional): Enable altitude-based analysis (compatible with reference image)
 
 Requirements:
@@ -145,7 +145,9 @@ Requirements:
 > **This is also applicable** to DEM and mask files for compatibility requirements.
 
 Recommendation:
-- **Avoid monitored and reference having float values between 0 and 1**
+
+- The user shall carefully check the dynamic range of the monitored and reference images, because KARIOS converts these input data into integers.  
+  For instance, providing float values between 0 and 1 will give very poor results. In that case, it is recommended to multiply the data by 100.
 - Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.
 
 ## CLI Usage
