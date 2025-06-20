@@ -91,14 +91,18 @@ def mask_callback(ctx: click.Context, param: click.Parameter, value: Path) -> Pa
         click.BadParameter: If not "-" and the file does not exists.
     """
 
+    if param.name != "mask_file":
+        raise RuntimeError("Function not used as expected")
+
     # Handle special case for skipped mask
-    if param.name == "mask_file":
+    if value:
         if value.exists():
             return value
         if value.name == "-":
             return None
 
         raise click.BadParameter("File '-' does not exist", ctx, param)
+    return value
 
 
 @click.group()
