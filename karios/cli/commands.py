@@ -73,6 +73,38 @@ click.rich_click.OPTION_GROUPS = {
 }
 
 
+def mask_callback(ctx: click.Context, param: click.Parameter, value: Path) -> Path | None:
+    """
+    Validate if mask value is - or exists.
+    It repace click.Path.exists=True as we need to handle spacial case of "-"
+    It raises an error with message similar to what click would print if the provided value does not exists.
+
+    Args:
+        ctx (click.Context): Click context object containing command state.
+        param (click.Parameter): Click parameter that triggered this callback.
+        value (Path): The specified mask path.
+
+    Returns:
+        Path|None: provided path if exists, None if "-".
+
+    Raises:
+        click.BadParameter: If not "-" and the file does not exists.
+    """
+
+    if param.name != "mask_file":
+        raise RuntimeError("Function not used as expected")
+
+    # Handle special case for skipped mask
+    if value:
+        if value.exists():
+            return value
+        if value.name == "-":
+            return None
+
+        raise click.BadParameter("File '-' does not exist", ctx, param)
+    return value
+
+
 @click.group()
 @click.version_option(version=__version__)
 def cli() -> None:
@@ -93,8 +125,9 @@ def cli() -> None:
 )
 @click.argument(
     "mask_file",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=Path),
     required=False,
+    callback=mask_callback,  # handle file exists in place of click for special case -
 )
 @click.argument(
     "dem_file",
@@ -226,9 +259,6 @@ def process(
     logger.info("Start KARIOS %s", __version__)
 
     try:
-        # Handle special case for skipped mask
-        if mask_file == "-":
-            mask_file = None
 
         # Load configuration from file
         logger.info("Load config from file %s", conf)

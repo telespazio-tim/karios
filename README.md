@@ -10,25 +10,25 @@ KLT-based Algorithm for Registration of Images from Observing Systems (KARIOS)
 
 ## Introduction
 
-In general, quality assessment processes are fundamental to appreciate how well data fit for Earth Observation application purposes. Those assessments dedicated to geometric accuracy are rarely opened to community. As consequence, it is always difficult to inter compare data based on the same process and it is always difficult to compare results based on harmonized mapping accuracy metrics.
+In general, quality assessment processes are fundamental to appreciate how well data is fit for Earth Observation application purposes. Those assessments dedicated to geometric accuracy are rarely open to community. As a consequence, it is difficult to inter compare data based on the same processes and to compare results based on harmonized mapping accuracy metrics.
 
-To overcome this situation, thanks to funding of ESA / EDAP [EDAP](https://earth.esa.int/eogateway/activities/edap) project, the KARIOS initiative has been promoted and a user tool is now available.
+To overcome this situation, thanks to funding of ESA / EDAP [EDAP](https://earth.esa.int/eogateway/activities/edap) project, the KARIOS initiative has been launched and a user tool is now available.
 
-The KARIOS tool has been designed to analyse geometric deformations within optical / radar images. For this purpose, the tool performs image matching and generate several key graphical presentations and compute accuracy statistics.
+The KARIOS tool has been designed to analyse geometric deformations within optical and radar images. For this purpose, the tool performs image matching and generate several key graphical representations and compute accuracy statistics.
 
 Image matching process does not follow traditional approach because it is based on feature point matching (corner). A [KLT](https://en.wikipedia.org/wiki/Kanade%E2%80%93Lucas%E2%80%93Tomasi_feature_tracker) implementation available in OpenCV library is used in KARIOS. Also, the Candidate point selection is done with GoodFeaturesToTrack function and matching is done with calcOpticalFlowPyrLK function.
 
-As show in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering) / post-processing (outlier filtering).
+As shown in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering) and post-processing (outlier filtering).
 
 ![functional representation](docs/images/algorithm.PNG)
 
-> As an optional and experimental feature, KARIOS have the capability to detect large shift between images. If a large shift is detected, the monitored image is shifted according to the offsets it found, and then apply the KLT matching.
+> As an optional and experimental feature, KARIOS has the capability to detect large shifts between images. If a large shift is detected, the monitored image is shifted according to the offsets found, and the KLT matching is applied
 >
 > To enable large shift detection, use `--enable-large-shift-detection` program argument.
 >
-> NOTICE that it could use lots of memory in case of large image such as Sentinel2 B04 (11GB)
+> Please note that it could use lot of memory in case of large images such as Sentinel2 10 m bands, e.g. 11GB for band B04.
 
-Furthermore, KARIOS analyses displacements between the two input image grids both in line and pixel direction outputing, providing user with the three following items:
+Furthermore, KARIOS analyses displacements between the two input image grids in both line (along-track) and pixel (across-track) directions, providing user with the three following items:
 
 ### Geometric Error overview
 
@@ -51,9 +51,9 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 
 > The Circular Error (CE) at the 90% level confidence graphic is used for horizontal accuracy in image products.  
 > This representation is relevant for image expressed within cartographic system grid.  
-> Because, with the CE representation, it is straightforward to evaluate mapping accuracy, considering reference data with known accuracy.
+> Because with the CE representation, it is straightforward to evaluate mapping accuracy, considering reference data with known accuracy.
 >
-> Rather, in case of images with no cartographic system grid, the CE graphic representation becomes less informative.  
+> In case of images with no cartographic system grid, the CE graphic representation becomes less informative.  
 > The CE graphic is still generated, and equally spaced sample data is assumed.  
 > This hypothesis is not obvious, when details on image grids are unknown.
 
@@ -61,7 +61,7 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 
 ### Prerequisites
 
-This tool is a Python application, to run it you should have a dedicated conda environnement.
+This tool is a Python application for which you need a dedicated conda environnement.
 
 - Python 3.12+
 - [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
@@ -133,19 +133,21 @@ conda activate karios
 KARIOS takes as inputs:
 - **Monitored image** (mandatory): The image to analyze for shifts/changes
 - **Reference image** (mandatory): The stable reference image for comparison
-- **Mask file** (optional): Exclude pixels from matching (compatible with monitored image)
+- **Mask file** (optional): Exclude pixels from matching (co-registered the monitored image, having byte values, 0 are excluded while 1 are considered has valid for process)
 - **DEM file** (optional): Enable altitude-based analysis (compatible with reference image)
 
 Requirements:
 
 - Input images grids should be comparable. **The user should take care of data preparation**.  
-  That means geo coded images must have the same footprint, same geo transform information (same EPSG code) and same resolution.
-- Image pixel resolution should also be square (same X,Y) and unit meter.
+  That means geo coded images must have the same footprint, same geotransform information (same cartographic projection, i.e. EPSG code) and same resolution.
+- Image pixel resolution should also be square (same X, Y) and unit meter.
 
 > **This is also applicable** to DEM and mask files for compatibility requirements.
 
 Recommendation:
-- **Avoid monitored and reference having float values between 0 and 1**
+
+- The user shall carefully check the dynamic range of the monitored and reference images, because KARIOS converts these input data into integers.  
+  For instance, providing float values between 0 and 1 will give very poor results. In that case, it is recommended to multiply the data by 100.
 - Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.
 
 ## CLI Usage
@@ -168,28 +170,33 @@ karios process MONITORED_IMAGE REFERENCE_IMAGE [MASK_FILE] [DEM_FILE] [OPTIONS]
 ### Examples
 
 #### Basic Processing
+
 ```bash
 karios process monitored.tif reference.tif
 ```
 
 #### With Mask
+
 ```bash
 karios process monitored.tif reference.tif mask.tif
 ```
 
 #### With Mask and DEM
+
 ```bash
 karios process monitored.tif reference.tif mask.tif dem.tif \
   --dem-description "SRTM 30m resample to 10m"
 ```
 
 #### DEM Only (No Mask)
+
 ```bash
 karios process monitored.tif reference.tif - dem.tif \
   --dem-description "Copernicus DEM 30m"
 ```
 
 #### Full Workflow with Options
+
 ```bash
 karios process monitored.tif reference.tif mask.tif dem.tif \
   --out ./results \
@@ -201,6 +208,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 ```
 
 #### Resume Previous Analysis
+
 ```bash
 karios process monitored.tif reference.tif mask.tif dem.tif \
   --resume \
@@ -208,7 +216,6 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 ```
 
 ### CLI Options
-
 
 #### Processing Options
 
@@ -225,18 +232,18 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 | `--out` | PATH | Output results folder path [default: results] |
 | `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts (limited to 26 characters) |
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
-| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two band tiff based on KP with band 1 dx and band 2 dy |
-| `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resample to 10m") |
+| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
+| `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resampled to 10m") |
 
 #### Advanced Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts |
 
 #### Logging Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--debug`, `-d` | FLAG | Enable Debug mode |
 | `--no-log-file` | FLAG | Do not log in file (not compatible with `--log-file-path`) |
@@ -252,7 +259,7 @@ KARIOS can be used as a Python library in your own applications by providing an 
 
 Activate **your project conda environment**, then install KARIOS in this environment.
 
-From the karios directory run :
+From the karios directory, run :
 
 ```bash
 pip install .
@@ -342,7 +349,7 @@ for monitored, reference, mask, dem in image_pairs:
 
 ## Configuration
 
-KARIOS uses two types of configuration:
+KARIOS uses two types of configurations:
 
 ### Processing Configuration
 
@@ -432,10 +439,12 @@ Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots con
 KARIOS generates several types of outputs:
 
 #### Statistical Files
+
 - **CSV file**: Key points with dx/dy deviations and confidence scores
 - **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
 
 #### Visualizations
+
 - **01_overview.png**: Error distribution overview with image thumbnails
 - **02_dx.png**: X-direction displacement analysis by row/column
 - **03_dy.png**: Y-direction displacement analysis by row/column  
@@ -443,11 +452,13 @@ KARIOS generates several types of outputs:
 - **dem_*.png**: DEM-based altitude analysis (if DEM provided)
 
 #### Products (Optional)
+
 - **kp_mask.tif**: Binary mask of key point locations (if `--generate-key-points-mask`)
 - **kp_delta.tif**: Two-band raster with dx/dy displacement values (if `--generate-intermediate-product`)
 - **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced)
 
 #### Configuration
+
 - Copy of the processing configuration used
 
 ## KLT param leverage
@@ -456,23 +467,23 @@ KARIOS generates several types of outputs:
 
 In order to have a lower memory usage during KLT process, it is possible to define a tile size to process for KLT.
 
-For example, a tile_size of 10000 for an image having a size of 20000x20000 pixels will result of 4 tiles to process.
+For example, a tile_size of 10000 for an image having a size of 20000 x 20000 pixels will result in 4 tiles to process.
 
-In this context, the KLT process will look in each tiles for `maxCorners`.
+In this context, the KLT process will look in each tile for `maxCorners`.
 
-While an image of 20000x20000 pixels results of 4 equals tiles, an image of 20000x15000 pixels also result of 4 tiles, but with different size, two of 10000x10000 pixels and two of 10000x5000 pixels.
+While an image of 20000 x 20000 pixels results in 4 equals tiles, an image of 20000 x 15000 pixels will also result in 4 tiles, but with different size, two of 10000 x 10000 pixels and two of 10000 x 5000 pixels.
 
-The consequence is that the density for matching point will not be the same each tiles, the bigger tiles will have a lower matching point than the smallest.
+The consequence is that the density for matching point will not be the same each tile, the bigger tiles will have a lower matching point density than the smallest.
 
-You may also consider that the image can content empty parts where KLT will not find any matching point. So tiles having a large empty parts will also results to a bigger matching point density.
+You should also consider that the image can contain empty parts where KLT will not find any matching point. So tiles having large empty parts will also results in a higher matching point density.
 
-In order to avoid density difference in the final result, you can define a `tile_size` largest than the image with an hight `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost same size.
+In order to avoid density differences in the final result, you can define a `tile_size` larger than the image with a high `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost same size.
 
-For example, for image of 20000x15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
+For example, for image of 20000 x 15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
 
 ## About shift by altitude plot
 
-This output use box plot to show statistics of KP on altitudes groups.
+This output uses box plot to show statistics of KP on altitudes groups.
 
 _The box extends from the first quartile (Q1) to the third quartile (Q3) of the data, with a line at the median. The whiskers extend from the box to the farthest data point lying within 1.5x the inter-quartile range (IQR) from the box. Flier points are those past the end of the whiskers. See https://en.wikipedia.org/wiki/Box_plot for reference._
 
@@ -492,18 +503,21 @@ flier             <----------->            fliers
 Understanding how input files relate to each other:
 
 ### Image Compatibility
+
 - **Monitored** and **Reference** images must be compatible:
   - Same footprint and resolution
   - Same coordinate system (EPSG)
   - Same pixel grid alignment
 
 ### Mask Usage
+
 - **Mask** file must be compatible with the **monitored image**
 - Used to exclude pixels from KLT feature detection
 - Typical use cases: exclude water bodies, clouds, or invalid data areas
 - Pixel value 0 = exclude from matching, non-zero = include
 
-### DEM Usage  
+### DEM Usage
+
 - **DEM** file must be compatible with the **reference image**
 - Used to extract altitude values at key point locations
 - Enables analysis of geometric errors vs terrain elevation
@@ -531,7 +545,7 @@ KariosException: Monitored image geo info not compatible with reference image
 KariosException: Mask geo info not compatible with monitored image
 ```
 
-**Solution**: Ensure mask has same geometry as monitored image
+**Solution**: Ensure mask has the same geometry as monitored image
 
 ### Performance Optimization
 
@@ -575,7 +589,7 @@ karios process monitored.tif reference.tif --resume --out ./existing_results
 
 **Requirements**:
 - Previous KLT CSV results must exist in output directory
-- Same image pair and configuration
+- Same images pair and configuration
 
 ## License
 

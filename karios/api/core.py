@@ -388,6 +388,23 @@ class KariosAPI:
                 output_dir_path,
             )
 
+    def _check_quality(self, monitored_image: GdalRasterImage, reference_image: GdalRasterImage):
+        """This function verify input image quality by:
+        - verifying dynamic range at 2 and 98 percentile
+
+        Args:
+            monitored_image (GdalRasterImage): monitored image to check
+            reference_image (GdalRasterImage): reference image to check
+        """
+
+        min_max = np.nanpercentile(monitored_image.array, [2, 98])
+        if min_max[1] - min_max[0] <= 10:
+            logger.warning("Low dynamic range detected for monitored, you could get poor results")
+
+        min_max = np.nanpercentile(reference_image.array, [2, 98])
+        if min_max[1] - min_max[0] <= 10:
+            logger.warning("Low dynamic range detected for reference, you could get poor results")
+
     def _load_images(
         self, ref_file_path: Path, mon_file_path: Path
     ) -> tuple[GdalRasterImage, GdalRasterImage]:
@@ -406,6 +423,8 @@ class KariosAPI:
         monitored_image = GdalRasterImage(mon_file_path)
         reference_image = GdalRasterImage(ref_file_path)
 
+        self._check_quality(monitored_image, reference_image)
+
         if not monitored_image.is_compatible_with(reference_image):
             raise KariosException(
                 f"""Monitored image geo info not compatible with reference image:
@@ -413,6 +432,7 @@ class KariosAPI:
             * Reference image : {reference_image.image_information}
             """
             )
+
         return reference_image, monitored_image
 
     def _load_mask(
