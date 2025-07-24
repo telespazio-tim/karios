@@ -128,11 +128,11 @@ class KariosAPI:
 
         Args:
             processing_configuration: Configuration for KLT matching, accuracy analysis,
-                                    and plotting parameters
+                and plotting parameters
             runtime_configuration: Runtime configuration specifying output settings,
-                                optional mask/DEM files, and processing flags.
-                                Does not include input image paths - these are
-                                provided to processing methods.
+                optional mask/DEM files, and processing flags.
+                Does not include input image paths - these are
+                provided to processing methods.
         """
         self._processing_configuration = processing_configuration
         self._runtime_configuration = runtime_configuration
@@ -160,7 +160,7 @@ class KariosAPI:
             monitored_image_path: Path to the monitored image
             reference_image_path: Path to the reference image
             mask_file_path: Optional path to mask file for excluding pixels from matching.
-                        Mask should be compatible with the monitored image.
+                Mask should be compatible with the monitored image.
             resume: Whether to resume from previous analysis
 
         Returns:
@@ -277,7 +277,7 @@ class KariosAPI:
             match_result: Result from match_images
             accuracy_analysis: Result from analyze_accuracy
             dem_file_path: Optional path to DEM file for altitude-based analysis.
-                        DEM should be compatible with the reference image.
+                DEM should be compatible with the reference image.
 
         Returns:
             ReportPaths: Object containing paths to generated reports
