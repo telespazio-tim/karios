@@ -85,17 +85,23 @@ class ProductGenerator:
         - mask if `gen_kp_mask` (-kpm)
         - KP Raster if `gen_delta_raster (-gip)`
         - KP geojson if reference image have projection
+
+        Returns:
+            list(str): list of generated product paths
         """
+        product_paths = []
         if self._config.gen_kp_mask:
-            self._create_mask()
+            product_paths.append(str(self._create_mask()))
 
         if self._config.gen_delta_raster:
-            self._create_intermediate_raster()
+            product_paths.append(str(self._create_intermediate_raster()))
 
         if not self._reference_image.get_epsg():
             logger.warning("Unable to generate KP GeoJSON, reference image not geo referenced")
         else:
-            self._create_kp_geojson()
+            product_paths.append(str(self._create_kp_geojson()))
+
+        return product_paths
 
     def _create_intermediate_raster(self):
         logger.info("Create KP raster product")
@@ -117,13 +123,17 @@ class ProductGenerator:
         dx_band_array[y_index, x_index] = self._points["dx"]
         dy_band_array[y_index, x_index] = self._points["dy"]
 
+        output_file_path = os.path.join(self._config.output_directory, "kp_delta.tif")
+
         self._reference_image.to_raster(
-            os.path.join(self._config.output_directory, "kp_delta.tif"),
+            output_file_path,
             [dx_band_array, dy_band_array],
             gdal.GDT_Float32,
         )
 
         logger.info("KP raster product created")
+
+        return output_file_path
 
     def _create_mask(self):
         logger.info("Create KP product mask")
@@ -134,10 +144,10 @@ class ProductGenerator:
             [self._reference_image.y_size, self._reference_image.x_size], dtype=np.uint8
         )
         final_mask[y_index, x_index] = 1
-        self._reference_image.to_raster(
-            os.path.join(self._config.output_directory, "kp_mask.tif"), final_mask
-        )
+        output_file_path = os.path.join(self._config.output_directory, "kp_mask.tif")
+        self._reference_image.to_raster(output_file_path, final_mask)
         logger.info("KP product mask created")
+        return output_file_path
 
     def _create_kp_geojson(self):
         logger.info("Create KP vector product")
@@ -163,3 +173,5 @@ class ProductGenerator:
             out.write(json.dumps(feature_collection, indent=3))
 
         logger.info("KP vector product created")
+
+        return output_file

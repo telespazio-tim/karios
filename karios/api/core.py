@@ -291,7 +291,7 @@ class KariosAPI:
             match_result.points,
             match_result.reference_image,
         )
-        product_generator.generate_products()
+        product_paths = product_generator.generate_products()
 
         # Generate standard plots...
         overview_path = self._generate_overview_plot(match_result, output_dir)
@@ -304,15 +304,6 @@ class KariosAPI:
 
         # make sure all are closed
         plt.close("all")
-
-        # List product paths
-        product_paths = []
-        if self._runtime_configuration.gen_kp_mask:
-            product_paths.append(str(output_dir / "kp_mask.tif"))
-        if self._runtime_configuration.gen_delta_raster:
-            product_paths.append(str(output_dir / "kp_delta.tif"))
-        if match_result.reference_image.get_epsg():
-            product_paths.append(str(output_dir / "kp_delta.json"))
 
         return ReportPaths(
             overview_plot=str(overview_path),
