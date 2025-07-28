@@ -58,6 +58,7 @@ click.rich_click.OPTION_GROUPS = {
                 "--title-prefix",
                 "--generate-key-points-mask",
                 "--generate-intermediate-product",
+                "--generate-kp-chips",
                 "--dem-description",
             ],
         },
@@ -182,6 +183,15 @@ def cli() -> None:
     help="Generate a two band tiff based on KP with band 1 dx and band 2 dy",
 )
 @click.option(
+    "--generate-kp-chips",
+    "-gkc",
+    is_flag=True,
+    help="""
+    Generate chip images centered on KP of monitored and reference products.
+    Only KP having a KTL score greater than accuracy analysis confidence_threshold config parameter are concerned.
+    """,
+)
+@click.option(
     "--dem-description",
     type=str,
     default=None,
@@ -213,6 +223,7 @@ def process(
     input_pixel_size: Optional[float],
     generate_key_points_mask: bool,
     generate_intermediate_product: bool,
+    generate_kp_chips: bool,
     title_prefix: Optional[str],
     dem_description: Optional[str],
     enable_large_shift_detection: bool,
@@ -275,6 +286,7 @@ def process(
             title_prefix=title_prefix,
             gen_kp_mask=generate_key_points_mask,
             gen_delta_raster=generate_intermediate_product,
+            generate_kp_chips=generate_kp_chips,
             dem_description=dem_description,
             enable_large_shift_detection=enable_large_shift_detection,
         )

@@ -40,6 +40,7 @@ from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
+from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
@@ -314,6 +315,16 @@ class KariosAPI:
             products=product_paths,
         )
 
+    def _generate_chips(self, match_result: MatchResult):
+        chips_service = ChipService()
+        chips_service.generate_chips(
+            match_result.monitored_image,
+            match_result.reference_image,
+            match_result.points,
+            self._processing_configuration.accuracy_analysis_configuration.confidence_threshold,
+            self._runtime_configuration.output_directory,
+        )
+
     def process(
         self,
         monitored_image_path: Path,
@@ -327,7 +338,7 @@ class KariosAPI:
         This method performs the full KARIOS workflow:
         1. Image matching using KLT feature tracking
         2. Accuracy analysis with statistical metrics
-        3. Report and visualization generation
+        3. Report, visualization generation and chips
 
         The processing configuration and output settings are defined by the
         RuntimeConfiguration provided during API initialization, while the specific
@@ -366,6 +377,13 @@ class KariosAPI:
         accuracy = self.analyze_accuracy(match_result)
 
         reports = self.generate_reports(match_result, accuracy, dem_file_path)
+
+        if (
+            self._runtime_configuration.generate_kp_chips
+            # if != large shift have been used and applyed
+            and match_result.monitored_image.filepath == monitored_image_path
+        ):
+            self._generate_chips(match_result)
 
         return match_result, accuracy, reports
 

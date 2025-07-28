@@ -48,6 +48,7 @@ class RuntimeConfiguration:
         title_prefix: Optional prefix for chart titles (max 26 characters)
         gen_kp_mask: Whether to generate a TIFF mask based on key points
         gen_delta_raster: Whether to generate intermediate products (dx/dy raster)
+        generate_kp_chips: Whether to generate KP chip images
         dem_description: Optional DEM source description for plots
         enable_large_shift_detection: Whether to detect and correct large pixel shifts
     """
@@ -57,5 +58,6 @@ class RuntimeConfiguration:
     title_prefix: Optional[str]
     gen_kp_mask: bool
     gen_delta_raster: bool
+    generate_kp_chips: bool
     dem_description: Optional[str]
     enable_large_shift_detection: bool
