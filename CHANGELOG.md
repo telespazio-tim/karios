@@ -1,6 +1,13 @@
 # KARIOS CHANGELOG
 
-## NEXT VERSION [FILL ME]
+## 2.1.0 [TODO]
+
+### New features
+
+- Add generation of chip images of a selection of relevant KP using options `--generate-kp-chips`
+- Add ZNCC score (`zncc_score`) for relevant KP in csv and JSON output.
+
+## 2.0.0 [20240620]
 
 ### breaking changes
 

@@ -40,6 +40,7 @@ from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
+from karios.matcher.zncc_service import ZNCCService
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
 from karios.report.overview_plot import OverviewPlot
@@ -145,6 +146,12 @@ class KariosAPI:
             self._runtime_configuration.output_directory,
         )
 
+        # Initialize ZNCC Service
+        self._zncc_service = ZNCCService()
+
+        #
+        self._large_shift_applied = False
+
         # Prepare output dir
         self._check_output_dir()
 
@@ -184,6 +191,9 @@ class KariosAPI:
             if shifted_image:
                 monitored_image.clear_cache()  # force clean
                 monitored_image = shifted_image.image
+
+                self._large_shift_applied = True
+
                 logger.info("Switch monitored image to %s", monitored_image.filepath)
                 points = self._get_match_points(resume, monitored_image, reference_image, mask)
 
@@ -378,11 +388,8 @@ class KariosAPI:
 
         reports = self.generate_reports(match_result, accuracy, dem_file_path)
 
-        if (
-            self._runtime_configuration.generate_kp_chips
-            # if != large shift have been used and applyed
-            and match_result.monitored_image.filepath == monitored_image_path
-        ):
+        # do not generate chips if large shift applied
+        if self._runtime_configuration.generate_kp_chips and not self._large_shift_applied:
             self._generate_chips(match_result)
 
         return match_result, accuracy, reports
@@ -609,14 +616,26 @@ class KariosAPI:
             DataFrame containing match points
         """
         dataframe_gen = self._klt.match(monitored_image, reference_image, mask)
-        return self._handle_klt_results(dataframe_gen, csv_file)
+        return self._handle_klt_results(dataframe_gen, csv_file, monitored_image, reference_image)
 
-    def _handle_klt_results(self, results: pd.DataFrame, csv_file: Path) -> pd.DataFrame:
-        """Process KLT results and save to CSV.
+    def _handle_klt_results(
+        self,
+        results: pd.DataFrame,
+        csv_file: Path,
+        monitored_image: GdalRasterImage,
+        reference_image: GdalRasterImage,
+    ) -> pd.DataFrame:
+        """Process KLT results by:
+        - computing radial error
+        - computing angle error
+        - computing zncc for relevant KP
+        - save to CSV.
 
         Args:
             results: Generator producing DataFrames with KLT results
             csv_file: Path to save CSV results
+            monitored_image: Monitored image
+            reference_image: Reference image
 
         Returns:
             Combined DataFrame with all results
@@ -625,6 +644,24 @@ class KariosAPI:
         for dataframe in results:
             dataframe["radial error"] = np.sqrt(dataframe["dx"] ** 2 + dataframe["dy"] ** 2)
             dataframe["angle"] = np.degrees(np.arctan2(dataframe["dy"], dataframe["dx"]))
+
+            # compute and add zncc_score
+            if not self._large_shift_applied:
+
+                threshold = (
+                    self._processing_configuration.accuracy_analysis_configuration.confidence_threshold
+                )
+
+                logger.warning("Compute ZNCC for KP with KLT score > %.2f", threshold)
+
+                zncc_candidates = dataframe[dataframe["score"] >= threshold]
+
+                dataframe["zncc_score"] = self._zncc_service.compute_zncc(
+                    zncc_candidates, monitored_image, reference_image
+                )
+
+            else:
+                logger.warning("Large shift applied, skip ZNCC")
 
             if not csv_file.exists():
                 logger.info("Write to csv %s", str(csv_file))

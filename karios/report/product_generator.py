@@ -61,7 +61,10 @@ def _to_feature(series: Series, geo_transform: tuple, properties: list[str]) -> 
         "geometry": {"type": "Point", "coordinates": [x, y]},
         # 1* allow convert np.float32 to float that
         # allow json serialization (serialize np.float32 fail)
-        "properties": {prop: 1 * series[prop] for prop in properties},
+        # nan set to none for good json serialisation
+        "properties": {
+            prop: None if np.isnan(series[prop]) else 1 * series[prop] for prop in properties
+        },
     }
 
 
@@ -96,6 +99,7 @@ class ProductGenerator:
         if self._config.gen_delta_raster:
             product_paths.append(str(self._create_intermediate_raster()))
 
+        # always generate JSON if inputs products is geo referenced
         if not self._reference_image.get_epsg():
             logger.warning("Unable to generate KP GeoJSON, reference image not geo referenced")
         else:
@@ -151,12 +155,18 @@ class ProductGenerator:
 
     def _create_kp_geojson(self):
         logger.info("Create KP vector product")
+
+        # configure properties to export in features
+        columns_to_export = ["dx", "dy", "score", "radial error", "angle"]
+        if "zncc_score" in self._points.columns:
+            columns_to_export.append("zncc_score")
+
         # creates feature for each dataframe rows
         feature_as_series = self._points.apply(
             _to_feature,
             axis=1,
             geo_transform=self._reference_image.geo_transform,
-            properties=["dx", "dy", "score", "radial error", "angle"],
+            properties=columns_to_export,
         )
 
         feature_collection = {

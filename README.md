@@ -64,7 +64,7 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 This tool is a Python application for which you need a dedicated conda environnement.
 
 - Python 3.12+
-- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html). **We recommend Miniconda**.
 - **libGL**: you need libGL for linux, depending on your distribution it can be libgl1-mesa-glx, mesa-libGL or another. Install it if you don't have it yet.
 
 Get KARIOS:
@@ -219,7 +219,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 
 #### Processing Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--conf` | FILE | Configuration file path. Default is the built-in configuration. [default: PWD/karios/configuration/processing_configuration.json] |
 | `--resume` | Flag | Do not run KLT matcher, only accuracy analysis and report generation |
@@ -227,7 +227,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 
 #### Output Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--out` | PATH | Output results folder path [default: results] |
 | `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts (limited to 26 characters) |
@@ -404,7 +404,6 @@ Refer to section [KLT param leverage](#klt-param-leverage) for details
 #### `processing_configuration.accuracy_analysis`
 - `confidence_threshold`: Minimum confidence score for statistical analysis. If `None`, not applied.
 
-
 Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots control figure sizes, color maps, and axis limits.
 
 #### `plot_configuration.overview` (overview plot parameters)
@@ -460,6 +459,82 @@ KARIOS generates several types of outputs:
 #### Configuration
 
 - Copy of the processing configuration used
+
+## Output File Formats
+
+### CSV Output
+
+KARIOS generates a CSV file containing all key points detected by the KLT matcher with their displacement measurements and quality metrics. The CSV file is saved as `KLT_matcher_{monitored_filename}_{reference_filename}.csv` in the output directory.
+
+#### CSV Columns
+
+| Column | Description | Unit | Notes |
+|--------|-------------|------|-------|
+| `x0` | X coordinate of key point in reference image | pixels | Column position (0-based) |
+| `y0` | Y coordinate of key point in reference image | pixels | Row position (0-based) |
+| `dx` | Displacement in X direction (column) | pixels | Positive = eastward shift |
+| `dy` | Displacement in Y direction (row) | pixels | Positive = southward shift |
+| `score` | KLT matching confidence score | 0.0-1.0 | Higher values indicate better matches |
+| `radial error` | Euclidean distance of displacement | pixels | √(dx² + dy²) |
+| `angle` | Direction of displacement | degrees | Measured from east, counter-clockwise |
+| `zncc_score` | Zero-mean Normalized Cross-Correlation score | -1.0 to 1.0 | Optional: only if large shift detection is disabled |
+
+**Notes:**
+- The CSV uses semicolon (`;`) as separator
+- `zncc_score` is only computed for a selection of key points with KLT score above the confidence threshold
+- `zncc_score` provides additional matching quality assessment using normalized cross-correlation
+- All coordinates are in image pixel space (not geographic coordinates)
+
+### GeoJSON Output
+
+When input images are georeferenced, KARIOS generates a GeoJSON file (`kp_delta.json`) containing key points as geographic features with displacement vectors and quality metrics.
+
+#### GeoJSON Structure
+
+```json
+{
+  "type": "FeatureCollection",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:EPSG::{EPSG_CODE}"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [x_geographic, y_geographic]
+      },
+      "properties": {
+        "dx": displacement_x_pixels,
+        "dy": displacement_y_pixels,
+        "score": klt_confidence_score,
+        "radial error": euclidean_displacement,
+        "angle": displacement_angle_degrees,
+        "zncc_score": cross_correlation_score
+      }
+    }
+  ]
+}
+```
+
+#### Feature Properties
+
+| Property | Description | Unit | Range |
+|----------|-------------|------|-------|
+| `dx` | X displacement in pixels | pixels | Real number |
+| `dy` | Y displacement in pixels | pixels | Real number |
+| `score` | KLT matching confidence | 0.0-1.0 | Higher = better match |
+| `radial error` | Total displacement magnitude | pixels | ≥ 0 |
+| `angle` | Displacement direction | degrees | -180 to 180 |
+| `zncc_score` | Cross-correlation score | -1.0 to 1.0 | Optional, can be `null` |
+
+**Coordinate System:**
+- Point coordinates are in the same coordinate reference system as the input images
+- Coordinates are transformed from pixel space to geographic space using the image's geotransform
+- The CRS is specified in the `crs` object using the EPSG code from the reference image
 
 ## KLT param leverage
 

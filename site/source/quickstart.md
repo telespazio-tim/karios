@@ -2,12 +2,12 @@
 
 ## Installation
 
-### Prerequisite
+### Prerequisites
 
-As KARIOS is a Python application for which you need a dedicated conda environnement.
+KARIOS is a Python application for which you need a dedicated conda environnement.
 
 - Python 3.12+
-- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html). We recommend Miniconda.
+- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html). **We recommend Miniconda**.
 - **libGL**: you need libGL for linux, depending on your distribution it can be libgl1-mesa-glx, mesa-libGL or another. Install it if you don't have it yet.
 
 Get KARIOS:
@@ -113,28 +113,33 @@ karios process MONITORED_IMAGE REFERENCE_IMAGE [MASK_FILE] [DEM_FILE] [OPTIONS]
 ### Examples
 
 #### Basic Processing
+
 ```bash
 karios process monitored.tif reference.tif
 ```
 
 #### With Mask
+
 ```bash
 karios process monitored.tif reference.tif mask.tif
 ```
 
 #### With Mask and DEM
+
 ```bash
 karios process monitored.tif reference.tif mask.tif dem.tif \
   --dem-description "SRTM 30m resample to 10m"
 ```
 
 #### DEM Only (No Mask)
+
 ```bash
 karios process monitored.tif reference.tif - dem.tif \
   --dem-description "Copernicus DEM 30m"
 ```
 
 #### Full Workflow with Options
+
 ```bash
 karios process monitored.tif reference.tif mask.tif dem.tif \
   --out ./results \
@@ -146,6 +151,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 ```
 
 #### Resume Previous Analysis
+
 ```bash
 karios process monitored.tif reference.tif mask.tif dem.tif \
   --resume \
@@ -153,7 +159,6 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 ```
 
 ### CLI Options
-
 
 #### Processing Options
 
@@ -263,10 +268,12 @@ Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots con
 KARIOS generates several types of outputs:
 
 #### Statistical Files
+
 - **CSV file**: Key points with dx/dy deviations and confidence scores
 - **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
 
 #### Visualizations
+
 - **01_overview.png**: Error distribution overview with image thumbnails
 - **02_dx.png**: X-direction displacement analysis by row/column
 - **03_dy.png**: Y-direction displacement analysis by row/column  
@@ -274,12 +281,90 @@ KARIOS generates several types of outputs:
 - **dem_*.png**: DEM-based altitude analysis (if DEM provided)
 
 #### Products (Optional)
+
 - **kp_mask.tif**: Binary mask of key point locations (if `--generate-key-points-mask`)
 - **kp_delta.tif**: Two-band raster with dx/dy displacement values (if `--generate-intermediate-product`)
 - **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced)
 
 #### Configuration
+
 - Copy of the processing configuration used
+
+## Output File Formats
+
+### CSV Output
+
+KARIOS generates a CSV file containing all key points detected by the KLT matcher with their displacement measurements and quality metrics. The CSV file is saved as `KLT_matcher_{monitored_filename}_{reference_filename}.csv` in the output directory.
+
+#### CSV Columns
+
+| Column | Description | Unit | Notes |
+|--------|-------------|------|-------|
+| `x0` | X coordinate of key point in reference image | pixels | Column position (0-based) |
+| `y0` | Y coordinate of key point in reference image | pixels | Row position (0-based) |
+| `dx` | Displacement in X direction (column) | pixels | Positive = eastward shift |
+| `dy` | Displacement in Y direction (row) | pixels | Positive = southward shift |
+| `score` | KLT matching confidence score | 0.0-1.0 | Higher values indicate better matches |
+| `radial error` | Euclidean distance of displacement | pixels | √(dx² + dy²) |
+| `angle` | Direction of displacement | degrees | Measured from east, counter-clockwise |
+| `zncc_score` | Zero-mean Normalized Cross-Correlation score | -1.0 to 1.0 | Optional: only if large shift detection is disabled |
+
+**Notes:**
+- The CSV uses semicolon (`;`) as separator
+- `zncc_score` is only computed for a selection of key points with KLT score above the confidence threshold
+- `zncc_score` provides additional matching quality assessment using normalized cross-correlation
+- All coordinates are in image pixel space (not geographic coordinates)
+
+### GeoJSON Output
+
+When input images are georeferenced, KARIOS generates a GeoJSON file (`kp_delta.json`) containing key points as geographic features with displacement vectors and quality metrics.
+
+#### GeoJSON Structure
+
+```json
+{
+  "type": "FeatureCollection",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:EPSG::{EPSG_CODE}"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [x_geographic, y_geographic]
+      },
+      "properties": {
+        "dx": displacement_x_pixels,
+        "dy": displacement_y_pixels,
+        "score": klt_confidence_score,
+        "radial error": euclidean_displacement,
+        "angle": displacement_angle_degrees,
+        "zncc_score": cross_correlation_score
+      }
+    }
+  ]
+}
+```
+
+#### Feature Properties
+
+| Property | Description | Unit | Range |
+|----------|-------------|------|-------|
+| `dx` | X displacement in pixels | pixels | Real number |
+| `dy` | Y displacement in pixels | pixels | Real number |
+| `score` | KLT matching confidence | 0.0-1.0 | Higher = better match |
+| `radial error` | Total displacement magnitude | pixels | ≥ 0 |
+| `angle` | Displacement direction | degrees | -180 to 180 |
+| `zncc_score` | Cross-correlation score | -1.0 to 1.0 | Optional, can be `null` |
+
+**Coordinate System:**
+- Point coordinates are in the same coordinate reference system as the input images
+- Coordinates are transformed from pixel space to geographic space using the image's geotransform
+- The CRS is specified in the `crs` object using the EPSG code from the reference image
 
 ## KLT param leverage
 
@@ -323,18 +408,21 @@ flier             <----------->            fliers
 Understanding how input files relate to each other:
 
 ### Image Compatibility
+
 - **Monitored** and **Reference** images must be compatible:
   - Same footprint and resolution
   - Same coordinate system (EPSG)
   - Same pixel grid alignment
 
 ### Mask Usage
+
 - **Mask** file must be compatible with the **monitored image**
 - Used to exclude pixels from KLT feature detection
 - Typical use cases: exclude water bodies, clouds, or invalid data areas
 - Pixel value 0 = exclude from matching, non-zero = include
 
-### DEM Usage  
+### DEM Usage
+
 - **DEM** file must be compatible with the **reference image**
 - Used to extract altitude values at key point locations
 - Enables analysis of geometric errors vs terrain elevation
