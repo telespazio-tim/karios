@@ -233,6 +233,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 | `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts (limited to 26 characters) |
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
 | `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
+| `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resampled to 10m") |
 
 #### Advanced Options
@@ -286,7 +287,8 @@ runtime_config = RuntimeConfiguration(
     gen_kp_mask=True,
     gen_delta_raster=True,
     pixel_size=10.0,  # meters
-    enable_large_shift_detection=False
+    enable_large_shift_detection=False,
+    generate_kp_chips=True,
 )
 
 # Initialize API
@@ -372,6 +374,7 @@ runtime_config = RuntimeConfiguration(
     title_prefix="MyAnalysis",    # Optional chart title prefix
     gen_kp_mask=True,             # Generate key point mask
     gen_delta_raster=True,        # Generate displacement raster
+    generate_kp_chips=True,      # Enable chip generation
     dem_description="SRTM 30m",   # Optional DEM description for plots
     enable_large_shift_detection=False
 )
@@ -439,7 +442,7 @@ KARIOS generates several types of outputs:
 
 #### Statistical Files
 
-- **CSV file**: Key points with dx/dy deviations and confidence scores
+- **CSV file**: Key points with dx/dy deviations and confidence scores (see [CSV Output section](#csv-output))
 - **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
 
 #### Visualizations
@@ -454,7 +457,8 @@ KARIOS generates several types of outputs:
 
 - **kp_mask.tif**: Binary mask of key point locations (if `--generate-key-points-mask`)
 - **kp_delta.tif**: Two-band raster with dx/dy displacement values (if `--generate-intermediate-product`)
-- **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced)
+- **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced, see [GeoJSON Output section](#geojson-output))
+- **chips/** directory: Directory with chip images of KP (see [Chip Images section](#chip-images-optional))
 
 #### Configuration
 
@@ -535,6 +539,54 @@ When input images are georeferenced, KARIOS generates a GeoJSON file (`kp_delta.
 - Point coordinates are in the same coordinate reference system as the input images
 - Coordinates are transformed from pixel space to geographic space using the image's geotransform
 - The CRS is specified in the `crs` object using the EPSG code from the reference image
+
+## Chip Images (Optional)
+
+When enabled with `--generate-kp-chips`, KARIOS generates small image patches (chips) centered on key points for visual inspection and quality assessment.
+
+```bash
+karios process monitored.tif reference.tif --generate-kp-chips
+```
+
+### Chip Specifications
+
+- **Size**: 57×57 pixels per chip
+- **Selection**: Up to 125 chips using center + quarter strategy from a 5×5 grid overlay
+- **Quality threshold**: Only key points with KLT score ≥ confidence threshold are considered
+- **Pairing**: Each chip location generates two files (monitored and reference)
+
+### Output Structure
+
+```
+results/
+└── chips/
+    ├── {monitored_filename}/
+    │   ├── MON_1234_5678.TIFF
+    │   ├── MON_2345_6789.TIFF
+    │   └── ...
+    ├── {reference_filename}/
+    │   ├── REF_1234_5678.TIFF
+    │   ├── REF_2345_6789.TIFF
+    │   └── ...
+    ├── chips.csv
+    ├── monitored_chips.vrt
+    └── reference_chips.vrt
+```
+
+### Generated Files
+
+| File | Description |
+|------|-------------|
+| `MON_{x}_{y}.TIFF` | Chip from monitored image at reference coordinates (x,y) |
+| `REF_{x}_{y}.TIFF` | Chip from reference image at coordinates (x,y) |
+| `chips.csv` | Metadata of selected key points used for chip generation |
+| `*_chips.vrt` | Virtual raster mosaics for easy visualization in GIS software |
+
+**Notes:**
+- Chips near image boundaries are automatically excluded
+- Coordinate pairs (x,y) in filenames refer to the key point location in the reference image
+- Chips are extracted at the detected displacement location in the monitored image
+- VRT files enable easy visualization of all chips as a single mosaic in QGIS or similar tools
 
 ## KLT param leverage
 
