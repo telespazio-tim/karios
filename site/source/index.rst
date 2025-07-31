@@ -33,9 +33,9 @@ Welcome to Karios's documentation!
    :maxdepth: 1
    :caption: Contents:
 
+   case_study/index
    quickstart
    cookbook/index
-   case_study/index
    references
 
 .. raw:: html
