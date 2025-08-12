@@ -81,12 +81,22 @@ cd karios
 
 ### Environment Setup
 
-1. **Create the conda environment:**
+1. **Setup the conda environment:**
+
    ```bash
    conda env create -f environment.yml
    ```
 
+   If the following error message  `CondaValueError: prefix already exists: <PATH_TO_CONDA_DIR>/envs/karios` appears, that means you already have a `karios` conda environment.
+   
+   **Update it** with following command:
+
+   ```bash
+   conda env update -f environment.yml --prune
+   ```
+
 2. **Activate the environment:**
+
    ```bash
    conda activate karios
    ```
@@ -99,7 +109,8 @@ cd karios
    pip install .
    ```
 
-   For development
+  For development:
+
    ```bash
    pip install -e .
    ```

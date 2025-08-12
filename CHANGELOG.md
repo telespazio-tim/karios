@@ -1,11 +1,16 @@
 # KARIOS CHANGELOG
 
-## 2.1.0 [TODO]
+## 2.1.0 [20250812]
 
 ### New features
 
 - Add generation of chip images of a selection of relevant KP using options `--generate-kp-chips`
 - Add ZNCC score (`zncc_score`) for relevant KP in csv and JSON output.
+
+### Fix
+
+- Warning message during plot generation
+- Missing conda env update instruction
 
 ## 2.0.0 [20240620]
 
