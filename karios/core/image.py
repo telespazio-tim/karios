@@ -173,11 +173,12 @@ class GdalRasterImage:
         self._array = None
 
     @property
-    def geo_transform(self) -> str | None:
-        """Provides EPSG code, e.g. 4326 for example
+    def geo_transform(self) -> tuple | None:
+        """Provides image gdal geotransform
+        see https://gdal.org/en/stable/tutorials/geotransforms_tut.html
 
         Returns:
-            str | None: EPSG code, None if no projection
+            tuple | None: EPSG code, None if no projection
         """
         return self._geo
 

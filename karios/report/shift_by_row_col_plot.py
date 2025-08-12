@@ -170,6 +170,8 @@ class MeanShiftByRowColGroupPlot(AbstractPlot):
             s=1,
             **kwargs,
         )
+        # Create legend with no entries, just the title,
+        # it avoids a warning as we don't pass label argument to scatter
         ax_scatter.legend(loc="upper left", title=f"Nb KP={len(self._points['x0'])}")
         ax_scatter.set_title(f"{dim} pixels shifts")
 

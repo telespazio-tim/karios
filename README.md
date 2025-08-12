@@ -64,7 +64,7 @@ The geometric accuracy report includes the following accuracy metrics, in both d
 This tool is a Python application for which you need a dedicated conda environnement.
 
 - Python 3.12+
-- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+- [Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html). **We recommend Miniconda**.
 - **libGL**: you need libGL for linux, depending on your distribution it can be libgl1-mesa-glx, mesa-libGL or another. Install it if you don't have it yet.
 
 Get KARIOS:
@@ -81,12 +81,22 @@ cd karios
 
 ### Environment Setup
 
-1. **Create the conda environment:**
+1. **Setup the conda environment:**
+
    ```bash
    conda env create -f environment.yml
    ```
 
+   If the following error message  `CondaValueError: prefix already exists: <PATH_TO_CONDA_DIR>/envs/karios` appears, that means you already have a `karios` conda environment.
+   
+   **Update it** with following command:
+
+   ```bash
+   conda env update -f environment.yml --prune
+   ```
+
 2. **Activate the environment:**
+
    ```bash
    conda activate karios
    ```
@@ -99,7 +109,8 @@ cd karios
    pip install .
    ```
 
-   For development
+  For development:
+
    ```bash
    pip install -e .
    ```
@@ -219,7 +230,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 
 #### Processing Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--conf` | FILE | Configuration file path. Default is the built-in configuration. [default: PWD/karios/configuration/processing_configuration.json] |
 | `--resume` | Flag | Do not run KLT matcher, only accuracy analysis and report generation |
@@ -227,12 +238,13 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 
 #### Output Options
 
-| Option | Type | Decription |
+| Option | Type | Description |
 |--------|------|------------|
 | `--out` | PATH | Output results folder path [default: results] |
 | `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts (limited to 26 characters) |
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
 | `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
+| `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resampled to 10m") |
 
 #### Advanced Options
@@ -286,7 +298,8 @@ runtime_config = RuntimeConfiguration(
     gen_kp_mask=True,
     gen_delta_raster=True,
     pixel_size=10.0,  # meters
-    enable_large_shift_detection=False
+    enable_large_shift_detection=False,
+    generate_kp_chips=True,
 )
 
 # Initialize API
@@ -372,6 +385,7 @@ runtime_config = RuntimeConfiguration(
     title_prefix="MyAnalysis",    # Optional chart title prefix
     gen_kp_mask=True,             # Generate key point mask
     gen_delta_raster=True,        # Generate displacement raster
+    generate_kp_chips=True,      # Enable chip generation
     dem_description="SRTM 30m",   # Optional DEM description for plots
     enable_large_shift_detection=False
 )
@@ -403,7 +417,6 @@ Refer to section [KLT param leverage](#klt-param-leverage) for details
 
 #### `processing_configuration.accuracy_analysis`
 - `confidence_threshold`: Minimum confidence score for statistical analysis. If `None`, not applied.
-
 
 Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots control figure sizes, color maps, and axis limits.
 
@@ -440,7 +453,7 @@ KARIOS generates several types of outputs:
 
 #### Statistical Files
 
-- **CSV file**: Key points with dx/dy deviations and confidence scores
+- **CSV file**: Key points with dx/dy deviations and confidence scores (see [CSV Output section](#csv-output))
 - **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
 
 #### Visualizations
@@ -455,11 +468,136 @@ KARIOS generates several types of outputs:
 
 - **kp_mask.tif**: Binary mask of key point locations (if `--generate-key-points-mask`)
 - **kp_delta.tif**: Two-band raster with dx/dy displacement values (if `--generate-intermediate-product`)
-- **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced)
+- **kp_delta.json**: GeoJSON of key points with displacement vectors (if images are georeferenced, see [GeoJSON Output section](#geojson-output))
+- **chips/** directory: Directory with chip images of KP (see [Chip Images section](#chip-images-optional))
 
 #### Configuration
 
 - Copy of the processing configuration used
+
+## Output File Formats
+
+### CSV Output
+
+KARIOS generates a CSV file containing all key points detected by the KLT matcher with their displacement measurements and quality metrics. The CSV file is saved as `KLT_matcher_{monitored_filename}_{reference_filename}.csv` in the output directory.
+
+#### CSV Columns
+
+| Column | Description | Unit | Notes |
+|--------|-------------|------|-------|
+| `x0` | X coordinate of key point in reference image | pixels | Column position (0-based) |
+| `y0` | Y coordinate of key point in reference image | pixels | Row position (0-based) |
+| `dx` | Displacement in X direction (column) | pixels | Positive = eastward shift |
+| `dy` | Displacement in Y direction (row) | pixels | Positive = southward shift |
+| `score` | KLT matching confidence score | 0.0-1.0 | Higher values indicate better matches |
+| `radial error` | Euclidean distance of displacement | pixels | √(dx² + dy²) |
+| `angle` | Direction of displacement | degrees | Measured from east, counter-clockwise |
+| `zncc_score` | Zero-mean Normalized Cross-Correlation score | -1.0 to 1.0 | Optional: only if large shift detection is disabled |
+
+**Notes:**
+- The CSV uses semicolon (`;`) as separator
+- `zncc_score` is only computed for a selection of key points with KLT score above the confidence threshold
+- `zncc_score` provides additional matching quality assessment using normalized cross-correlation
+- All coordinates are in image pixel space (not geographic coordinates)
+
+### GeoJSON Output
+
+When input images are georeferenced, KARIOS generates a GeoJSON file (`kp_delta.json`) containing key points as geographic features with displacement vectors and quality metrics.
+
+#### GeoJSON Structure
+
+```json
+{
+  "type": "FeatureCollection",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:EPSG::{EPSG_CODE}"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [x_geographic, y_geographic]
+      },
+      "properties": {
+        "dx": displacement_x_pixels,
+        "dy": displacement_y_pixels,
+        "score": klt_confidence_score,
+        "radial error": euclidean_displacement,
+        "angle": displacement_angle_degrees,
+        "zncc_score": cross_correlation_score
+      }
+    }
+  ]
+}
+```
+
+#### Feature Properties
+
+| Property | Description | Unit | Range |
+|----------|-------------|------|-------|
+| `dx` | X displacement in pixels | pixels | Real number |
+| `dy` | Y displacement in pixels | pixels | Real number |
+| `score` | KLT matching confidence | 0.0-1.0 | Higher = better match |
+| `radial error` | Total displacement magnitude | pixels | ≥ 0 |
+| `angle` | Displacement direction | degrees | -180 to 180 |
+| `zncc_score` | Cross-correlation score | -1.0 to 1.0 | Optional, can be `null` |
+
+**Coordinate System:**
+- Point coordinates are in the same coordinate reference system as the input images
+- Coordinates are transformed from pixel space to geographic space using the image's geotransform
+- The CRS is specified in the `crs` object using the EPSG code from the reference image
+
+## Chip Images (Optional)
+
+When enabled with `--generate-kp-chips`, KARIOS generates small image patches (chips) centered on key points for visual inspection and quality assessment.
+
+```bash
+karios process monitored.tif reference.tif --generate-kp-chips
+```
+
+### Chip Specifications
+
+- **Size**: 57×57 pixels per chip
+- **Selection**: Up to 125 chips using center + quarter strategy from a 5×5 grid overlay
+- **Quality threshold**: Only key points with KLT score ≥ confidence threshold are considered
+- **Pairing**: Each chip location generates two files (monitored and reference)
+
+### Output Structure
+
+```
+results/
+└── chips/
+    ├── {monitored_filename}/
+    │   ├── MON_1234_5678.TIFF
+    │   ├── MON_2345_6789.TIFF
+    │   └── ...
+    ├── {reference_filename}/
+    │   ├── REF_1234_5678.TIFF
+    │   ├── REF_2345_6789.TIFF
+    │   └── ...
+    ├── chips.csv
+    ├── monitored_chips.vrt
+    └── reference_chips.vrt
+```
+
+### Generated Files
+
+| File | Description |
+|------|-------------|
+| `MON_{x}_{y}.TIFF` | Chip from monitored image at reference coordinates (x,y) |
+| `REF_{x}_{y}.TIFF` | Chip from reference image at coordinates (x,y) |
+| `chips.csv` | Metadata of selected key points used for chip generation |
+| `*_chips.vrt` | Virtual raster mosaics for easy visualization in GIS software |
+
+**Notes:**
+- Chips near image boundaries are automatically excluded
+- Coordinate pairs (x,y) in filenames refer to the key point location in the reference image
+- Chips are extracted at the detected displacement location in the monitored image
+- VRT files enable easy visualization of all chips as a single mosaic in QGIS or similar tools
 
 ## KLT param leverage
 

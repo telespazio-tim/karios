@@ -40,6 +40,8 @@ from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
+from karios.matcher.zncc_service import ZNCCService
+from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
@@ -128,11 +130,11 @@ class KariosAPI:
 
         Args:
             processing_configuration: Configuration for KLT matching, accuracy analysis,
-                                    and plotting parameters
+                and plotting parameters
             runtime_configuration: Runtime configuration specifying output settings,
-                                optional mask/DEM files, and processing flags.
-                                Does not include input image paths - these are
-                                provided to processing methods.
+                optional mask/DEM files, and processing flags.
+                Does not include input image paths - these are
+                provided to processing methods.
         """
         self._processing_configuration = processing_configuration
         self._runtime_configuration = runtime_configuration
@@ -143,6 +145,12 @@ class KariosAPI:
             self._runtime_configuration.gen_delta_raster,
             self._runtime_configuration.output_directory,
         )
+
+        # Initialize ZNCC Service
+        self._zncc_service = ZNCCService()
+
+        #
+        self._large_shift_applied = False
 
         # Prepare output dir
         self._check_output_dir()
@@ -160,7 +168,7 @@ class KariosAPI:
             monitored_image_path: Path to the monitored image
             reference_image_path: Path to the reference image
             mask_file_path: Optional path to mask file for excluding pixels from matching.
-                        Mask should be compatible with the monitored image.
+                Mask should be compatible with the monitored image.
             resume: Whether to resume from previous analysis
 
         Returns:
@@ -183,6 +191,9 @@ class KariosAPI:
             if shifted_image:
                 monitored_image.clear_cache()  # force clean
                 monitored_image = shifted_image.image
+
+                self._large_shift_applied = True
+
                 logger.info("Switch monitored image to %s", monitored_image.filepath)
                 points = self._get_match_points(resume, monitored_image, reference_image, mask)
 
@@ -277,7 +288,7 @@ class KariosAPI:
             match_result: Result from match_images
             accuracy_analysis: Result from analyze_accuracy
             dem_file_path: Optional path to DEM file for altitude-based analysis.
-                        DEM should be compatible with the reference image.
+                DEM should be compatible with the reference image.
 
         Returns:
             ReportPaths: Object containing paths to generated reports
@@ -291,7 +302,7 @@ class KariosAPI:
             match_result.points,
             match_result.reference_image,
         )
-        product_generator.generate_products()
+        product_paths = product_generator.generate_products()
 
         # Generate standard plots...
         overview_path = self._generate_overview_plot(match_result, output_dir)
@@ -305,15 +316,6 @@ class KariosAPI:
         # make sure all are closed
         plt.close("all")
 
-        # List product paths
-        product_paths = []
-        if self._runtime_configuration.gen_kp_mask:
-            product_paths.append(str(output_dir / "kp_mask.tif"))
-        if self._runtime_configuration.gen_delta_raster:
-            product_paths.append(str(output_dir / "kp_delta.tif"))
-        if match_result.reference_image.get_epsg():
-            product_paths.append(str(output_dir / "kp_delta.json"))
-
         return ReportPaths(
             overview_plot=str(overview_path),
             dx_plot=str(dx_plot_path),
@@ -321,6 +323,16 @@ class KariosAPI:
             ce_plot=str(ce_plot_path),
             dem_plots=dem_plots,
             products=product_paths,
+        )
+
+    def _generate_chips(self, match_result: MatchResult):
+        chips_service = ChipService()
+        chips_service.generate_chips(
+            match_result.monitored_image,
+            match_result.reference_image,
+            match_result.points,
+            self._processing_configuration.accuracy_analysis_configuration.confidence_threshold,
+            self._runtime_configuration.output_directory,
         )
 
     def process(
@@ -336,7 +348,7 @@ class KariosAPI:
         This method performs the full KARIOS workflow:
         1. Image matching using KLT feature tracking
         2. Accuracy analysis with statistical metrics
-        3. Report and visualization generation
+        3. Report, visualization generation and chips
 
         The processing configuration and output settings are defined by the
         RuntimeConfiguration provided during API initialization, while the specific
@@ -375,6 +387,10 @@ class KariosAPI:
         accuracy = self.analyze_accuracy(match_result)
 
         reports = self.generate_reports(match_result, accuracy, dem_file_path)
+
+        # do not generate chips if large shift applied
+        if self._runtime_configuration.generate_kp_chips and not self._large_shift_applied:
+            self._generate_chips(match_result)
 
         return match_result, accuracy, reports
 
@@ -600,14 +616,26 @@ class KariosAPI:
             DataFrame containing match points
         """
         dataframe_gen = self._klt.match(monitored_image, reference_image, mask)
-        return self._handle_klt_results(dataframe_gen, csv_file)
+        return self._handle_klt_results(dataframe_gen, csv_file, monitored_image, reference_image)
 
-    def _handle_klt_results(self, results: pd.DataFrame, csv_file: Path) -> pd.DataFrame:
-        """Process KLT results and save to CSV.
+    def _handle_klt_results(
+        self,
+        results: pd.DataFrame,
+        csv_file: Path,
+        monitored_image: GdalRasterImage,
+        reference_image: GdalRasterImage,
+    ) -> pd.DataFrame:
+        """Process KLT results by:
+        - computing radial error
+        - computing angle error
+        - computing zncc for relevant KP
+        - save to CSV.
 
         Args:
             results: Generator producing DataFrames with KLT results
             csv_file: Path to save CSV results
+            monitored_image: Monitored image
+            reference_image: Reference image
 
         Returns:
             Combined DataFrame with all results
@@ -616,6 +644,24 @@ class KariosAPI:
         for dataframe in results:
             dataframe["radial error"] = np.sqrt(dataframe["dx"] ** 2 + dataframe["dy"] ** 2)
             dataframe["angle"] = np.degrees(np.arctan2(dataframe["dy"], dataframe["dx"]))
+
+            # compute and add zncc_score
+            if not self._large_shift_applied:
+
+                threshold = (
+                    self._processing_configuration.accuracy_analysis_configuration.confidence_threshold
+                )
+
+                logger.warning("Compute ZNCC for KP with KLT score > %.2f", threshold)
+
+                zncc_candidates = dataframe[dataframe["score"] >= threshold]
+
+                dataframe["zncc_score"] = self._zncc_service.compute_zncc(
+                    zncc_candidates, monitored_image, reference_image
+                )
+
+            else:
+                logger.warning("Large shift applied, skip ZNCC")
 
             if not csv_file.exists():
                 logger.info("Write to csv %s", str(csv_file))
