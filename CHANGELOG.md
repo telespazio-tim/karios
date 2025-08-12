@@ -1,6 +1,6 @@
 # KARIOS CHANGELOG
 
-## 2.1.0 [TODO]
+## 2.1.0 [20250812]
 
 ### New features
 

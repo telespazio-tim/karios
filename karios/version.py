@@ -18,4 +18,4 @@
 
 
 """version info module."""
-__version__ = "2.1.0-pre0"
+__version__ = "2.1.0"
