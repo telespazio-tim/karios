@@ -228,6 +228,7 @@ class GdalRasterImage:
             self.x_max = self.x_min + self.x_size * self.x_res
             self.y_min = self.y_max + self.y_size * self.y_res
             self.projection = dataset.GetProjection()
+            self.spatial_ref = dataset.GetSpatialRef()
 
     def have_pixel_resolution(self) -> bool:
         """Indicate if the image have a pixel size
@@ -335,7 +336,7 @@ class GdalRasterImage:
             bool: True images have same geometric and geographic specifications
         """
         return (
-            (self.projection == image.projection)
+            self.spatial_ref.IsSame(image.spatial_ref)
             and (self._geo == self._geo)
             and (self.x_size == image.x_size)
             and (self.y_size == image.y_size)
