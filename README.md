@@ -729,6 +729,10 @@ karios process monitored.tif reference.tif --resume --out ./existing_results
 - Previous KLT CSV results must exist in output directory
 - Same images pair and configuration
 
+## Additionnal Documentation
+
+[Software User Manual](https://github.com/telespazio-tim/karios/blob/telespazio-tim-add-sum/docs/EDAP%2B.SUM.001_0.1%20KARIOS%20User%20Manual%20v.2.0_FINAL.pdf)
+
 ## License
 
 Apache License 2.0 - see LICENSE file for details.
