@@ -2,8 +2,9 @@ name: karios
 channels:
   - conda-forge
 dependencies:
+  - pip
   - gdal=3.8.*
-  - matplotlib=3.8.*
+  - matplotlib-base=3.8.*
   - opencv=4.8.*
   - pandas=2.1.*
   - python=3.12
