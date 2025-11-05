@@ -2,7 +2,7 @@ name: Windows64 Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**' ]
     paths-ignore:
       - 'docs/**'
       - '*.md'
@@ -10,7 +10,7 @@ on:
       - 'NOTICE'
       - 'CHANGELOG.md'
   pull_request:
-    branches: [ main ]
+    branches: [ '**' ]
     paths-ignore:
       - 'docs/**'
       - '*.md'
