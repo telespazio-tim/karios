@@ -1,0 +1,60 @@
+name: Ubuntu Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'CHANGELOG.md'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'CHANGELOG.md'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniconda-version: 'latest'
+        channels: conda-forge
+        channel-priority: strict
+        environment-file: environment.yml
+        activate-environment: karios
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-glx
+
+    - name: Install package in development mode
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools>=77.0
+        pip install -e .
+
+    - name: Install dev dependencies for testing
+      run: |
+        pip install pytest
+        if [ -f requirements_dev.txt ]; then
+          pip install -r requirements_dev.txt
+        fi
+
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v
