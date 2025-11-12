@@ -335,8 +335,11 @@ class GdalRasterImage:
         Returns:
             bool: True images have same geometric and geographic specifications
         """
+        epsg_self = self.spatial_ref.GetAuthorityCode(None)
+        epsg_other = image.spatial_ref.GetAuthorityCode(None)
+
         return (
-            self.spatial_ref.IsSame(image.spatial_ref)
+            epsg_self == epsg_other
             and (self._geo == self._geo)
             and (self.x_size == image.x_size)
             and (self.y_size == image.y_size)
