@@ -53,4 +53,5 @@ jobs:
 
     - name: Run tests
       run: |
+        conda list
         python -m pytest tests/ -v
