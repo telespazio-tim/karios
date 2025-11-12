@@ -203,6 +203,27 @@ class ZNCCService:
                 21,
             )
 
+        except ValueError as e:
+            if "zero standard deviation" in str(e):
+                logger.warning(
+                    "Cannot compute ZNCC: one or both patches have zero standard deviation, returning NaN",
+                    extra={"x0": int(series["x0"]), "y0": int(series["y0"])}
+                )
+                return np.nan
+            else:
+                # Re-raise other ValueErrors that are not related to zero standard deviation
+                raise
+        except IndexError as e:
+            # Handle boundary errors gracefully by returning NaN
+            if "beyond image boundaries" in str(e):
+                logger.warning(
+                    "Cannot compute ZNCC: patch extends beyond image boundaries, returning NaN",
+                    extra={"x0": int(series["x0"]), "y0": int(series["y0"]), "error": str(e)}
+                )
+                return np.nan
+            else:
+                # Re-raise other IndexErrors that are not related to boundaries
+                raise
         except Exception as e:
             logger.error(
                 "Error while computing ZNCC",
