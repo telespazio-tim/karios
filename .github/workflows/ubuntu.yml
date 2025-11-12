@@ -37,6 +37,18 @@ jobs:
         environment-file: environment.yml
         activate-environment: karios
 
+    - name: Install dependencies manually using conda install
+      run: |
+        conda install --yes \
+          numpy=1.26.* \
+          matplotlib-base=3.9.* \
+          gdal=3.8.1 \
+          opencv=4.8.1 \
+          pandas=2.1.4 \
+          python=3.12 \
+          scikit-image=0.22.0 \
+          rich-click=1.8.9
+
     - name: Install package in development mode
       run: |
         # python -m pip install --upgrade pip
