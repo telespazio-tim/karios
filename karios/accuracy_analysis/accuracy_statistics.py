@@ -56,6 +56,17 @@ class GeometricStat:
         self.median_y = ""
         self.mean_y = ""
         self.std_y = ""
+
+        # Check if required columns exist in the points DataFrame
+        required_columns = ["dx", "dy", "score"]
+        missing_columns = [col for col in required_columns if col not in points.columns]
+
+        if missing_columns:
+            raise ValueError(
+                f"Missing required columns in points DataFrame: {missing_columns}. "
+                f"Available columns: {list(points.columns)}. "
+            )
+
         self.v_x = points["dx"]  # vector of dx displacements
         self.v_y = points["dy"]  # vector of dy displacements
         # reverse y (line/northing) if image have SRS (carto representation)
