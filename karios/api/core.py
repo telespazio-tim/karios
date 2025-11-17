@@ -656,9 +656,16 @@ class KariosAPI:
 
                 zncc_candidates = dataframe[dataframe["score"] >= threshold]
 
-                dataframe["zncc_score"] = self._zncc_service.compute_zncc(
+                # Initialize zncc_score column with NaN values
+                dataframe["zncc_score"] = np.nan
+
+                # Compute ZNCC scores only for the candidates
+                zncc_scores = self._zncc_service.compute_zncc(
                     zncc_candidates, monitored_image, reference_image
                 )
+
+                # Assign the computed scores back to the original dataframe using the same indices
+                dataframe.loc[zncc_candidates.index, "zncc_score"] = zncc_scores
 
             else:
                 logger.warning("Large shift applied, skip ZNCC")
