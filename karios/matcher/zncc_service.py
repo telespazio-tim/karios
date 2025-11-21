@@ -116,7 +116,8 @@ def _zncc2(img1: NDArray, img2: NDArray, u1: int, v1: int, u2: int, v2: int, n: 
     std2: float = float(np.std(patch2))
 
     if std1 == 0 or std2 == 0:
-        raise ValueError("Cannot compute ZNCC: one or both patches have zero standard deviation")
+        logger.warning("One or both patches have zero standard deviation, returning NaN for ZNCC")
+        return np.nan
 
     # Normalize patches
     patch1_norm = (patch1 - np.mean(patch1)) / std1
