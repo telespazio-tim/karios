@@ -337,7 +337,7 @@ class GdalRasterImage:
         """
         return (
             self.spatial_ref.IsSame(image.spatial_ref)
-            and (self._geo == self._geo)
+            and (self._geo == image._geo)
             and (self.x_size == image.x_size)
             and (self.y_size == image.y_size)
         )
