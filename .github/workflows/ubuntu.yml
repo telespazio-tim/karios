@@ -67,6 +67,7 @@ jobs:
         pip install pytest
         if [ -f requirements_dev.txt ]; then
           pip install -r requirements_dev.txt
+
           # conda install -n karios -c conda-forge --file requirements_dev.txt
         fi
 
