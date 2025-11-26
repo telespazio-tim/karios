@@ -49,14 +49,42 @@ class E2ETest(unittest.TestCase):
 
         self.assertEqual(0, result.exit_code)
 
+        # Display both CSV files in the log before the test
+        result_csv_path = os.path.join(
+            result_dir,
+            "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
+            csv_result_filename,
+        )
+        ref_csv_path = os.path.join(ref_data_dir, csv_result_filename)
+
+        print(f"Result CSV content from: {result_csv_path}")
+        if os.path.exists(result_csv_path):
+            with open(result_csv_path, "r") as f:
+                result_csv_content = f.read()
+                print(
+                    result_csv_content[:2000] + "..."
+                    if len(result_csv_content) > 2000
+                    else result_csv_content
+                )  # Limit output to first 2000 characters
+        else:
+            print(f"Result CSV file does not exist: {result_csv_path}")
+
+        print(f"\nReference CSV content from: {ref_csv_path}")
+        if os.path.exists(ref_csv_path):
+            with open(ref_csv_path, "r") as f:
+                ref_csv_content = f.read()
+                print(
+                    ref_csv_content[:2000] + "..."
+                    if len(ref_csv_content) > 2000
+                    else ref_csv_content
+                )  # Limit output to first 2000 characters
+        else:
+            print(f"Reference CSV file does not exist: {ref_csv_path}")
+
         self.assertTrue(
             filecmp.cmp(
-                os.path.join(
-                    result_dir,
-                    "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
-                    csv_result_filename,
-                ),
-                os.path.join(ref_data_dir, csv_result_filename),
+                result_csv_path,
+                ref_csv_path,
                 False,
             )
         )
