@@ -191,7 +191,15 @@ class E2ETest(unittest.TestCase):
         )
 
         if not json_comparison_result:
-            print(f"\nJSON files differ: {json_diff_message}")
-            self.fail(f"JSON files are different. Details: {json_diff_message}")
+            # Limit the size of the diff message to prevent overwhelming output
+            if len(json_diff_message) > 2000:
+                shortened_message = json_diff_message[:2000] + "... (truncated)"
+                print(f"\nJSON files differ: {shortened_message}")
+                self.fail(
+                    f"JSON files are different. Details truncated to 2000 chars: {shortened_message}"
+                )
+            else:
+                print(f"\nJSON files differ: {json_diff_message}")
+                self.fail(f"JSON files are different. Details: {json_diff_message}")
         else:
             print(f"\nJSON files are equivalent: {json_diff_message}")
