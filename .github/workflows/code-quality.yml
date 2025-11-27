@@ -1,0 +1,56 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.12]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: karios
+        python-version: ${{ matrix.python-version }}
+        auto-activate-base: false
+
+    - name: Install dependencies
+      run: |
+        pip install -e .
+        pip install -r requirements_dev.txt
+        # Install tools needed for pre-commit checks
+        pip install black isort bandit pydocstyle pre-commit
+
+    - name: Run license headers check
+      run: |
+        python -c "import licenseheaders; print('licenseheaders available')"
+        # Check if license headers are properly applied
+        python -m licenseheaders -cy -o "Telespazio France" -n "KARIOS" -t apache-2.tmpl -u "https://github.com/telespazio-tim/karios" -d karios --checkonly .
+      continue-on-error: true
+
+    - name: Run import sorting check (isort)
+      run: |
+        isort --check-only .
+
+    - name: Run code formatting check (black)
+      run: |
+        black -l 100 --check .
+
+    - name: Run security check (bandit)
+      run: |
+        bandit .
