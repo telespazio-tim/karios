@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from karios.cli.commands import process
 from tests.utils.test_csv_comparison import compare_csv_with_tolerance
+from tests.utils.test_json_comparison import compare_json_files
 
 
 
@@ -108,14 +109,21 @@ class E2ETest(unittest.TestCase):
         else:
             print(f"\nCSV files are equivalent within tolerance: {diff_message}")
 
-        self.assertTrue(
-            filecmp.cmp(
-                os.path.join(
-                    result_dir,
-                    "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
-                    geojson_filename,
-                ),
-                os.path.join(ref_data_dir, geojson_filename),
-                False,
-            )
+        # Compare JSON files using proper JSON comparison with better error reporting
+        json_result_path = os.path.join(
+            result_dir,
+            "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
+            geojson_filename,
         )
+        json_ref_path = os.path.join(ref_data_dir, geojson_filename)
+
+        json_comparison_result, json_diff_message = compare_json_files(
+            json_result_path,
+            json_ref_path
+        )
+
+        if not json_comparison_result:
+            print(f"\nJSON files differ: {json_diff_message}")
+            self.fail(f"JSON files are different. Details: {json_diff_message}")
+        else:
+            print(f"\nJSON files are equivalent: {json_diff_message}")
