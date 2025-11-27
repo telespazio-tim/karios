@@ -14,7 +14,7 @@ module_dir_path = os.path.dirname(__file__)
 result_dir = os.path.join(module_dir_path, "test_results")
 result_dir_path = Path(result_dir)
 ref_data_dir = os.path.join(module_dir_path, "ref_data", "test_full")
-config_file_path = os.path.join(module_dir_path, "processing_configuration.json")
+test_data_dir = os.path.join(module_dir_path, "test_data")
 
 
 class E2ETest(unittest.TestCase):
@@ -29,6 +29,7 @@ class E2ETest(unittest.TestCase):
             shutil.rmtree(result_dir_path)
 
     def test_full(self):
+        """Test full processing"""
         csv_result_filename = (
             "KLT_matcher_L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04.csv"
         )
@@ -38,12 +39,12 @@ class E2ETest(unittest.TestCase):
         result = runner.invoke(
             process,
             [
-                "/media/pcanonici/KINGSTON/data/KARIOS/monitored/L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.TIF",
-                "/media/pcanonici/KINGSTON/data/KARIOS/ref/T12SYH_20220514T175909_B04.jp2",
+                os.path.join(test_data_dir, "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m.tif"),
+                os.path.join(test_data_dir, "T12SYH_20220514T175909_B04.tif"),
                 "--out",
                 result_dir,
                 "--conf",
-                config_file_path,
+                os.path.join(module_dir_path, "processing_configuration.json"),
             ],
         )
 
@@ -83,8 +84,12 @@ class E2ETest(unittest.TestCase):
 
         self.assertTrue(
             filecmp.cmp(
-                result_csv_path,
-                ref_csv_path,
+                os.path.join(
+                    result_dir,
+                    "L2F_T12SYH_20220824T175017_LS9_R035_B04_10m_T12SYH_20220514T175909_B04",
+                    csv_result_filename,
+                ),
+                os.path.join(ref_data_dir, csv_result_filename),
                 False,
             )
         )
