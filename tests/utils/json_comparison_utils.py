@@ -10,7 +10,9 @@ import json
 from typing import Any, Dict, Union
 
 
-def compare_json_objects(result: Union[Dict, Any], ref: Union[Dict, Any], ignore_order: bool = False) -> tuple[bool, str]:
+def compare_json_objects(
+    result: Union[Dict, Any], ref: Union[Dict, Any], ignore_order: bool = False
+) -> tuple[bool, str]:
     """
     Compare two JSON objects using proper equality (==) rather than identity (is).
 
@@ -43,13 +45,18 @@ def compare_json_objects(result: Union[Dict, Any], ref: Union[Dict, Any], ignore
         try:
             result_str = json.dumps(result, sort_keys=True, indent=2)
             ref_str = json.dumps(ref, sort_keys=True, indent=2)
-            return False, f"JSON objects differ:\nReference:\n{ref_str}\n\nResult:\n{result_str}"
+            return (
+                False,
+                f"JSON objects differ:\nReference:\n{ref_str}\n\nResult:\n{result_str}",
+            )
         except Exception:
             # If JSON serialization fails, provide basic error message
             return False, "JSON objects differ"
 
 
-def compare_json_files(result_json_path: str, ref_json_path: str, ignore_order: bool = False) -> tuple[bool, str]:
+def compare_json_files(
+    result_json_path: str, ref_json_path: str, ignore_order: bool = False
+) -> tuple[bool, str]:
     """
     Compare two JSON files for equality.
 
@@ -62,14 +69,14 @@ def compare_json_files(result_json_path: str, ref_json_path: str, ignore_order: 
         tuple: (comparison_result, diff_message)
     """
     try:
-        with open(result_json_path, 'r', encoding='utf-8') as f:
+        with open(result_json_path, "r", encoding="utf-8") as f:
             result = json.load(f)
-        
-        with open(ref_json_path, 'r', encoding='utf-8') as f:
+
+        with open(ref_json_path, "r", encoding="utf-8") as f:
             ref = json.load(f)
-        
+
         return compare_json_objects(result, ref, ignore_order)
-    
+
     except FileNotFoundError as e:
         return False, f"File not found: {str(e)}"
     except json.JSONDecodeError as e:
@@ -81,10 +88,10 @@ def compare_json_files(result_json_path: str, ref_json_path: str, ignore_order: 
 def _sort_json_objects(obj: Any) -> Any:
     """
     Recursively sort JSON objects to normalize ordering for comparison.
-    
+
     Args:
         obj: JSON object to sort
-        
+
     Returns:
         Sorted version of the object
     """

@@ -119,10 +119,12 @@ def cli() -> None:
     short_help="Performs image matching to detect pixel-level shifts between a monitored image and a reference image"
 )
 @click.argument(
-    "monitored_image", type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path)
+    "monitored_image",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
 )
 @click.argument(
-    "reference_image", type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path)
+    "reference_image",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
 )
 @click.argument(
     "mask_file",

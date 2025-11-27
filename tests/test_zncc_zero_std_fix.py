@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Test script to verify the ZNCC zero standard deviation fix."""
+
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
-from unittest.mock import Mock
+
 from karios.matcher.zncc_service import ZNCCService, _zncc2
+
 
 def test_zero_std_handling():
     """Test that zero standard deviation patches return NaN instead of raising an exception."""
@@ -30,12 +34,14 @@ def test_zero_std_handling():
     mock_reference.clear_cache = Mock()
 
     # Test case: create a dataframe that would lead to uniform patches
-    test_df = pd.DataFrame({
-        'x0': [30],  # Center point
-        'y0': [30],  # Center point
-        'dx': [0],   # No offset
-        'dy': [0]    # No offset
-    })
+    test_df = pd.DataFrame(
+        {
+            "x0": [30],  # Center point
+            "y0": [30],  # Center point
+            "dx": [0],  # No offset
+            "dy": [0],  # No offset
+        }
+    )
 
     # Call the compute_zncc method - this should not raise an exception
     try:
@@ -55,6 +61,7 @@ def test_zero_std_handling():
         print(f"Error: ZNCC computation raised exception: {e}")
         assert False, f"ZNCC computation raised exception: {e}"
 
+
 def test_zncc2_directly():
     """Test _zncc2 function directly with zero std patches."""
     uniform_patch = np.ones((57, 57)) * 100
@@ -68,6 +75,7 @@ def test_zncc2_directly():
     except Exception as e:
         print(f"Error: Unexpected exception type: {e}")
         assert False, f"Unexpected exception type: {e}"
+
 
 if __name__ == "__main__":
     print("Testing ZNCC zero standard deviation fix...")

@@ -492,7 +492,9 @@ class ChipService:
 
             # Build VRT options
             vrt_options = gdal.BuildVRTOptions(
-                separate=False, srcNodata=None, VRTNodata=0  # False for mosaic (single band)
+                separate=False,
+                srcNodata=None,
+                VRTNodata=0,  # False for mosaic (single band)
             )
 
             # Create the VRT
