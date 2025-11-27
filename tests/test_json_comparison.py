@@ -4,7 +4,7 @@
 import json
 import tempfile
 import os
-from tests.utils.test_json_comparison import compare_json_objects, compare_json_files
+from tests.utils.json_comparison_utils import compare_json_objects, compare_json_files
 
 
 def test_json_objects_equal():

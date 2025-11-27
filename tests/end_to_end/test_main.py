@@ -11,7 +11,7 @@ from click.testing import CliRunner
 
 from karios.cli.commands import process
 from tests.utils.test_csv_comparison import compare_csv_with_tolerance
-from tests.utils.test_json_comparison import compare_json_files
+from tests.utils.json_comparison_utils import compare_json_files
 
 
 
