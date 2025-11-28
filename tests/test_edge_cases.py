@@ -17,10 +17,10 @@ from karios.matcher.zncc_service import ZNCCService, _zncc2
 
 def test_zncc2_edge_cases():
     """Test ZNCC2 function with edge cases."""
-    # Let's start by testing the error condition (should raise ValueError)
-    with pytest.raises(ValueError, match="zero standard deviation"):
-        single_pixel_img = np.array([[5.0]], dtype=np.float64)
-        _zncc2(single_pixel_img, single_pixel_img, 0, 0, 0, 0, 0)
+    # Test with zero std patches - should return NaN instead of raising ValueError
+    single_pixel_img = np.array([[5.0]], dtype=np.float64)
+    result = _zncc2(single_pixel_img, single_pixel_img, 0, 0, 0, 0, 0)
+    assert np.isnan(result)
 
     # Test with very small patches that have some variation
     patch1 = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], dtype=np.float64)

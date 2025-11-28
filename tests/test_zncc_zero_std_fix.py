@@ -65,16 +65,9 @@ def test_zero_std_handling():
 def test_zncc2_directly():
     """Test _zncc2 function directly with zero std patches."""
     uniform_patch = np.ones((57, 57)) * 100
-    try:
-        result = _zncc2(uniform_patch, uniform_patch, 28, 28, 28, 28, 21)
-        print(f"Error: _zncc2 should have raised ValueError but returned {result}")
-        assert False, f"_zncc2 should have raised ValueError but returned {result}"
-    except ValueError as e:
-        assert "zero standard deviation" in str(e), f"Unexpected ValueError message: {e}"
-        print("Success: _zncc2 correctly raises ValueError for zero std")
-    except Exception as e:
-        print(f"Error: Unexpected exception type: {e}")
-        assert False, f"Unexpected exception type: {e}"
+    result = _zncc2(uniform_patch, uniform_patch, 28, 28, 28, 28, 21)
+    assert np.isnan(result), f"Expected NaN for zero std case, but got {result}"
+    print("Success: _zncc2 correctly returns NaN for zero std case")
 
 
 if __name__ == "__main__":

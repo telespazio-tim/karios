@@ -90,12 +90,12 @@ def test_shift_image_large_offsets():
 
 def test_zncc2_function_error_conditions():
     """Test _zncc2 function error conditions."""
-    # Test with zero standard deviation (should raise ValueError)
+    # Test with zero standard deviation - should return NaN instead of raising ValueError
     img1 = np.ones((5, 5), dtype=np.float64)
     img2 = np.ones((5, 5), dtype=np.float64)
 
-    with pytest.raises(ValueError, match="zero standard deviation"):
-        _zncc2(img1, img2, 2, 2, 2, 2, 2)
+    result = _zncc2(img1, img2, 2, 2, 2, 2, 2)
+    assert np.isnan(result)
 
     # Test with invalid coordinates (should raise IndexError)
     img1 = np.random.rand(10, 10).astype(np.float64)

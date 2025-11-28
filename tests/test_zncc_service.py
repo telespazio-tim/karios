@@ -61,13 +61,13 @@ def test_zncc2_opposite_patches():
 
 
 def test_zncc2_zero_std_error():
-    """Test _zncc2 raises ValueError for zero standard deviation."""
+    """Test _zncc2 returns NaN for zero standard deviation (instead of raising ValueError)."""
     # Create a patch with zero std (all same values)
     img1 = np.ones((5, 5), dtype=np.float64)
     img2 = np.ones((5, 5), dtype=np.float64)
 
-    with pytest.raises(ValueError, match="zero standard deviation"):
-        _zncc2(img1, img2, 2, 2, 2, 2, 2)
+    result = _zncc2(img1, img2, 2, 2, 2, 2, 2)
+    assert np.isnan(result)
 
 
 def test_zncc2_boundary_check():
