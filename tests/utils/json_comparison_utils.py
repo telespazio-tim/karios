@@ -11,7 +11,10 @@ from typing import Any, Dict, Union
 
 
 def compare_json_objects(
-    result: Union[Dict, Any], ref: Union[Dict, Any], ignore_order: bool = False
+    result: Union[Dict, Any],
+    ref: Union[Dict, Any],
+    ignore_order: bool = False,
+    float_tolerance: float = None,
 ) -> tuple[bool, str]:
     """
     Compare two JSON objects using proper equality (==) rather than identity (is).
@@ -20,14 +23,21 @@ def compare_json_objects(
         result: The result JSON object to compare
         ref: The reference JSON object to compare against
         ignore_order: Whether to ignore order in lists/arrays
+        float_tolerance: Tolerance for floating-point comparison (default: None, which means exact comparison)
 
     Returns:
         tuple: (comparison_result, diff_message)
             - comparison_result: True if objects are equal, False otherwise
             - diff_message: Detailed message about differences or success
     """
-    # Use == for proper value comparison, not 'is' which checks object identity
-    if ignore_order:
+    # Use deep comparison with optional float tolerance
+    if float_tolerance is not None:
+        are_equal, diff_msg = _compare_json_with_tolerance(result, ref, float_tolerance)
+        if are_equal:
+            return True, f"JSON objects are equivalent within tolerance {float_tolerance}"
+        else:
+            return False, diff_msg
+    elif ignore_order:
         # For comparing JSON with potentially different ordering
         try:
             result_sorted = _sort_json_objects(result)
@@ -55,7 +65,10 @@ def compare_json_objects(
 
 
 def compare_json_files(
-    result_json_path: str, ref_json_path: str, ignore_order: bool = False
+    result_json_path: str,
+    ref_json_path: str,
+    ignore_order: bool = False,
+    float_tolerance: float = None,
 ) -> tuple[bool, str]:
     """
     Compare two JSON files for equality.
@@ -64,6 +77,7 @@ def compare_json_files(
         result_json_path: Path to the result JSON file
         ref_json_path: Path to the reference JSON file
         ignore_order: Whether to ignore order in lists/arrays
+        float_tolerance: Tolerance for floating-point comparison (default: None, which means exact comparison)
 
     Returns:
         tuple: (comparison_result, diff_message)
@@ -75,7 +89,7 @@ def compare_json_files(
         with open(ref_json_path, "r", encoding="utf-8") as f:
             ref = json.load(f)
 
-        return compare_json_objects(result, ref, ignore_order)
+        return compare_json_objects(result, ref, ignore_order, float_tolerance)
 
     except FileNotFoundError as e:
         return False, f"File not found: {str(e)}"
@@ -83,6 +97,59 @@ def compare_json_files(
         return False, f"Invalid JSON in file: {str(e)}"
     except Exception as e:
         return False, f"Error comparing JSON files: {str(e)}"
+
+
+def _compare_json_with_tolerance(obj1: Any, obj2: Any, tolerance: float) -> tuple[bool, str]:
+    """
+    Recursively compare JSON objects with float tolerance.
+
+    Args:
+        obj1: First JSON object to compare
+        obj2: Second JSON object to compare
+        tolerance: Tolerance for floating point comparison
+
+    Returns:
+        tuple: (comparison_result, diff_message)
+    """
+    if type(obj1) != type(obj2):
+        return False, f"Different types: {type(obj1).__name__} vs {type(obj2).__name__}"
+
+    if isinstance(obj1, float) and isinstance(obj2, float):
+        if abs(obj1 - obj2) <= tolerance:
+            return True, ""
+        else:
+            return (
+                False,
+                f"Float values differ beyond tolerance: {obj1} vs {obj2} (diff: {abs(obj1 - obj2)}, tolerance: {tolerance})",
+            )
+    elif isinstance(obj1, (int, str, type(None))):
+        if obj1 == obj2:
+            return True, ""
+        else:
+            return False, f"Values differ: {obj1} vs {obj2}"
+    elif isinstance(obj1, dict) and isinstance(obj2, dict):
+        if set(obj1.keys()) != set(obj2.keys()):
+            return False, f"Different keys: {set(obj1.keys())} vs {set(obj2.keys())}"
+
+        for key in obj1.keys():
+            is_equal, msg = _compare_json_with_tolerance(obj1[key], obj2[key], tolerance)
+            if not is_equal:
+                return False, f"Key '{key}' differs: {msg}"
+        return True, ""
+    elif isinstance(obj1, list) and isinstance(obj2, list):
+        if len(obj1) != len(obj2):
+            return False, f"Different list lengths: {len(obj1)} vs {len(obj2)}"
+
+        for i, (item1, item2) in enumerate(zip(obj1, obj2)):
+            is_equal, msg = _compare_json_with_tolerance(item1, item2, tolerance)
+            if not is_equal:
+                return False, f"Item at index {i} differs: {msg}"
+        return True, ""
+    else:
+        if obj1 == obj2:
+            return True, ""
+        else:
+            return False, f"Objects differ: {obj1} vs {obj2}"
 
 
 def _sort_json_objects(obj: Any) -> Any:

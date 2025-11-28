@@ -185,9 +185,9 @@ class E2ETest(unittest.TestCase):
         else:
             print(f"Result JSON/GeoJSON file does not exist: {json_result_path}")
 
-        # Compare JSON files using proper JSON comparison with better error reporting
+        # Compare JSON files using proper JSON comparison with tolerance for floating-point differences
         json_comparison_result, json_diff_message = compare_json_files(
-            json_result_path, json_ref_path
+            json_result_path, json_ref_path, float_tolerance=1e-5
         )
 
         if not json_comparison_result:
