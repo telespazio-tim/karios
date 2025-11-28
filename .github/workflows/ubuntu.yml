@@ -37,22 +37,10 @@ jobs:
         environment-file: environment.yml
         activate-environment: karios
 
-    - name: Test conda installation
-      shell: bash -l {0}
-      run: conda info
-
-    # - name: Install dependencies manually using conda install
-    #   shell: bash -l {0}
-    #   run: |
-    #     conda install --yes \
-    #       numpy=1.26.* \
-    #       matplotlib-base=3.9.* \
-    #       gdal=3.8.1 \
-    #       opencv=4.8.1 \
-    #       pandas=2.1.4 \
-    #       python=3.12 \
-    #       scikit-image=0.22.0 \
-    #       rich-click=1.8.9
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglx0
 
     - name: Install package in development mode
       shell: bash -l {0}
@@ -60,6 +48,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install setuptools>=77.0
         pip install -e .
+      shell: bash -l {0}
 
     - name: Install dev dependencies for testing
       shell: bash -l {0}
@@ -67,12 +56,13 @@ jobs:
         pip install pytest
         if [ -f requirements_dev.txt ]; then
           pip install -r requirements_dev.txt
-
           # conda install -n karios -c conda-forge --file requirements_dev.txt
         fi
+      shell: bash -l {0}
 
     - name: Run tests
       shell: bash -l {0}
       continue-on-error: true
       run: |
         python -m pytest tests/ -v
+      shell: bash -l {0}

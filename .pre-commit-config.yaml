@@ -46,7 +46,7 @@ repos:
      require_serial: true
      pass_filenames: false # avoid files to be passed to pytest as args
      always_run: true
-     stages: [push]
+     stages: [pre-push]
   #  - id: docstyle
   #    name: docstyle
   #    entry: pydocstyle --convention=google

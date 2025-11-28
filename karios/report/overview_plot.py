@@ -197,7 +197,12 @@ class OverviewPlot(AbstractPlot):
         axes.axis("scaled")
 
         scatter = axes.scatter(
-            self._points["x0"], self._points["y0"], c=values, cmap=colormap, s=1, **kwargs
+            self._points["x0"],
+            self._points["y0"],
+            c=values,
+            cmap=colormap,
+            s=1,
+            **kwargs,
         )
 
         axes.grid()
