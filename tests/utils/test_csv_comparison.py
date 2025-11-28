@@ -81,6 +81,10 @@ def compare_csv_with_tolerance(
                 )
 
         # Compare numeric columns with tolerance
+        diff_stats = {}  # Store statistics for each numeric column
+        all_columns_equivalent = True
+        all_diff_messages = []
+
         for col in numeric_cols:
             ref_series = pd.to_numeric(ref_df_processed[col], errors="coerce")
             res_series = pd.to_numeric(result_df_processed[col], errors="coerce")
@@ -90,13 +94,30 @@ def compare_csv_with_tolerance(
             res_nan_mask = res_series.isna()
 
             if not ref_nan_mask.equals(res_nan_mask):
-                return False, f"Different NaN patterns in column '{col}'"
+                all_columns_equivalent = False
+                all_diff_messages.append(f"Different NaN patterns in column '{col}'")
+                continue
 
             # Compare non-NaN values with tolerance
             valid_mask = ~ref_nan_mask
             if valid_mask.any():
                 ref_values = ref_series[valid_mask]
                 res_values = res_series[valid_mask]
+
+                # Calculate differences
+                abs_diff = np.abs(ref_values - res_values)
+
+                # Calculate statistics
+                if len(abs_diff) > 0:
+                    std_diff = np.std(abs_diff)
+                    min_diff = np.min(abs_diff)
+                    max_diff = np.max(abs_diff)
+                    diff_stats[col] = {
+                        "std": std_diff,
+                        "min": min_diff,
+                        "max": max_diff,
+                        "count": len(abs_diff),
+                    }
 
                 # Use numpy's allclose for element-wise comparison with tolerance
                 if not np.allclose(
@@ -106,19 +127,45 @@ def compare_csv_with_tolerance(
                     atol=float_tolerance,
                     equal_nan=True,
                 ):
+                    all_columns_equivalent = False
                     # Find and report the first significant difference
-                    abs_diff = np.abs(ref_values - res_values)
                     max_diff_idx = abs_diff.argmax()
-                    max_diff = abs_diff.max()
+                    max_diff_val = abs_diff.max()
                     max_ref_val = ref_values.iloc[max_diff_idx]
                     max_res_val = res_values.iloc[max_diff_idx]
 
-                    return (
-                        False,
-                        f"Numeric column '{col}' differs beyond tolerance at row {max_diff_idx}: ref={max_ref_val}, result={max_res_val}, diff={max_diff}, tolerance={float_tolerance}",
+                    # Include statistics in the error message
+                    stats = diff_stats[col]
+                    col_diff_msg = (
+                        f"Numeric column '{col}' differs beyond tolerance at row {max_diff_idx}: "
+                        f"ref={max_ref_val}, result={max_res_val}, diff={max_diff_val}, "
+                        f"tolerance={float_tolerance}. "
+                        f"Statistics: std={stats['std']:.2e}, min={stats['min']:.2e}, max={stats['max']:.2e}"
                     )
+                    all_diff_messages.append(col_diff_msg)
+                else:
+                    # Even when values are within tolerance, track the statistics
+                    continue  # The column is equivalent
 
-        return True, "CSV files are equivalent within tolerance"
+        if all_columns_equivalent:
+            # Compile statistics summary for all columns
+            if diff_stats:
+                stats_summary = []
+                for col, stats in diff_stats.items():
+                    stats_summary.append(
+                        f"'{col}': std={stats['std']:.2e}, min={stats['min']:.2e}, max={stats['max']:.2e} (n={stats['count']})"
+                    )
+                stats_str = "; ".join(stats_summary)
+                return (
+                    True,
+                    f"CSV files are equivalent within tolerance. Difference statistics: {stats_str}",
+                )
+            else:
+                return True, "CSV files are equivalent within tolerance"
+        else:
+            # Return the accumulated messages
+            error_msg = "; ".join(all_diff_messages)
+            return False, error_msg
 
     except Exception as e:
         return False, f"Error comparing CSV files: {str(e)}"

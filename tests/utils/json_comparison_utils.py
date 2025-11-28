@@ -9,6 +9,8 @@ with proper handling of object equality vs object identity.
 import json
 from typing import Any, Dict, Union
 
+import numpy as np
+
 
 def compare_json_objects(
     result: Union[Dict, Any],
@@ -32,11 +34,8 @@ def compare_json_objects(
     """
     # Use deep comparison with optional float tolerance
     if float_tolerance is not None:
-        are_equal, diff_msg = _compare_json_with_tolerance(result, ref, float_tolerance)
-        if are_equal:
-            return True, f"JSON objects are equivalent within tolerance {float_tolerance}"
-        else:
-            return False, diff_msg
+        are_equal, diff_msg = compare_json_with_tolerance_and_stats(result, ref, float_tolerance)
+        return are_equal, diff_msg
     elif ignore_order:
         # For comparing JSON with potentially different ordering
         try:
@@ -99,7 +98,9 @@ def compare_json_files(
         return False, f"Error comparing JSON files: {str(e)}"
 
 
-def _compare_json_with_tolerance(obj1: Any, obj2: Any, tolerance: float) -> tuple[bool, str]:
+def _compare_json_with_tolerance(
+    obj1: Any, obj2: Any, tolerance: float, diff_values=None
+) -> tuple[bool, str]:
     """
     Recursively compare JSON objects with float tolerance.
 
@@ -107,20 +108,26 @@ def _compare_json_with_tolerance(obj1: Any, obj2: Any, tolerance: float) -> tupl
         obj1: First JSON object to compare
         obj2: Second JSON object to compare
         tolerance: Tolerance for floating point comparison
+        diff_values: List to accumulate float differences (for statistics)
 
     Returns:
         tuple: (comparison_result, diff_message)
     """
+    if diff_values is None:
+        diff_values = []
+
     if type(obj1) != type(obj2):
         return False, f"Different types: {type(obj1).__name__} vs {type(obj2).__name__}"
 
     if isinstance(obj1, float) and isinstance(obj2, float):
-        if abs(obj1 - obj2) <= tolerance:
+        abs_diff = abs(obj1 - obj2)
+        diff_values.append(abs_diff)
+        if abs_diff <= tolerance:
             return True, ""
         else:
             return (
                 False,
-                f"Float values differ beyond tolerance: {obj1} vs {obj2} (diff: {abs(obj1 - obj2)}, tolerance: {tolerance})",
+                f"Float values differ beyond tolerance: {obj1} vs {obj2} (diff: {abs_diff}, tolerance: {tolerance})",
             )
     elif isinstance(obj1, (int, str, type(None))):
         if obj1 == obj2:
@@ -132,7 +139,9 @@ def _compare_json_with_tolerance(obj1: Any, obj2: Any, tolerance: float) -> tupl
             return False, f"Different keys: {set(obj1.keys())} vs {set(obj2.keys())}"
 
         for key in obj1.keys():
-            is_equal, msg = _compare_json_with_tolerance(obj1[key], obj2[key], tolerance)
+            is_equal, msg = _compare_json_with_tolerance(
+                obj1[key], obj2[key], tolerance, diff_values
+            )
             if not is_equal:
                 return False, f"Key '{key}' differs: {msg}"
         return True, ""
@@ -141,7 +150,7 @@ def _compare_json_with_tolerance(obj1: Any, obj2: Any, tolerance: float) -> tupl
             return False, f"Different list lengths: {len(obj1)} vs {len(obj2)}"
 
         for i, (item1, item2) in enumerate(zip(obj1, obj2)):
-            is_equal, msg = _compare_json_with_tolerance(item1, item2, tolerance)
+            is_equal, msg = _compare_json_with_tolerance(item1, item2, tolerance, diff_values)
             if not is_equal:
                 return False, f"Item at index {i} differs: {msg}"
         return True, ""
@@ -150,6 +159,40 @@ def _compare_json_with_tolerance(obj1: Any, obj2: Any, tolerance: float) -> tupl
             return True, ""
         else:
             return False, f"Objects differ: {obj1} vs {obj2}"
+
+
+def compare_json_with_tolerance_and_stats(
+    obj1: Any, obj2: Any, tolerance: float
+) -> tuple[bool, str]:
+    """
+    Compare JSON objects with float tolerance and return statistics on differences.
+
+    Args:
+        obj1: First JSON object to compare
+        obj2: Second JSON object to compare
+        tolerance: Tolerance for floating point comparison
+
+    Returns:
+        tuple: (comparison_result, diff_message)
+    """
+    diff_values = []
+    is_equal, msg = _compare_json_with_tolerance(obj1, obj2, tolerance, diff_values)
+
+    if is_equal and len(diff_values) > 0:
+        # Calculate statistics for the differences
+        std_diff = np.std(diff_values)
+        min_diff = np.min(diff_values)
+        max_diff = np.max(diff_values)
+        mean_diff = np.mean(diff_values)
+
+        stats_msg = f"JSON objects are equivalent within tolerance {tolerance}. Statistics: std={std_diff:.2e}, min={min_diff:.2e}, max={max_diff:.2e}, mean={mean_diff:.2e} (n={len(diff_values)})"
+        return True, stats_msg
+    elif is_equal:
+        # No differences found
+        return True, f"JSON objects are equivalent within tolerance {tolerance}"
+    else:
+        # If not equal, return the original message without statistics
+        return False, msg
 
 
 def _sort_json_objects(obj: Any) -> Any:
