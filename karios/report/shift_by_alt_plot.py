@@ -203,5 +203,5 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
         # plt.axhline(-1, c="grey", lw=0.5, linestyle="--")
 
         # plt.legend(loc="upper right")
-        axis_right.set_ylabel("Deviation (m)", loc="center")
+        axis_right.set_ylabel("Deviation (px)", loc="center")
         axis_right.legend(loc="upper right")
