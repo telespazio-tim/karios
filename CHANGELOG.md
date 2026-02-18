@@ -1,5 +1,20 @@
 # KARIOS CHANGELOG
 
+## 2.1.1 [20260218]
+
+### Fix
+
+- **Correct axis label (TIGI-131)** - Fix axis labeling issue
+- **Handle zero standard deviation in ZNCC computation** - Return NaN instead of raising exception when standard deviation is zero
+- **Try to better handle some processing errors** - Improve error handling in processing pipeline
+- **Update deps** - General dependency updates
+
+## CI/CD
+- **Add unit tests for KLT matcher, LargeOffsetMatcher, and ZNCC service** - Extensive unit test coverage for matcher components
+- **Add e2e test**
+- **Create GitHub Actions workflows for Ubuntu and Windows64** - Add CI support for both platforms
+  - Test conda installation and run tests.
+
 ## 2.1.0 [20250812]
 
 ### New features
