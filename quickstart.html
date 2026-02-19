@@ -1,0 +1,1380 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" data-theme="light">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Getting started &#8212; KARIOS 1.0.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "light";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinxcontrib-images/LightBox2/lightbox2/dist/css/lightbox.min.css?v=6e7d0de0" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinxcontrib-images/LightBox2/lightbox2-customize/pointer.css?v=c97663ff" />
+    <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=0b4f26b6" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="_static/documentation_options.js?v=8d563738"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/sphinxcontrib-images/LightBox2/lightbox2/dist/js/lightbox-plus-jquery.min.js?v=f0ca4bb6"></script>
+    <script src="_static/sphinxcontrib-images/LightBox2/lightbox2-customize/jquery-noconflict.js?v=12818e64"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'quickstart';</script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Cookbook" href="cookbook/index.html" />
+    <link rel="prev" title="MSS" href="case_study/mss.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="light">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+    
+    
+    
+    <img src="_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">KARIOS</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="case_study/index.html">
+    Case studies
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    Getting started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="cookbook/index.html">
+    Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="references.html">
+    References
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/telespazio-tim/karios/" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="case_study/index.html">
+    Case studies
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    Getting started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="cookbook/index.html">
+    Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="references.html">
+    References
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/telespazio-tim/karios/" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Getting started</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="getting-started">
+<h1>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading">#</a></h1>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
+<section id="prerequisites">
+<h3>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h3>
+<p>KARIOS is a Python application for which you need a dedicated conda environnement.</p>
+<ul class="simple">
+<li><p>Python 3.12+</p></li>
+<li><p><a class="reference external" href="https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html">Conda</a> or <a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html">Miniconda</a>. <strong>We recommend Miniconda</strong>.</p></li>
+<li><p><strong>libGL</strong>: you need libGL for linux, depending on your distribution it can be libgl1-mesa-glx, mesa-libGL or another. Install it if you don’t have it yet.</p></li>
+</ul>
+<p>Get KARIOS:</p>
+<p>Download KARIOS sources <a class="reference external" href="https://github.com/telespazio-tim/karios/releases">from github</a>
+or clone the KARIOS github repository:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/telespazio-tim/karios.git
+<span class="c1"># go to karios dir</span>
+<span class="nb">cd</span><span class="w"> </span>karios
+</pre></div>
+</div>
+</section>
+<section id="environment-setup">
+<h3>Environment Setup<a class="headerlink" href="#environment-setup" title="Link to this heading">#</a></h3>
+<ol class="arabic simple">
+<li><p><strong>Setup the conda environment:</strong></p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+</pre></div>
+</div>
+<p>If the following error message  <code class="docutils literal notranslate"><span class="pre">CondaValueError:</span> <span class="pre">prefix</span> <span class="pre">already</span> <span class="pre">exists:</span> <span class="pre">&lt;PATH_TO_CONDA_DIR&gt;/envs/karios</span></code> appears, that means you already have a <code class="docutils literal notranslate"><span class="pre">karios</span></code> conda environment.</p>
+<p><strong>Update it</strong> with following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>env<span class="w"> </span>update<span class="w"> </span>-f<span class="w"> </span>environment.yml<span class="w"> </span>--prune
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p><strong>Activate the environment:</strong></p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>activate<span class="w"> </span>karios
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p><strong>Install KARIOS</strong></p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>.
+</pre></div>
+</div>
+<p>Karios is now installed in its conda envronement, you are ready to use it.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The conda environment stay active until you close your terminal session. You need to activate it every time you start a new session and want to use KARIOS in the terminal session.</p>
+</div>
+</section>
+<section id="verify-installation">
+<h3>Verify Installation<a class="headerlink" href="#verify-installation" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>karios<span class="w"> </span>--help
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>--help
+</pre></div>
+</div>
+</section>
+</section>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading">#</a></h2>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Always activate the environment before using the command-line</p>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>activate<span class="w"> </span>karios
+</pre></div>
+</div>
+<section id="input-requirements-and-recommendations">
+<h3>Input Requirements and recommendations<a class="headerlink" href="#input-requirements-and-recommendations" title="Link to this heading">#</a></h3>
+<p>KARIOS takes as inputs:</p>
+<ul class="simple">
+<li><p><strong>Monitored image</strong> (mandatory): The image to analyze for shifts/changes</p></li>
+<li><p><strong>Reference image</strong> (mandatory): The stable reference image for comparison</p></li>
+<li><p><strong>Mask file</strong> (optional): Exclude pixels from matching (co-registered the monitored image, having byte values, 0 are excluded while 1 are considered has valid for process)</p></li>
+<li><p><strong>DEM file</strong> (optional): Enable altitude-based analysis (compatible with reference image)</p></li>
+</ul>
+<p>Requirements:</p>
+<ul class="simple">
+<li><p>Input images grids should be comparable. <strong>The user should take care of data preparation</strong>.<br />
+That means geo coded images must have the same footprint, same geotransform information (same cartographic projection, i.e. EPSG code) and same resolution.</p></li>
+<li><p>Image pixel resolution should also be square (same X, Y) and unit meter.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>This is also applicable</strong> to DEM and mask files for compatibility requirements.</p>
+</div>
+<p>Recommendation:</p>
+<ul class="simple">
+<li><p>The user shall carefully check the dynamic range of the monitored and reference images, because KARIOS converts these input data into integers.<br />
+For instance, providing float values between 0 and 1 will give very poor results. In that case, it is recommended to multiply the data by 100.</p></li>
+<li><p>Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.</p></li>
+</ul>
+</section>
+</section>
+<section id="cli-usage">
+<h2>CLI Usage<a class="headerlink" href="#cli-usage" title="Link to this heading">#</a></h2>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p><strong>All commands below suppose that the karios conda environment is activated</strong></p>
+</div>
+<section id="command-structure">
+<h3>Command Structure<a class="headerlink" href="#command-structure" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>MONITORED_IMAGE<span class="w"> </span>REFERENCE_IMAGE<span class="w"> </span><span class="o">[</span>MASK_FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>DEM_FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</pre></div>
+</div>
+</section>
+<section id="arguments">
+<h3>Arguments<a class="headerlink" href="#arguments" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">MONITORED_IMAGE</span></code>: Path to the image to analyze for shifts/changes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">REFERENCE_IMAGE</span></code>: Path to the stable reference image for comparison</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MASK_FILE</span></code>: Optional mask file to exclude pixels from matching (use ‘-’ to skip)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DEM_FILE</span></code>: Optional DEM file for altitude-based analysis</p></li>
+</ul>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h3>
+<section id="basic-processing">
+<h4>Basic Processing<a class="headerlink" href="#basic-processing" title="Link to this heading">#</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif
+</pre></div>
+</div>
+</section>
+<section id="with-mask">
+<h4>With Mask<a class="headerlink" href="#with-mask" title="Link to this heading">#</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>mask.tif
+</pre></div>
+</div>
+</section>
+<section id="with-mask-and-dem">
+<h4>With Mask and DEM<a class="headerlink" href="#with-mask-and-dem" title="Link to this heading">#</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>mask.tif<span class="w"> </span>dem.tif<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dem-description<span class="w"> </span><span class="s2">&quot;SRTM 30m resample to 10m&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="dem-only-no-mask">
+<h4>DEM Only (No Mask)<a class="headerlink" href="#dem-only-no-mask" title="Link to this heading">#</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>-<span class="w"> </span>dem.tif<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dem-description<span class="w"> </span><span class="s2">&quot;Copernicus DEM 30m&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="full-workflow-with-options">
+<h4>Full Workflow with Options<a class="headerlink" href="#full-workflow-with-options" title="Link to this heading">#</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>mask.tif<span class="w"> </span>dem.tif<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>./results<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--generate-key-points-mask<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--generate-intermediate-product<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--title-prefix<span class="w"> </span><span class="s2">&quot;MyAnalysis&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dem-description<span class="w"> </span><span class="s2">&quot;SRTM 30m&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--enable-large-shift-detection
+</pre></div>
+</div>
+</section>
+<section id="resume-previous-analysis">
+<h4>Resume Previous Analysis<a class="headerlink" href="#resume-previous-analysis" title="Link to this heading">#</a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>mask.tif<span class="w"> </span>dem.tif<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--resume<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>./existing_results
+</pre></div>
+</div>
+</section>
+</section>
+<section id="cli-options">
+<h3>CLI Options<a class="headerlink" href="#cli-options" title="Link to this heading">#</a></h3>
+<section id="processing-options">
+<h4>Processing Options<a class="headerlink" href="#processing-options" title="Link to this heading">#</a></h4>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--conf</span></code></p></td>
+<td><p>FILE</p></td>
+<td><p>Configuration file path. Default is the built-in configuration.<br>[default: &lt;INSTALL_DIR&gt;/karios/configuration/processing_configuration.json]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--resume</span></code></p></td>
+<td><p>Flag</p></td>
+<td><p>Do not run KLT matcher, only accuracy analysis and report generation</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--input-pixel-size</span></code>, <code class="docutils literal notranslate"><span class="pre">-pxs</span></code></p></td>
+<td><p>FLOAT</p></td>
+<td><p>Input image pixel size in meter. Ignored if image resolution can be read from input image</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="output-options">
+<h4>Output Options<a class="headerlink" href="#output-options" title="Link to this heading">#</a></h4>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--out</span></code></p></td>
+<td><p>PATH</p></td>
+<td><p>Output results folder path [default: results]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--title-prefix</span></code>, <code class="docutils literal notranslate"><span class="pre">-tp</span></code></p></td>
+<td><p>TEXT</p></td>
+<td><p>Add prefix to title of generated output charts.<br>(limited to 26 characters)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--generate-key-points-mask</span></code>, <code class="docutils literal notranslate"><span class="pre">-kpm</span></code></p></td>
+<td><p>FLAG</p></td>
+<td><p>Generate a tiff mask based on KP from KTL</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--generate-intermediate-product</span></code>, <code class="docutils literal notranslate"><span class="pre">-gip</span></code></p></td>
+<td><p>FLAG</p></td>
+<td><p>Generate a two-bands tiff based on KP with band 1 dx and band 2 dy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--generate-kp-chips</span></code>, <code class="docutils literal notranslate"><span class="pre">-gkc</span></code></p></td>
+<td><p>FLAG</p></td>
+<td><p>Generate chip images centered on key points of monitored and reference products</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--dem-description</span></code></p></td>
+<td><p>TEXT</p></td>
+<td><p>DEM source name. Added in generated DEM plots.<br>Example: “COPERNICUS DEM resampled to 10m”</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="advanced-options">
+<h4>Advanced Options<a class="headerlink" href="#advanced-options" title="Link to this heading">#</a></h4>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--enable-large-shift-detection</span></code></p></td>
+<td><p>FLAG</p></td>
+<td><p>Enable detection and correction of large pixel shifts</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="logging-options">
+<h4>Logging Options<a class="headerlink" href="#logging-options" title="Link to this heading">#</a></h4>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--debug</span></code>, <code class="docutils literal notranslate"><span class="pre">-d</span></code></p></td>
+<td><p>FLAG</p></td>
+<td><p>Enable Debug mode</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--no-log-file</span></code></p></td>
+<td><p>FLAG</p></td>
+<td><p>Do not log in file (not compatible with <code class="docutils literal notranslate"><span class="pre">--log-file-path</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--log-file-path</span></code></p></td>
+<td><p>PATH</p></td>
+<td><p>Log file path [default: karios.log]</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<section id="processing-configuration">
+<h3>Processing Configuration<a class="headerlink" href="#processing-configuration" title="Link to this heading">#</a></h3>
+<p>The processing configuration defines algorithm parameters and is loaded from JSON files. The default configuration is located in <a class="reference external" href="https://github.com/telespazio-tim/karios/tree/develop/karios/configuration/processing_configuration.json">karios/configuration/processing_configuration.json</a>.</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">Default configuration (click to open)</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;processing_configuration&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;input_products&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;testing&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;cloud_mask&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;shift_image_processing&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;bias_correction_min_threshold&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;klt_matching&quot;</span><span class="p">:{</span>
+<span class="w">            </span><span class="nt">&quot;minDistance&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;blocksize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">15</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;maxCorners&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20000</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;matching_winsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">25</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;qualityLevel&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.1</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;xStart&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;tile_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20000</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;laplacian_kernel_size&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;outliers_filtering&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;accuracy_analysis&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;confidence_threshold&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mf">0.4</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;plot_configuration&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;overview&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;shift_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bone_r&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;shift_auto_axes_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;shift_axes_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;theta_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;twilight_shifted&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;shift&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Spectral&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_auto_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_min_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;scatter_max_limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">4.0</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;histo_mean_bin_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;dem&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;show_fliers&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;histo_mean_bin_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;ce&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;fig_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">9</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;ce_scatter_colormap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;jet&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>This configuration includes:</p>
+<ul class="simple">
+<li><p><strong>KLT matching parameters</strong>: Corner detection, window sizes, quality thresholds</p></li>
+<li><p><strong>Accuracy analysis settings</strong>: Confidence thresholds for statistical calculations</p></li>
+<li><p><strong>Plot configurations</strong>: Figure sizes, color maps, axis limits</p></li>
+<li><p><strong>Large shift detection</strong>: Bias correction thresholds</p></li>
+</ul>
+<p>When using the CLI, runtime configuration is automatically created from command-line arguments.</p>
+</section>
+<section id="parameter-details">
+<h3>Parameter Details<a class="headerlink" href="#parameter-details" title="Link to this heading">#</a></h3>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">processing_configuration.shift_image_processing</span></code> (Large Shift Matching processing parameters)</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bias_correction_min_threshold</span></code>: Pixel threshold for applying large shift correction</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">processing_configuration.klt_matching</span></code> (Matching processing parameters)</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">xStart</span></code>: X margin to skip during matching</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tile_size</span></code>: Tile size for memory-efficient processing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">laplacian_kernel_size</span></code>: Aperture size for Laplacian filtering</p></li>
+</ul>
+<blockquote>
+<div><p>The following parameter allows to control how to find the most prominent corners in the
+reference image, as described by the OpenCV documentation goodFeaturesToTrack, after applying Laplacian.</p>
+</div></blockquote>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">minDistance</span></code>: Minimum distance between detected corners</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">blocksize</span></code>: Block size for derivative computation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">maxCorners</span></code>: Maximum corners to extract per tile. <code class="docutils literal notranslate"><span class="pre">0</span></code> implies that no limit on the maximum is set and all detected corners are returned.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">qualityLevel</span></code>: Minimum corner quality threshold</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">matching_winsize</span></code>: Search window size during matching</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">outliers_filtering</span></code>: Enable/disable outlier filtering</p></li>
+</ul>
+</li>
+</ul>
+<p>Refer to section <a class="reference internal" href="#klt-param-leverage"><span class="xref myst">KLT param leverage</span></a> for details</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">processing_configuration.accuracy_analysis</span></code></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">confidence_threshold</span></code>: Minimum confidence score for statistical analysis. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, not applied.</p></li>
+</ul>
+</li>
+</ul>
+<p>Plot configuration parameters for <code class="docutils literal notranslate"><span class="pre">overview</span></code>, <code class="docutils literal notranslate"><span class="pre">shift</span></code>, <code class="docutils literal notranslate"><span class="pre">dem</span></code>, and <code class="docutils literal notranslate"><span class="pre">ce</span></code> plots control figure sizes, color maps, and axis limits.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.overview</span></code> (overview plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Size of the generated figure in inches</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shift_colormap</span></code> : matplotlib color map name for the KP shift error scatter plot</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shift_auto_axes_limit</span></code> : auto compute KP shift error colorbar scale</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shift_axes_limit</span></code> : KP shift error colorbar maximum limit, N/A if <code class="docutils literal notranslate"><span class="pre">shift_auto_axes_limit</span></code> is <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">theta_colormap</span></code> : matplotlib color map name for the KP theta error scatter plot</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.shift</span></code> (shift by row/col group plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Size of the generated figure in inches</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_colormap</span></code> : matplotlib color map name for the KP shift scatter plot</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_auto_limit</span></code> : auto compute KP shift scatter plot limit</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_min_limit</span></code> : KP shift scatter plot minimum limit, N/A if <code class="docutils literal notranslate"><span class="pre">scatter_auto_limit</span></code> is <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scatter_max_limit</span></code> : KP shift scatter plot maximum limit, N/A if <code class="docutils literal notranslate"><span class="pre">scatter_auto_limit</span></code> is <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">histo_mean_bin_size</span></code> : KP shift histogram bin size (number of image row/col for the histogram bin)</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.dem</span></code> (shift by altitude group plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Size of the generated figure in inches</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">show_fliers</span></code> : draw fliers of box plot</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">histo_mean_bin_size</span></code>: KP altitude histogram bin size (altitude ranges size)</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">plot_configuration.ce</span></code> (Circular error plot parameters)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">fig_size</span></code> : Height size of the generated figure in inches, width is 5/3 of the height</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ce_scatter_colormap</span></code> : matplotlib color map name for the KP shift density scatter plot</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="outputs">
+<h3>Outputs<a class="headerlink" href="#outputs" title="Link to this heading">#</a></h3>
+<p>KARIOS generates several types of outputs:</p>
+<section id="statistical-files">
+<h4>Statistical Files<a class="headerlink" href="#statistical-files" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p><strong>CSV file</strong>: Key points with dx/dy deviations and confidence scores (see <a class="reference internal" href="#csv-output"><span class="xref myst">CSV Output section</span></a>)</p></li>
+<li><p><strong>correl_res.txt</strong>: Summary statistics (RMSE, CE90, etc.)</p></li>
+</ul>
+</section>
+<section id="visualizations">
+<h4>Visualizations<a class="headerlink" href="#visualizations" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p><strong>01_overview.png</strong>: Error distribution overview with image thumbnails</p></li>
+<li><p><strong>02_dx.png</strong>: X-direction displacement analysis by row/column</p></li>
+<li><p><strong>03_dy.png</strong>: Y-direction displacement analysis by row/column</p></li>
+<li><p><strong>04_ce.png</strong>: Circular error analysis with statistical summaries</p></li>
+<li><p><strong>dem_*.png</strong>: DEM-based altitude analysis (if DEM provided)</p></li>
+</ul>
+</section>
+<section id="products-optional">
+<h4>Products (Optional)<a class="headerlink" href="#products-optional" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p><strong>kp_mask.tif</strong>: Binary mask of key point locations (if <code class="docutils literal notranslate"><span class="pre">--generate-key-points-mask</span></code>)</p></li>
+<li><p><strong>kp_delta.tif</strong>: Two-band raster with dx/dy displacement values (if <code class="docutils literal notranslate"><span class="pre">--generate-intermediate-product</span></code>)</p></li>
+<li><p><strong>kp_delta.json</strong>: GeoJSON of key points with displacement vectors (if images are georeferenced, see <a class="reference internal" href="#geojson-output"><span class="xref myst">GeoJSON Output section</span></a>)</p></li>
+<li><p><strong>chips/</strong> directory: Directory with chip images of KP (see <a class="reference internal" href="#chip-images-optional"><span class="xref myst">Chip Images section</span></a>)</p></li>
+</ul>
+</section>
+<section id="id1">
+<h4>Configuration<a class="headerlink" href="#id1" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p>Copy of the processing configuration used</p></li>
+</ul>
+</section>
+</section>
+</section>
+<section id="output-file-formats">
+<h2>Output File Formats<a class="headerlink" href="#output-file-formats" title="Link to this heading">#</a></h2>
+<section id="csv-output">
+<h3>CSV Output<a class="headerlink" href="#csv-output" title="Link to this heading">#</a></h3>
+<p>KARIOS generates a CSV file containing all key points detected by the KLT matcher with their displacement measurements and quality metrics. The CSV file is saved as <code class="docutils literal notranslate"><span class="pre">KLT_matcher_{monitored_filename}_{reference_filename}.csv</span></code> in the output directory.</p>
+<section id="csv-columns">
+<h4>CSV Columns<a class="headerlink" href="#csv-columns" title="Link to this heading">#</a></h4>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Column</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Unit</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">x0</span></code></p></td>
+<td><p>X coordinate of key point in reference image</p></td>
+<td><p>pixels</p></td>
+<td><p>Column position (0-based)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">y0</span></code></p></td>
+<td><p>Y coordinate of key point in reference image</p></td>
+<td><p>pixels</p></td>
+<td><p>Row position (0-based)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dx</span></code></p></td>
+<td><p>Displacement in X direction (column)</p></td>
+<td><p>pixels</p></td>
+<td><p>Positive = eastward shift</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dy</span></code></p></td>
+<td><p>Displacement in Y direction (row)</p></td>
+<td><p>pixels</p></td>
+<td><p>Positive = southward shift</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">score</span></code></p></td>
+<td><p>KLT matching confidence score</p></td>
+<td><p>0.0-1.0</p></td>
+<td><p>Higher values indicate better matches</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">radial</span> <span class="pre">error</span></code></p></td>
+<td><p>Euclidean distance of displacement</p></td>
+<td><p>pixels</p></td>
+<td><p>√(dx² + dy²)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">angle</span></code></p></td>
+<td><p>Direction of displacement</p></td>
+<td><p>degrees</p></td>
+<td><p>Measured from east, counter-clockwise</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zncc_score</span></code></p></td>
+<td><p>Zero-mean Normalized Cross-Correlation score</p></td>
+<td><p>-1.0 to 1.0</p></td>
+<td><p>Optional: only if large shift detection is disabled</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Notes:</strong></p>
+<ul class="simple">
+<li><p>The CSV uses semicolon (<code class="docutils literal notranslate"><span class="pre">;</span></code>) as separator</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zncc_score</span></code> is only computed for a selection of key points with KLT score above the confidence threshold</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zncc_score</span></code> provides additional matching quality assessment using normalized cross-correlation</p></li>
+<li><p>All coordinates are in image pixel space (not geographic coordinates)</p></li>
+</ul>
+</section>
+</section>
+<section id="geojson-output">
+<h3>GeoJSON Output<a class="headerlink" href="#geojson-output" title="Link to this heading">#</a></h3>
+<p>When input images are georeferenced, KARIOS generates a GeoJSON file (<code class="docutils literal notranslate"><span class="pre">kp_delta.json</span></code>) containing key points as geographic features with displacement vectors and quality metrics.</p>
+<section id="geojson-structure">
+<h4>GeoJSON Structure<a class="headerlink" href="#geojson-structure" title="Link to this heading">#</a></h4>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;FeatureCollection&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;crs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;name&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;urn:ogc:def:crs:EPSG::{EPSG_CODE}&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;features&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Feature&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;geometry&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Point&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;coordinates&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">x_geographic</span><span class="p">,</span><span class="w"> </span><span class="err">y_geographic</span><span class="p">]</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;dx&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">displaceme</span><span class="kc">nt</span><span class="err">_x_pixels</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;dy&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">displaceme</span><span class="kc">nt</span><span class="err">_y_pixels</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;score&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">kl</span><span class="kc">t</span><span class="err">_co</span><span class="kc">nf</span><span class="err">ide</span><span class="kc">n</span><span class="err">ce_score</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;radial error&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">euclidea</span><span class="kc">n</span><span class="err">_displaceme</span><span class="kc">nt</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;angle&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">displaceme</span><span class="kc">nt</span><span class="err">_a</span><span class="kc">n</span><span class="err">gle_degrees</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;zncc_score&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">cross_correla</span><span class="kc">t</span><span class="err">io</span><span class="kc">n</span><span class="err">_score</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="feature-properties">
+<h4>Feature Properties<a class="headerlink" href="#feature-properties" title="Link to this heading">#</a></h4>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Property</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Unit</p></th>
+<th class="head"><p>Range</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dx</span></code></p></td>
+<td><p>X displacement in pixels</p></td>
+<td><p>pixels</p></td>
+<td><p>Real number</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dy</span></code></p></td>
+<td><p>Y displacement in pixels</p></td>
+<td><p>pixels</p></td>
+<td><p>Real number</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">score</span></code></p></td>
+<td><p>KLT matching confidence</p></td>
+<td><p>0.0-1.0</p></td>
+<td><p>Higher = better match</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">radial</span> <span class="pre">error</span></code></p></td>
+<td><p>Total displacement magnitude</p></td>
+<td><p>pixels</p></td>
+<td><p>≥ 0</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">angle</span></code></p></td>
+<td><p>Displacement direction</p></td>
+<td><p>degrees</p></td>
+<td><p>-180 to 180</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zncc_score</span></code></p></td>
+<td><p>Cross-correlation score</p></td>
+<td><p>-1.0 to 1.0</p></td>
+<td><p>Optional, can be <code class="docutils literal notranslate"><span class="pre">null</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Coordinate System:</strong></p>
+<ul class="simple">
+<li><p>Point coordinates are in the same coordinate reference system as the input images</p></li>
+<li><p>Coordinates are transformed from pixel space to geographic space using the image’s geotransform</p></li>
+<li><p>The CRS is specified in the <code class="docutils literal notranslate"><span class="pre">crs</span></code> object using the EPSG code from the reference image</p></li>
+</ul>
+</section>
+</section>
+</section>
+<section id="chip-images-optional">
+<h2>Chip Images (Optional)<a class="headerlink" href="#chip-images-optional" title="Link to this heading">#</a></h2>
+<p>When enabled with <code class="docutils literal notranslate"><span class="pre">--generate-kp-chips</span></code>, KARIOS generates small image patches (chips) centered on key points for visual inspection and quality assessment.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>--generate-kp-chips
+</pre></div>
+</div>
+<section id="chip-specifications">
+<h3>Chip Specifications<a class="headerlink" href="#chip-specifications" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>Size</strong>: 57×57 pixels per chip</p></li>
+<li><p><strong>Selection</strong>: Up to 125 chips using center + quarter strategy from a 5×5 grid overlay</p></li>
+<li><p><strong>Quality threshold</strong>: Only key points with KLT score ≥ confidence threshold are considered</p></li>
+<li><p><strong>Pairing</strong>: Each chip location generates two files (monitored and reference)</p></li>
+</ul>
+</section>
+<section id="output-structure">
+<h3>Output Structure<a class="headerlink" href="#output-structure" title="Link to this heading">#</a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>results/
+└── chips/
+    ├── {monitored_filename}/
+    │   ├── MON_1234_5678.TIFF
+    │   ├── MON_2345_6789.TIFF
+    │   └── ...
+    ├── {reference_filename}/
+    │   ├── REF_1234_5678.TIFF
+    │   ├── REF_2345_6789.TIFF
+    │   └── ...
+    ├── chips.csv
+    ├── monitored_chips.vrt
+    └── reference_chips.vrt
+</pre></div>
+</div>
+</section>
+<section id="generated-files">
+<h3>Generated Files<a class="headerlink" href="#generated-files" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">MON_{x}_{y}.TIFF</span></code></p></td>
+<td><p>Chip from monitored image at reference coordinates (x,y)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">REF_{x}_{y}.TIFF</span></code></p></td>
+<td><p>Chip from reference image at coordinates (x,y)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">chips.csv</span></code></p></td>
+<td><p>Metadata of selected key points used for chip generation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">*_chips.vrt</span></code></p></td>
+<td><p>Virtual raster mosaics for easy visualization in GIS software</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>Chips near image boundaries are automatically excluded</p></li>
+<li><p>Coordinate pairs (x,y) in filenames refer to the key point location in the reference image</p></li>
+<li><p>Chips are extracted at the detected displacement location in the monitored image</p></li>
+<li><p>VRT files enable easy visualization of all chips as a single mosaic in QGIS or similar tools</p></li>
+</ul>
+</div>
+</section>
+</section>
+<section id="klt-param-leverage">
+<h2>KLT param leverage<a class="headerlink" href="#klt-param-leverage" title="Link to this heading">#</a></h2>
+<section id="maxcorners-tile-size">
+<h3>maxCorners &amp; tile_size<a class="headerlink" href="#maxcorners-tile-size" title="Link to this heading">#</a></h3>
+<p>In order to have a lower memory usage during KLT process, it is possible to define a tile size to process for KLT.</p>
+<p>For example, a tile_size of 10000 for an image having a size of 20000 x 20000 pixels will result in 4 tiles to process.</p>
+<p>In this context, the KLT process will look in each tile for <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code>.</p>
+<p>While an image of 20000 x 20000 pixels results in 4 equals tiles, an image of 20000 x 15000 pixels will also result in 4 tiles, but with different size, two of 10000 x 10000 pixels and two of 10000 x 5000 pixels.</p>
+<p>The consequence is that the density for matching point will not be the same each tile, the bigger tiles will have a lower matching point density than the smallest.</p>
+<p>You should also consider that the image can contain empty parts where KLT will not find any matching point. So tiles having large empty parts will also results in a higher matching point density.</p>
+<p>In order to avoid density differences in the final result, you can define a <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> larger than the image with a high <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code>, or a small <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> and <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code> in order to have tiles with almost same size.</p>
+<p>For example, for image of 20000 x 15000 pixels, you should consider a <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> of 20000 (1 tile), or 5000 (12 equal tiles)</p>
+</section>
+</section>
+<section id="about-shift-by-altitude-plot">
+<h2>About shift by altitude plot<a class="headerlink" href="#about-shift-by-altitude-plot" title="Link to this heading">#</a></h2>
+<p>This output uses box plot to show statistics of KP on altitudes groups.</p>
+<p><em>The box extends from the first quartile (Q1) to the third quartile (Q3) of the data, with a line at the median. The whiskers extend from the box to the farthest data point lying within 1.5x the inter-quartile range (IQR) from the box. Flier points are those past the end of the whiskers. See https://en.wikipedia.org/wiki/Box_plot for reference.</em></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="n">Q1</span><span class="o">-</span><span class="mf">1.5</span><span class="n">IQR</span>   <span class="n">Q1</span>   <span class="n">median</span>  <span class="n">Q3</span>   <span class="n">Q3</span><span class="o">+</span><span class="mf">1.5</span><span class="n">IQR</span>
+                  <span class="o">|-----</span><span class="p">:</span><span class="o">-----|</span>
+  <span class="n">o</span>      <span class="o">|--------|</span>     <span class="p">:</span>     <span class="o">|--------|</span>    <span class="n">o</span>  <span class="n">o</span>
+                  <span class="o">|-----</span><span class="p">:</span><span class="o">-----|</span>
+<span class="n">flier</span>             <span class="o">&lt;-----------&gt;</span>            <span class="n">fliers</span>
+                       <span class="n">IQR</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p>credits https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.boxplot.html</p>
+</div></blockquote>
+</section>
+<section id="input-data-relationships">
+<h2>Input Data Relationships<a class="headerlink" href="#input-data-relationships" title="Link to this heading">#</a></h2>
+<p>Understanding how input files relate to each other:</p>
+<section id="image-compatibility">
+<h3>Image Compatibility<a class="headerlink" href="#image-compatibility" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>Monitored</strong> and <strong>Reference</strong> images must be compatible:</p>
+<ul>
+<li><p>Same footprint and resolution</p></li>
+<li><p>Same coordinate system (EPSG)</p></li>
+<li><p>Same pixel grid alignment</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="mask-usage">
+<h3>Mask Usage<a class="headerlink" href="#mask-usage" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>Mask</strong> file must be compatible with the <strong>monitored image</strong></p></li>
+<li><p>Used to exclude pixels from KLT feature detection</p></li>
+<li><p>Typical use cases: exclude water bodies, clouds, or invalid data areas</p></li>
+<li><p>Pixel value 0 = exclude from matching, non-zero = include</p></li>
+</ul>
+</section>
+<section id="dem-usage">
+<h3>DEM Usage<a class="headerlink" href="#dem-usage" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>DEM</strong> file must be compatible with the <strong>reference image</strong></p></li>
+<li><p>Used to extract altitude values at key point locations</p></li>
+<li><p>Enables analysis of geometric errors vs terrain elevation</p></li>
+<li><p>Helps identify elevation-dependent systematic errors</p></li>
+</ul>
+</section>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h2>
+<section id="common-issues">
+<h3>Common Issues<a class="headerlink" href="#common-issues" title="Link to this heading">#</a></h3>
+<section id="image-compatibility-errors">
+<h4>Image Compatibility Errors<a class="headerlink" href="#image-compatibility-errors" title="Link to this heading">#</a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">KariosException</span><span class="p">:</span> <span class="n">Monitored</span> <span class="n">image</span> <span class="n">geo</span> <span class="n">info</span> <span class="ow">not</span> <span class="n">compatible</span> <span class="k">with</span> <span class="n">reference</span> <span class="n">image</span>
+</pre></div>
+</div>
+<p><strong>Solution</strong>: Ensure both images have:</p>
+<ul class="simple">
+<li><p>Same coordinate system (EPSG code)</p></li>
+<li><p>Same pixel resolution</p></li>
+<li><p>Same geographic extent</p></li>
+<li><p>Same grid alignment</p></li>
+</ul>
+</section>
+<section id="mask-or-dem-compatibility-errors">
+<h4>Mask or DEM Compatibility Errors<a class="headerlink" href="#mask-or-dem-compatibility-errors" title="Link to this heading">#</a></h4>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">KariosException</span><span class="p">:</span> <span class="n">Mask</span> <span class="n">geo</span> <span class="n">info</span> <span class="ow">not</span> <span class="n">compatible</span> <span class="k">with</span> <span class="n">monitored</span> <span class="n">image</span>
+</pre></div>
+</div>
+<p><strong>Solution</strong>: Ensure mask has the same geometry as monitored image</p>
+</section>
+</section>
+<section id="performance-optimization">
+<h3>Performance Optimization<a class="headerlink" href="#performance-optimization" title="Link to this heading">#</a></h3>
+<section id="for-large-images">
+<h4>For Large Images<a class="headerlink" href="#for-large-images" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p>Use smaller <code class="docutils literal notranslate"><span class="pre">tile_size</span></code> (e.g., 5000-10000 pixels)</p></li>
+<li><p>Reduce <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code> per tile</p></li>
+<li><p>Enable <code class="docutils literal notranslate"><span class="pre">outliers_filtering:</span> <span class="pre">false</span></code> for faster processing</p></li>
+</ul>
+</section>
+<section id="for-high-accuracy">
+<h4>For High Accuracy<a class="headerlink" href="#for-high-accuracy" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p>Increase <code class="docutils literal notranslate"><span class="pre">maxCorners</span></code> for more key points</p></li>
+<li><p>Use smaller <code class="docutils literal notranslate"><span class="pre">matching_winsize</span></code> for precise matching</p></li>
+<li><p>Increase <code class="docutils literal notranslate"><span class="pre">qualityLevel</span></code> for better corner quality</p></li>
+</ul>
+</section>
+</section>
+</section>
+<section id="advanced-features">
+<h2>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading">#</a></h2>
+<section id="large-shift-detection">
+<h3>Large Shift Detection<a class="headerlink" href="#large-shift-detection" title="Link to this heading">#</a></h3>
+<p>When enabled with <code class="docutils literal notranslate"><span class="pre">--enable-large-shift-detection</span></code>, KARIOS can detect and compensate for large pixel offsets between images:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>--enable-large-shift-detection
+</pre></div>
+</div>
+<p><strong>Use cases</strong>:</p>
+<ul class="simple">
+<li><p>Images with significant misalignment</p></li>
+<li><p>Coarse co-registration before fine matching</p></li>
+<li><p>Detection of systematic offsets</p></li>
+</ul>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Experimental feature that may use significant memory for large images.</p>
+</div>
+</section>
+<section id="resume-functionality">
+<h3>Resume Functionality<a class="headerlink" href="#resume-functionality" title="Link to this heading">#</a></h3>
+<p>Skip KLT matching and reuse previous results:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>karios<span class="w"> </span>process<span class="w"> </span>monitored.tif<span class="w"> </span>reference.tif<span class="w"> </span>--resume<span class="w"> </span>--out<span class="w"> </span>./existing_results
+</pre></div>
+</div>
+<p><strong>Requirements</strong>:</p>
+<ul class="simple">
+<li><p>Previous KLT CSV results must exist in output directory</p></li>
+<li><p>Same images pair and configuration</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="case_study/mss.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">MSS</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="cookbook/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Cookbook</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#environment-setup">Environment Setup</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-installation">Verify Installation</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#input-requirements-and-recommendations">Input Requirements and recommendations</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cli-usage">CLI Usage</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#command-structure">Command Structure</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#arguments">Arguments</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-processing">Basic Processing</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#with-mask">With Mask</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#with-mask-and-dem">With Mask and DEM</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#dem-only-no-mask">DEM Only (No Mask)</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#full-workflow-with-options">Full Workflow with Options</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#resume-previous-analysis">Resume Previous Analysis</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#cli-options">CLI Options</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#processing-options">Processing Options</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#output-options">Output Options</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-options">Advanced Options</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#logging-options">Logging Options</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#processing-configuration">Processing Configuration</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#parameter-details">Parameter Details</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#outputs">Outputs</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#statistical-files">Statistical Files</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#visualizations">Visualizations</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#products-optional">Products (Optional)</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Configuration</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-file-formats">Output File Formats</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#csv-output">CSV Output</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#csv-columns">CSV Columns</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#geojson-output">GeoJSON Output</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#geojson-structure">GeoJSON Structure</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#feature-properties">Feature Properties</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#chip-images-optional">Chip Images (Optional)</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#chip-specifications">Chip Specifications</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#output-structure">Output Structure</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#generated-files">Generated Files</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#klt-param-leverage">KLT param leverage</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#maxcorners-tile-size">maxCorners &amp; tile_size</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#about-shift-by-altitude-plot">About shift by altitude plot</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#input-data-relationships">Input Data Relationships</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#image-compatibility">Image Compatibility</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mask-usage">Mask Usage</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dem-usage">DEM Usage</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#troubleshooting">Troubleshooting</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#common-issues">Common Issues</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#image-compatibility-errors">Image Compatibility Errors</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#mask-or-dem-compatibility-errors">Mask or DEM Compatibility Errors</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#performance-optimization">Performance Optimization</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#for-large-images">For Large Images</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#for-high-accuracy">For High Accuracy</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-features">Advanced Features</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#large-shift-detection">Large Shift Detection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resume-functionality">Resume Functionality</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2023-2026, Telespazio.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.4.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
