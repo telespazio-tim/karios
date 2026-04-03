@@ -10,9 +10,12 @@ it works in MD with myst_parser by enabling myst extension fieldlist
 :hidden:
 :maxdepth: 2
 
-prisma
-sen2like
+skysat
+proba
 mss
+ccm
+edap
+
 ```
 
 This show how KARIOS is useful for our works.
@@ -32,8 +35,8 @@ Grid works in MD thanks to myst extension colon_fence
 :::::{grid} 2
 <!-- item 1 -->
 ::::{grid-item}
-:::{card} PRISMA
-:link: prisma
+:::{card} SKYSAT / LiDAR Processing
+:link: skysat
 :link-type: ref
 
 ```{todo}
@@ -45,8 +48,8 @@ Write short description
 
 <!-- item 2 -->
 ::::{grid-item}
-:::{card} Sen2like
-:link: sen2like
+:::{card} PROBA Processing
+:link: proba
 :link-type: ref
 
 ```{todo}
@@ -58,7 +61,7 @@ Write short description
 
 <!-- item 3 -->
 ::::{grid-item}
-:::{card} MSS
+:::{card} MSS Processing
 :link: mss
 :link-type: ref
 
@@ -69,5 +72,32 @@ Write short description
 ::::
 <!-- EO item 3 -->
 
-:::::
+<!-- item 4 -->
+::::{grid-item}
+:::{card} CCM Copernicus
+:link: ccm
+:link-type: ref
+
+```{todo}
+Write short description
+```
+:::
+::::
+
+<!-- EO item 4 -->
+
+<!-- item 5 -->
+::::{grid-item}
+:::{card} EDAP Processing
+:link: edap
+:link-type: ref
+
+```{todo}
+Write short description
+```
+:::
+::::
+<!-- EO item 5 -->
+
+::::
 <!-- EO Grid -->
