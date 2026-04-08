@@ -1,9 +1,17 @@
-(mss)=
+(mss_cs)=
 
-# MSS
+# MSS Processing
 
 ## Introduction
 This case shows the Landsat MSS geometric processing and KARIOS results.
+
+The land monitoring community expects consistent and harmonised long-term datasets, in order to derive Essential Climate Variables (ECV).
+Within this context, in complement to Thematic Mapper (TM) and Enhanced Thematic Mapper (ETM) data, the ESA archive includes also Landsat Multi
+Spectral Scanner (MSS) data, which represent an outstanding source of historical data [RD-1](rd-01).
+In the last decades, many efforts spent in the consolidation of this ESA archive, focusing on raw data repatriation, definition of new product type and bulk
+processing of the full archive (ESA SLAP [RD-2](rd-02), [RD-3](rd-03), [RD-4](rd-04)).
+Nonetheless, in the era of data cube, the MSS data is now requiring challenging algorithm developments to ensure that all threshold requirements, as defined
+by the CEOS Analysis Ready Data For Land (CARD4L) Surface Reflectance (SR) Product Family Specifications (PFS), ([RD-5](rd-05)), are met.
 
 ```{figure} mss.png
 :name: mss
@@ -14,15 +22,48 @@ MSS Processing overview
 
 ## 1. MSS Geometric Correction
 
-The objective is to apply a poly-harmonic splines geometric transformation model to MSS data to account for local deformation.
-The poly-harmonic splines are a linear combination of Radial Basis Functions (RBFs) plus a 2nd degree polynomial term :
+The status is that the geometric accuracy of delivered Landsat
+MSS ESA/SLAP products is not sufficient to reach CEOS ARD
+compliancy at threshold level, because their multi temporal
+registration accuracy is not sub pixel. The bad precision of the
+geolocation is a major contributor to uncertainty lost, It
+prevents to reach 0.5 pixel RMSE multi temporal accuracy.
+
+The current ESA-MSS geo-processing is correct and include
+state of art geometric calibration algorithm (bundle block
+adjustment).
+
+The objective is to apply a poly-harmonic splines geometric transformation model to MSS data to account for local deformation. Also, a way forward might be to correct for local geometric distortions by using Radial Basis Functions (RBF) as proposed
+in ([RD-6](rd-06), [RD-7](rd-07)).
+The poly-harmonic splines are a linear combination of RBFs plus a 2nd degree polynomial term :
 
 ```{figure} formule1.png
 :name: formule1
 :width: 300px
 
 ```
-The model is applied for co registration of MSS Data to a common reference map, and is calibrated by using reference GCP set defined for every cell.
+Where :
+
+* N represents the total number of cells
+* Ci the cell center coordinate
+* Wi the weighting factor to be estimated
+* The model is applied for co-registration of MSS L1C data to a common reference map.
+* The model is calibrated by using reference GCP set (control point) defined for every cell (ci)
+* Cells are selected into input images, the number / dimension of cells play an important role in the final result.
+
+The following chart summarizes the RBF chain : 
+
+```{figure} rbf.png
+:name: rbf
+:width: 300px
+
+```
+
+* Data Preparation: clipping over the same geo extent
+* Matching: Collect Dense GCPs by using KARIOS applied on image twin (MSS Image, S2 image)
+* Poly Harmonic Model Calibration: Process GCPs grid, select GCPs relevant for calibration, and applied least square.
+* Warping: Transform input MSS image with poly harmonic model and generate output MSS Geo Re calibrated product
+* Validation: Use KARIOS, to check co registration between S2 ref and output image.
 
 ## 2. Example results
 

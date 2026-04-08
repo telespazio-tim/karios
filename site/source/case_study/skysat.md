@@ -3,10 +3,10 @@
 # SKYSAT / LiDAR Processing
 
 ## Introduction
-This case shows an example on how to interpret and use KARIOS results to create a strategy to get better results by changing the input parameters or applying a preprocessing.
+This case shows an example on how to interpret and use KARIOS results to create a strategy to get better results by changing the input parameters or applying a preprocessing on Skysat images.
 
 
-### 1. Initial results
+## 1. Initial results
 
 The two images are first compared without any preprocessing, with a basic configuration :
 
@@ -37,15 +37,14 @@ Geometric errors distribution - Skysat / USGS LiDAR before opimization
 
 ```{warning}
 
-Prefer performing the match on large areas
-
-Always use images with int value
+* Prefer performing the match on large areas
+* Always use images with int value
 ```
 
 These results look good but are misleading as the algorithm does not provide a relevant matching.
 Manual measurements show a geometric shift which is close to 10m.
 
-### 2. Laplacian optimization
+## 2. Laplacian optimization
 
 KARIOS tool matching approach is based on Kanade-Lucas-Tomasi feature
 detector algorithm. The two input intensity value images (Reference / Monitored) are filtered
@@ -108,7 +107,7 @@ DY pixel shift (mean/STD) - Skysat / USGS LiDAR after laplacian opimization
 Geometric errors distribution - Skysat / USGS LiDAR after laplacian opimization
 ```
 
-### 3. Downsampling
+## 3. Downsampling
 
 
 A second option consists in applying down sampling to a lower spatial resolution, e.g 3.0 m pixel

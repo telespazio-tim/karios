@@ -1,27 +1,10 @@
 <!-- # Welcome to Karios's documentation! -->
 
 ```{rst-class} font-weight-bold big-font
-Python application based on KLT Algorithm for Registration of Images from Observing Systems (KARIOS). Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Python application based on KLT Algorithm for Registration of Images from Observing Systems (KARIOS).
 ```
-
-# Case studies
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-
-Visit [Case studies page](case_study/index)
 
 # Getting started
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-
-<!--
-1 3 3 3 with gutter 2 allows to have a good vertical alignment
-trick found here : https://docs.sepal.io/en/latest/_sources/index.rst.txt
--->
-
-```{todo}
-**TO BE REFINED : Install / Limitations / Configure ?**
-```
 
 :::::{grid} 1 3 3 3
 :gutter: 2
@@ -52,16 +35,19 @@ A sample of how to run KARIOS.
 
 :::::
 
+# Case studies
+
+This section contains multiple examples of KARIOS usages, featuring different imaging sources (Landsat MSS, PROBA/CHRIS, SKYSAT, ...) showing how to use and analyze the tool's results. 
+
+Visit [Case studies page](case_study/index)
+
+
 # Cookbook
 
-Learn how to configure KARIOS to achieve your goal.
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Learn how to understand KARIOS outputs and configure the parameters to achieve your goal.
 
 Visit [Case Cookbook page](cookbook/index)
 
 # References
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
 Visit [References page](references)
