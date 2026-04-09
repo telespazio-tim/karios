@@ -36,6 +36,15 @@ Series Co-Registration». Remote Sensing of Environment 252: 112181. https://doi
 S. Saunier et al., On the use of Radial Basis Functions to improve geometric accuracy of the ESA Landsat MSS historical archive.
 VH RODA 2024, https://zenodo.org/records/14960373
 
+(rd-08)=
+## RD‑08
+EDAP Webpage :
+https://earth.esa.int/eogateway/activities/edap
+
+(rd-09)=
+## RD‑09
+Kanade–Lucas–Tomasi : https://en.wikipedia.org/wiki/Kanade%E2%80%93Lucas%E2%80%93Tomasi_feature_tracker
+
 <!-- ➢ 
 
 ➢ [RD-6] Landsat Products, Algorithms and Processing (MSS, TM & ETM+), IDEAS+-MAG-SRV-REP-2266, May 2015,

@@ -2,6 +2,6 @@
 
 # CCM Processing
 
-```{todo}
-TBW
+```{note}
+Coming soon
 ```

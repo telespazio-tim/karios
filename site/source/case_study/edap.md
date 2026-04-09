@@ -2,6 +2,6 @@
 
 # EDAP Processing
 
-```{todo}
-TBW
+```{note}
+Coming soon
 ```

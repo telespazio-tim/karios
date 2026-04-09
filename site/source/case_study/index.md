@@ -63,8 +63,8 @@ Landsat MSS geometric correction using TPS
 :link: ccm
 :link-type: ref
 
-```{todo}
-Write short description
+```{note}
+Coming soon
 ```
 :::
 ::::
@@ -77,8 +77,8 @@ Write short description
 :link: edap
 :link-type: ref
 
-```{todo}
-Write short description
+```{note}
+Coming soon
 ```
 :::
 ::::
