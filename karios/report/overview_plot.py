@@ -124,21 +124,15 @@ class OverviewPlot(AbstractPlot):
     def _plot_image(self, axes: Axes, img: GdalRasterImage, title: str) -> None:
         """Plot image with adaptive contrast for satellite imagery.
 
-        Uses cumulative count cut (2%-98%) matching QGIS default raster
-        display behavior for consistent visualization.
+        Uses cumulative count cut (0.5%-99.5%) for consistent visualization.
         """
         axes.set_title(title)
 
-        # Use only finite pixels for statistics
-        valid_pixels = img.array[np.isfinite(img.array)]
+        valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0)]
         if len(valid_pixels) > 0:
-            v_min = np.percentile(valid_pixels, 2)
-            v_max = np.percentile(valid_pixels, 98)
+            v_min = np.percentile(valid_pixels, 0.5)
+            v_max = np.percentile(valid_pixels, 99.5)                
         else:
-            v_min, v_max = 0, 1
-
-        # Fallback if range is invalid
-        if v_min >= v_max:
             v_min = np.nanmin(img.array)
             v_max = np.nanmax(img.array)
 
