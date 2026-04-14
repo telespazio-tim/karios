@@ -3,7 +3,9 @@
 # MSS Processing
 
 ## Introduction
-This case shows the Landsat MSS geometric processing and KARIOS results.
+
+The KARIOS tool can be easily integrated into a more complex geometric calibration processing in charge of Landsat MSS L1C product refinement [RD-11](rd-11).
+This case shows how KARIOS results are used to estimate the deformation model, subsequently used for warping to Sentinel 2 reference image grid. Furthermore, KARIOS is used to check the quality of resulting L1C refined image. An in depth analysis, based on large dataset confirms that the proposed approach is relevant.
 
 The land monitoring community expects consistent and harmonised long-term datasets, in order to derive Essential Climate Variables (ECV).
 Within this context, in complement to Thematic Mapper (TM) and Enhanced Thematic Mapper (ETM) data, the ESA archive includes also Landsat Multi
@@ -25,8 +27,8 @@ MSS Processing overview
 The status is that the geometric accuracy of delivered Landsat
 MSS ESA/SLAP products is not sufficient to reach CEOS ARD
 compliancy at threshold level, because their multi temporal
-registration accuracy is not sub pixel. The bad precision of the
-geolocation is a major contributor to uncertainty lost, It
+registration accuracy is not sub-pixel. The bad precision of the
+geolocation is a major contributor to uncertainty loss, It
 prevents to reach 0.5 pixel RMSE multi temporal accuracy.
 
 The current ESA-MSS geo-processing is correct and include
@@ -61,9 +63,9 @@ The following chart summarizes the RBF chain :
 
 * Data Preparation: clipping over the same geo extent
 * Matching: Collect Dense GCPs by using KARIOS applied on image twin (MSS Image, S2 image)
-* Poly Harmonic Model Calibration: Process GCPs grid, select GCPs relevant for calibration, and applied least square.
-* Warping: Transform input MSS image with poly harmonic model and generate output MSS Geo Re calibrated product
-* Validation: Use KARIOS, to check co registration between S2 ref and output image.
+* Poly Harmonic Model Calibration: process GCPs grid, select GCPs relevant for calibration, and apply least square.
+* Warping: transform input MSS image with polyharmonic model and generate output MSS Geo re-calibrated product
+* Validation: use KARIOS, to check co-registration between S2 reference and output image.
 
 ## 2. Example results
 
@@ -185,3 +187,9 @@ Circular error plot - All products - Landsat MSS / S2 (Poland)
 
 The scale is different in the before/after plots.
 ```
+
+## Conclusion 
+
+The results show a significant improvement in the global RMSE, in particular in the south of France and Poland dataset. For Greenland, the improvement is more limited as the mountainous terrain and the high ice coverage hinders the possibility to have a good KARIOS matching. Many parameters have been studied (number of cells, etc) with most of them being KARIOS parameters, which plays a key role in the geometric process.
+
+```{include} ../_includes/endnote.md

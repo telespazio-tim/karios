@@ -3,8 +3,10 @@
 # SKYSAT / LiDAR Processing
 
 ## Introduction
-This case shows an example on how to interpret and use KARIOS results to create a strategy to get better results by changing the input parameters or applying a preprocessing on Skysat images.
 
+The KARIOS tool can be used for matching images from different sensor types, in the herein page the Geometric Registration of a Skysat image against a reference LIDAR image is reported.
+ 
+This use case shows that KARIOS intermediate results should be carefully checked in order to define the most appropriate matching configuration (input parameters). Futhermore, beside configuration, image pre processing is also required.
 
 ## 1. Initial results
 
@@ -63,7 +65,7 @@ image corners can be matched :
 
 Computed laplacian - Skysat / USGS LiDAR before opimization
 ```
-In case of Skysat (on the left) and LIDAR (on the right), significant differences are observed. In the LIDAR image, edges are
+In case the of Skysat (on the left) and LIDAR (on the right), significant differences are observed. In the LIDAR image, edges are
 very sharp compared to the ones in Skysat image, which are more blurred. Both images are also quite noisy.
 
 A solution consists in applying a low-pass filtering (Gaussian filters, Median filters) to both images in order to
@@ -76,9 +78,9 @@ get more comparable Laplacian image set​. The laplacian kernel size can also b
 Computed laplacian - Skysat / USGS LiDAR after opimization
 
 ```
-As observed visually, the best configuration is to have :
-
-Gaussian kernel size = 17​ and Laplacian kernal size = 13​.
+As observed visually, the best configuration is to have:
+* Gaussian kernel size = 17​
+* Laplacian kernal size = 13​
 
 Nevertheless, the KARIOS results show that the algorithm still does not captures the real geometric difference :
 
@@ -110,11 +112,10 @@ Geometric errors distribution - Skysat / USGS LiDAR after laplacian opimization
 ## 3. Downsampling
 
 
-A second option consists in applying down sampling to a lower spatial resolution, e.g 3.0 m pixel
-spacing. (the original resolution was 0.5 m)
+A second option consists in sampling the images to a lower spatial resolution, e.g 3.0 m pixel
+spacing (the original resolution was 0.5 m)
 
-Indeed, KARIOS matching does not work at full resolution​ because of image quality issue​s, spatial resolution differences​
-and geometric deformations.
+Indeed, KARIOS matching does not work at full resolution​ because of image quality issue​s, spatial resolution differences​ and geometric deformations.
 
 Downsampling gives a smaller and more simple laplacian : 
 
@@ -155,18 +156,20 @@ DY pixel shift (mean/STD) - Skysat / USGS LiDAR at 3 meters
 Geometric errors distribution - Skysat / USGS LiDAR at 3 meters
 ```
 
-
+The deformation can now be detected by the matching algorithm.
 In the end, downsampling is a good approach​ which provides accuracy within pixel, but precision is degraded​.
 Results are consistent with the geometric deformations observed.
 
 ## Conclusion
 
-KARIOS has been used to assess SKS image against LIDAR Image​.
+* KARIOS has been used to assess SKS image against LIDAR Image​.
 
-Pre-processing and downsampling are required to in order to fully assess SKS geometry​.
+* Pre-processing and downsampling are required to in order to fully assess SKS geometry​.
 
-Automatic image Matching and manual image measurementsare matching.​
+* Automatic image Matching and manual image measurements are matching.​
 
-Within the uncertainty budget, similar results (and shape) areachieved against S2 data.​
+* Within the uncertainty budget, similar results (and shape) areachieved against S2 data.​
 
-When correcting SKS image for static error (about 5.0 m in both directions), uncertainty (RMSE) reaches 7.0 m.
+* When correcting SKS image for static error (about 5.0 m in both directions), uncertainty (RMSE) reaches 7.0 m.
+
+```{include} ../_includes/endnote.md

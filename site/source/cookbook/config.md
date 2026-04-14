@@ -84,3 +84,5 @@ A higher value will provide more relevant points with a high confidence value, w
 A lower value will take a lot of points in consideration which can include less relevant results but with nicer display.
 
 This value does not impact the tracking.
+
+```{include} ../_includes/endnote.md

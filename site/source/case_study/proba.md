@@ -3,13 +3,17 @@
 # PROBA/CHRIS Processing
 
 ## Introduction
-This case shows the PROBA/CHRIS geographic calibration. CHRIS images can be heavily distorted and are geographically inacurate.
 
-Before running KARIOS, they need to be replaced roughly in the reference corresponding area, and also scaled/rotated in some cases.
+The KARIOS tool can be easily integrated into a more complex geometric calibration processing.
+ 
+This is what has been proposed as prototype in the context of PROBA-1/CHRIS Heritage Mission (ESA/ QA4EO 2 project) [RD-10](rd-10).
+With the objective of creating a multi-temporal dataset, achieving a good registration of input PROBA-1 images against a reference map is mandatory.
 
-The KARIOS results will then be used to perform a Thin Plate Spline (TPS) correction that will refine the pixel displacement.
+There were several concerns regarding geometric quality of PROBA-1 images.
+The a priori geolocation accuracy of input image is rarely below 5.0 km and cannot be improved due to missing telemetry.
+Input images are generally strongly distorted.
 
-The process is summarized in this chart : 
+The general process is summarized in this chart : 
 
 ```{figure} chris.png
 :name: chris
@@ -108,4 +112,6 @@ Geometric errors overview - CHRIS / S2 LiDAR after additional TPS correction (18
 Geometric errors distribution - CHRIS / S2 LiDAR after additional TPS correction (18m)
 ```
 
-The results now show a significant improvement in terms of metrics and the two image can now be compared with a full coverage at native resolution.
+The results now show a significant improvement in terms of metrics and the two images can now be compared with a full coverage at native resolution.
+
+```{include} ../_includes/endnote.md
