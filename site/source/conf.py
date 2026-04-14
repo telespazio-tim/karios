@@ -22,7 +22,7 @@ extensions = [
     "sphinx_design",
     "sphinx.ext.todo",
     "sphinx.ext.githubpages",
-    "sphinxcontrib.images",
+    # "sphinxcontrib.images",
 ]
 
 templates_path = ["_templates"]
