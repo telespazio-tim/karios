@@ -12,22 +12,21 @@
     src: url('_fonts/TekneLDOVariable.ttf') format('woff');
 }
 
-/* @font-face {
-font-family: 'Public Sans Thin';
-font-style: normal;
-font-weight: normal;
-src: local('Public Sans Thin'), url('_static/fonts/PublicSans-Thin.woff') format('woff');
+@font-face {
+    font-family: 'Public Sans Thin';
+    font-style: normal;
+    font-weight: normal;
+    src: local('Public Sans Thin'), url('_static/fonts/PublicSans-Thin.woff') format('woff');
 }
 
 @font-face {
-font-family: 'Public Sans Medium';
-font-style: normal;
-font-weight: normal;
-src: local('Public Sans Medium'), url('_static/fonts/PublicSans-Medium.woff') format('woff');
-} */
+    font-family: 'Public Sans Medium';
+    font-style: normal;
+    font-weight: normal;
+    src: local('Public Sans Medium'), url('_static/fonts/PublicSans-Medium.woff') format('woff');
+}
 
-
-html {
+*/ html {
     --pst-font-family-base-system: 'Public Sans Regular';
     --pst-color-primary: #37424a !important;
     --pst-color-secondary: #6B92B2 !important;
