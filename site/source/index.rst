@@ -16,8 +16,8 @@
         .bd-header-article{display: none;} /* hide breadcrumbs*/
     </style>
 
-.. important::
-    Site under construction
+.. .. important::
+..     Site under construction
 
 .. This title is not displayed due to custom css above (h1)
 
@@ -33,8 +33,8 @@ Welcome to Karios's documentation!
    :maxdepth: 1
    :caption: Contents:
 
-   case_study/index
    quickstart
+   case_study/index
    cookbook/index
    references
 

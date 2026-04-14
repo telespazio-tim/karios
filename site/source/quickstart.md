@@ -52,7 +52,7 @@ pip install .
 Karios is now installed in its conda envronement, you are ready to use it.
 
 :::{note}
-The conda environment stay active until you close your terminal session. You need to activate it every time you start a new session and want to use KARIOS in the terminal session.
+The conda environment stays active until you close your terminal session. You need to activate it every time you start a new session to use KARIOS.
 :::
 
 ### Verify Installation
@@ -104,7 +104,7 @@ Recommendation:
 ## CLI Usage
 
 :::{important}
-**All commands below suppose that the karios conda environment is activated**
+**All commands below suppose that the karios conda environment is activated.**
 :::
 
 ### Command Structure
@@ -175,33 +175,33 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 | Option | Type | Description |
 |--------|------|------------|
 | `--conf` | FILE | Configuration file path. Default is the built-in configuration.<br>[default: <INSTALL_DIR>/karios/configuration/processing_configuration.json] |
-| `--resume` | Flag | Do not run KLT matcher, only accuracy analysis and report generation |
-| `--input-pixel-size`, `-pxs` | FLOAT | Input image pixel size in meter. Ignored if image resolution can be read from input image |
+| `--resume` | Flag | Do not run KLT matcher, only accuracy analysis and report generation. |
+| `--input-pixel-size`, `-pxs` | FLOAT | Input image pixel size in meter. Ignored if image resolution can be read from input image. |
 
 #### Output Options
 
 | Option | Type | Description |
 |--------|------|------------|
 | `--out` | PATH | Output results folder path [default: results] |
-| `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts.<br>(limited to 26 characters) |
-| `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
-| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
-| `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products |
-| `--dem-description` | TEXT | DEM source name. Added in generated DEM plots.<br>Example: "COPERNICUS DEM resampled to 10m" |
+| `--title-prefix`, `-tp` | TEXT | Add prefix to title of generated output charts.<br>(limited to 26 characters). |
+| `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL. |
+| `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 (dx) and band 2 (dy).|
+| `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products. |
+| `--dem-description` | TEXT | DEM source name. Added in generated DEM plots.<br>Example: "COPERNICUS DEM resampled to 10m." |
 
 #### Advanced Options
 
 | Option | Type | Description |
 |--------|------|------------|
-| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts |
+| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts. |
 
 #### Logging Options
 
 | Option | Type | Description |
 |--------|------|------------|
-| `--debug`, `-d` | FLAG | Enable Debug mode |
-| `--no-log-file` | FLAG | Do not log in file (not compatible with `--log-file-path`) |
-| `--log-file-path` | PATH | Log file path [default: karios.log] |
+| `--debug`, `-d` | FLAG | Enable Debug mode. |
+| `--no-log-file` | FLAG | Do not log in file (not compatible with `--log-file-path`). |
+| `--log-file-path` | PATH | Log file path [default: karios.log]. |
 
 ## Configuration
 
@@ -216,34 +216,32 @@ The processing configuration defines algorithm parameters and is loaded from JSO
   ```
 
 This configuration includes:
-- **KLT matching parameters**: Corner detection, window sizes, quality thresholds
-- **Accuracy analysis settings**: Confidence thresholds for statistical calculations  
-- **Plot configurations**: Figure sizes, color maps, axis limits
-- **Large shift detection**: Bias correction thresholds
+- **KLT matching parameters**: Corner detection, window sizes, quality thresholds.
+- **Accuracy analysis settings**: Confidence thresholds for statistical calculations.  
+- **Plot configurations**: Figure sizes, color maps, axis limits.
+- **Large shift detection**: Bias correction thresholds.
 
 When using the CLI, runtime configuration is automatically created from command-line arguments.
 
 ### Parameter Details
 
 - `processing_configuration.shift_image_processing` (Large Shift Matching processing parameters)
-  - `bias_correction_min_threshold`: Pixel threshold for applying large shift correction
+  - `bias_correction_min_threshold`: Pixel threshold for applying large shift correction.
 
 - `processing_configuration.klt_matching` (Matching processing parameters)
-  - `xStart`: X margin to skip during matching
-  - `tile_size`: Tile size for memory-efficient processing
-  - `laplacian_kernel_size`: Aperture size for Laplacian filtering
-
-  > The following parameter allows to control how to find the most prominent corners in the
-  reference image, as described by the OpenCV documentation goodFeaturesToTrack, after applying Laplacian.
-
-  - `minDistance`: Minimum distance between detected corners
-  - `blocksize`: Block size for derivative computation
+  - `xStart`: X margin to skip during matching.
+  - `tile_size`: Tile size for memory-efficient processing.
+  - `laplacian_kernel_size`: Aperture size for Laplacian filtering.
+  - `minDistance`: Minimum distance between detected corners.
+  - `blocksize`: Block size for derivative computation.
   - `maxCorners`: Maximum corners to extract per tile. `0` implies that no limit on the maximum is set and all detected corners are returned.
-  - `qualityLevel`: Minimum corner quality threshold
-  - `matching_winsize`: Search window size during matching
-  - `outliers_filtering`: Enable/disable outlier filtering
+    > The following parameter allows to control how to find the most prominent corners in the
+  reference image, as described by the OpenCV documentation goodFeaturesToTrack, after applying Laplacian.
+  - `qualityLevel`: Minimum corner quality threshold.
+  - `matching_winsize`: Search window size during matching.
+  - `outliers_filtering`: Enable/disable outlier filtering.
 
-Refer to section [KLT param leverage](#klt-param-leverage) for details
+Refer to section [KLT param leverage](#klt-param-leverage) for details.
 
 - `processing_configuration.accuracy_analysis`
   - `confidence_threshold`: Minimum confidence score for statistical analysis. If `None`, not applied.
@@ -251,28 +249,28 @@ Refer to section [KLT param leverage](#klt-param-leverage) for details
 Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots control figure sizes, color maps, and axis limits.
 
 - `plot_configuration.overview` (overview plot parameters)
-  - `fig_size` : Size of the generated figure in inches
-  - `shift_colormap` : matplotlib color map name for the KP shift error scatter plot
-  - `shift_auto_axes_limit` : auto compute KP shift error colorbar scale
-  - `shift_axes_limit` : KP shift error colorbar maximum limit, N/A if `shift_auto_axes_limit` is `true`
-  - `theta_colormap` : matplotlib color map name for the KP theta error scatter plot
+  - `fig_size` : size of the generated figure
+  - `shift_colormap` : matplotlib color map name for the KP shift error scatter plot.
+  - `shift_auto_axes_limit` : auto compute KP shift error colorbar scale.
+  - `shift_axes_limit` : KP shift error colorbar maximum limit, N/A if `shift_auto_axes_limit` is `true`.
+  - `theta_colormap` : matplotlib color map name for the KP theta error scatter plot.
 
 - `plot_configuration.shift` (shift by row/col group plot parameters)
-  - `fig_size` : Size of the generated figure in inches
-  - `scatter_colormap` : matplotlib color map name for the KP shift scatter plot
-  - `scatter_auto_limit` : auto compute KP shift scatter plot limit
-  - `scatter_min_limit` : KP shift scatter plot minimum limit, N/A if `scatter_auto_limit` is `true`
-  - `scatter_max_limit` : KP shift scatter plot maximum limit, N/A if `scatter_auto_limit` is `true`
-  - `histo_mean_bin_size` : KP shift histogram bin size (number of image row/col for the histogram bin)
+  - `fig_size` : size of the generated figure.
+  - `scatter_colormap` : matplotlib color map name for the KP shift scatter plot.
+  - `scatter_auto_limit` : auto compute KP shift scatter plot limit.
+  - `scatter_min_limit` : KP shift scatter plot minimum limit, N/A if `scatter_auto_limit` is `true`.
+  - `scatter_max_limit` : KP shift scatter plot maximum limit, N/A if `scatter_auto_limit` is `true`.
+  - `histo_mean_bin_size` : KP shift histogram bin size (number of image row/col for the histogram bin).
 
 - `plot_configuration.dem` (shift by altitude group plot parameters)
-  - `fig_size` : Size of the generated figure in inches
-  - `show_fliers` : draw fliers of box plot
-  - `histo_mean_bin_size`: KP altitude histogram bin size (altitude ranges size)
+  - `fig_size` : size of the generated figure.
+  - `show_fliers` : draw fliers of box plot.
+  - `histo_mean_bin_size`: KP altitude histogram bin size (altitude ranges size).
 
 - `plot_configuration.ce` (Circular error plot parameters)
-  - `fig_size` : Height size of the generated figure in inches, width is 5/3 of the height
-  - `ce_scatter_colormap` : matplotlib color map name for the KP shift density scatter plot
+  - `fig_size` : height size of the generated figure, width is 5/3 of the height.
+  - `ce_scatter_colormap` : matplotlib color map name for the KP shift density scatter plot.
 
 ### Outputs
 
@@ -300,7 +298,7 @@ KARIOS generates several types of outputs:
 
 #### Configuration
 
-- Copy of the processing configuration used
+- Copy of the processing configuration used.
 
 ## Output File Formats
 
@@ -322,10 +320,10 @@ KARIOS generates a CSV file containing all key points detected by the KLT matche
 | `zncc_score` | Zero-mean Normalized Cross-Correlation score | -1.0 to 1.0 | Optional: only if large shift detection is disabled |
 
 **Notes:**
-- The CSV uses semicolon (`;`) as separator
-- `zncc_score` is only computed for a selection of key points with KLT score above the confidence threshold
-- `zncc_score` provides additional matching quality assessment using normalized cross-correlation
-- All coordinates are in image pixel space (not geographic coordinates)
+- The CSV uses semicolon (`;`) as separator.
+- `zncc_score` is only computed for a selection of key points with KLT score above the confidence threshold.
+- `zncc_score` provides additional matching quality assessment using normalized cross-correlation.
+- All coordinates are in image pixel space (not geographic coordinates).
 
 ### GeoJSON Output
 
@@ -374,13 +372,13 @@ When input images are georeferenced, KARIOS generates a GeoJSON file (`kp_delta.
 | `zncc_score` | Cross-correlation score | -1.0 to 1.0 | Optional, can be `null` |
 
 **Coordinate System:**
-- Point coordinates are in the same coordinate reference system as the input images
-- Coordinates are transformed from pixel space to geographic space using the image's geotransform
-- The CRS is specified in the `crs` object using the EPSG code from the reference image
+- Point coordinates are in the same coordinate reference system as the input images.
+- Coordinates are transformed from pixel space to geographic space using the image's geotransform.
+- The CRS is specified in the `crs` object using the EPSG code from the reference image.
 
 ## Chip Images (Optional)
 
-When enabled with `--generate-kp-chips`, KARIOS generates small image patches (chips) centered on key points for visual inspection and quality assessment.
+When called with `--generate-kp-chips`, KARIOS generates small image patches (chips) centered on key points for visual inspection and quality assessment.
 
 ```bash
 karios process monitored.tif reference.tif --generate-kp-chips
@@ -421,13 +419,13 @@ results/
 | `*_chips.vrt` | Virtual raster mosaics for easy visualization in GIS software |
 
 :::{note}
-- Chips near image boundaries are automatically excluded
-- Coordinate pairs (x,y) in filenames refer to the key point location in the reference image
-- Chips are extracted at the detected displacement location in the monitored image
-- VRT files enable easy visualization of all chips as a single mosaic in QGIS or similar tools
+- Chips near image boundaries are automatically excluded.
+- Coordinate pairs (x,y) in filenames refer to the key point location in the reference image.
+- Chips are extracted at the detected displacement location in the monitored image.
+- VRT files enable easy visualization of all chips as a single mosaic in QGIS or similar tools.
 :::
 
-## KLT param leverage
+## KLT parameters leverage
 
 ### maxCorners & tile_size
 
@@ -435,23 +433,23 @@ In order to have a lower memory usage during KLT process, it is possible to defi
 
 For example, a tile_size of 10000 for an image having a size of 20000 x 20000 pixels will result in 4 tiles to process.
 
-In this context, the KLT process will look in each tile for `maxCorners`.
+In this context, the KLT process will look into each tile for `maxCorners`.
 
 While an image of 20000 x 20000 pixels results in 4 equals tiles, an image of 20000 x 15000 pixels will also result in 4 tiles, but with different size, two of 10000 x 10000 pixels and two of 10000 x 5000 pixels.
 
-The consequence is that the density for matching point will not be the same each tile, the bigger tiles will have a lower matching point density than the smallest.
+The consequence is that the density for matching points will not be the same for each tile, the bigger tiles will have a lower matching point density than the smaller.
 
-You should also consider that the image can contain empty parts where KLT will not find any matching point. So tiles having large empty parts will also results in a higher matching point density.
+You should also consider that the image can contain empty parts where KLT will not find any matching point. So tiles having large empty parts will also result in a higher matching point density.
 
-In order to avoid density differences in the final result, you can define a `tile_size` larger than the image with a high `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost same size.
+In order to avoid density differences in the final result, you can define a `tile_size` larger than the image with a high `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost the same size.
 
-For example, for image of 20000 x 15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
+For example, for an image of 20000 x 15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles).
 
 ## About shift by altitude plot
 
 This output uses box plot to show statistics of KP on altitudes groups.
 
-_The box extends from the first quartile (Q1) to the third quartile (Q3) of the data, with a line at the median. The whiskers extend from the box to the farthest data point lying within 1.5x the inter-quartile range (IQR) from the box. Flier points are those past the end of the whiskers. See https://en.wikipedia.org/wiki/Box_plot for reference._
+_The box extends from the first quartile (Q1) to the third quartile (Q3) of the data, with a line at the median. The whiskers extend from the box to the farthest data point lying within 1.5x the inter-quartile range (IQR) from the box. Flier points are those past the end of the whiskers. See [Box plot documentation [RD-12]](rd-12) for reference._
 
 ```
      Q1-1.5IQR   Q1   median  Q3   Q3+1.5IQR
@@ -462,7 +460,6 @@ flier             <----------->            fliers
                        IQR
 ```
 
-> credits https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.boxplot.html
 
 ## Input Data Relationships
 
@@ -511,7 +508,7 @@ KariosException: Monitored image geo info not compatible with reference image
 KariosException: Mask geo info not compatible with monitored image
 ```
 
-**Solution**: Ensure mask has the same geometry as monitored image
+**Solution**: Ensure mask has the same geometry as monitored image.
 
 ### Performance Optimization
 
@@ -531,7 +528,7 @@ KariosException: Mask geo info not compatible with monitored image
 
 ### Large Shift Detection
 
-When enabled with `--enable-large-shift-detection`, KARIOS can detect and compensate for large pixel offsets between images:
+When called with `--enable-large-shift-detection`, KARIOS can detect and compensate for large pixel offsets between images:
 
 ```bash
 karios process monitored.tif reference.tif --enable-large-shift-detection
@@ -544,7 +541,7 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 - Detection of systematic offsets
 
 :::{important}
-Experimental feature that may use significant memory for large images.
+This is still an experimental feature that may use significant memory for large images.
 :::
 
 ### Resume Functionality
