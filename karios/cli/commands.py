@@ -374,6 +374,9 @@ def _print_summary(match_result, accuracy, reports) -> None:
     click.echo(f"  DY plot: {reports.dy_plot}")
     click.echo(f"  CE plot: {reports.ce_plot}")
 
+    if reports.html_report:
+        click.echo(f"  HTML report: {reports.html_report}")
+
     if reports.dem_plots:
         click.echo(f"  DEM plots: {len(reports.dem_plots)}")
         for plot in reports.dem_plots:
