@@ -29,14 +29,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KARIOS Processing Report</title>
-    <style>
-        body {{
+CSS_STYLES = """
+        body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             color: #333;
@@ -44,8 +38,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin: 0 auto;
             padding: 20px;
             background-color: #f4f7f6;
-        }}
-        header {{
+        }
+        header {
             background-color: #2c3e50;
             color: white;
             padding: 0;
@@ -53,99 +47,139 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin-bottom: 20px;
             overflow: hidden;
             position: relative;
-        }}
-        .header-banner {{
+        }
+        .header-banner {
             width: 100%;
             display: block;
-        }}
-        .header-content {{
+        }
+        .header-content {
             padding: 20px;
             background: rgba(255, 255, 255, 0.8);
             position: absolute;
             bottom: 0;
             width: 100%;
-        }}
-        h1, h2, h3 {{
+        }
+        h1, h2, h3 {
             margin-top: 0;
-        }}
-        .section {{
+        }
+        .section {
             background: white;
             padding: 20px;
             margin-bottom: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .grid {{
+        }
+        .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
-        }}
-        table {{
+        }
+        table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 20px;
-        }}
-        th, td {{
+        }
+        th, td {
             text-align: left;
             padding: 12px;
             border-bottom: 1px solid #ddd;
-        }}
-        th {{
+        }
+        th {
             background-color: #f8f9fa;
-        }}
-        .image-container {{
+        }
+        .image-container {
             text-align: center;
             margin-top: 20px;
-        }}
-        .image-container img {{
+        }
+        .image-container img {
             max-width: 100%;
             height: auto;
             border-radius: 4px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }}
-        .image-title {{
+        }
+        .image-title {
             font-weight: bold;
             margin-top: 10px;
             display: block;
-        }}
-        .stats-card {{
+        }
+        .stats-card {
             background: #e9ecef;
             padding: 15px;
             border-radius: 6px;
             border-left: 5px solid #2c3e50;
-        }}
-        .footer {{
+        }
+        .footer {
             text-align: center;
             font-size: 0.9em;
-            color: #777;
+            color: #333;
             margin-top: 40px;
-            padding: 20px;
+            padding: 80px 20px;
             border-top: 1px solid #ddd;
-        }}
-        .links {{
+            background-image: url('footer_logo.svg');
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 200px;
+            background-color: rgba(255, 255, 255, 0.85);
+            background-blend-mode: lighten;
+        }
+        .links {
             margin-top: 10px;
-        }}
-        .links a {{
+        }
+        .links a {
             color: #3498db;
             text-decoration: none;
             margin: 0 10px;
-        }}
-        .links a:hover {{
+        }
+        .links a:hover {
             text-decoration: underline;
-        }}
+        }
+        .nav {
+            display: flex;
+            background: #2c3e50;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .nav a.active {
+            background: #34495e;
+            color: #3498db;
+        }
+        .nav a:hover {
+            background: #34495e;
+        }
+"""
+
+HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARIOS Processing Report</title>
+    <style>
+        {css_styles}
     </style>
 </head>
 <body>
     <header>
-        <img src="logo_telespazio.png" alt="Telespazio Logo" class="header-banner">
-        <div class="header-content">
-            <h1>KARIOS Processing Report</h1>
-            <p>Generated on {generation_date}</p>
-        </div>
+        <img src="karios_index_banner.webp" alt="KARIOS Banner" class="header-banner">
     </header>
 
+    <nav class="nav">
+        <a href="report.html" class="active">Summary</a>
+        {products_link}
+        {chips_link}
+    </nav>
+
     <div class="section">
-        <h2>Generation Info</h2>
+        <h1>KARIOS Processing Report</h1>
         <div class="grid">
             <div>
                 <h3>Input Images</h3>
@@ -165,6 +199,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </table>
             </div>
         </div>
+        <p>Generated on {generation_date}</p>
     </div>
 
     <div class="section">
@@ -220,6 +255,107 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+PRODUCTS_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARIOS Products - {title_prefix}</title>
+    <style>
+        {css_styles}
+    </style>
+</head>
+<body>
+    <header>
+        <img src="karios_index_banner.webp" alt="KARIOS Banner" class="header-banner">
+    </header>
+
+    <nav class="nav">
+        <a href="report.html">Summary</a>
+        <a href="products.html" class="active">Products</a>
+        {chips_link}
+    </nav>
+
+    <div class="section">
+        <h1>Optional Output Files</h1>
+        <p>The following products were generated during processing:</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Product Type</th>
+                    <th>File Name</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {products_rows}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        <p>KARIOS - KLT-based Algorithm for Registration of Images from Observing Systems</p>
+        <div class="links">
+            <a href="https://telespazio-tim.github.io/karios" target="_blank">Website</a> |
+            <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+CHIPS_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARIOS Key Point Chips - {title_prefix}</title>
+    <style>
+        {css_styles}
+    </style>
+</head>
+<body>
+    <header>
+        <img src="karios_index_banner.webp" alt="KARIOS Banner" class="header-banner">
+    </header>
+
+    <nav class="nav">
+        <a href="report.html">Summary</a>
+        {products_link}
+        <a href="chips.html" class="active">Chips</a>
+    </nav>
+
+    <div class="section">
+        <h1>Key Point Chips</h1>
+        <p>Visual verification chips for selected key points.</p>
+        <div class="grid">
+            <div class="stats-card">
+                <h3>VRT Files</h3>
+                <p>These files can be opened in QGIS to see all chips mosaicked:</p>
+                <ul>
+                    {chips_vrt_links}
+                </ul>
+            </div>
+        </div>
+        <div class="grid">
+            <div class="stats-card">
+                <h3>Chips CSV</h3>
+                <p>Full list of selected key points used for chips: <a href="chips/chips.csv">chips.csv</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>KARIOS - KLT-based Algorithm for Registration of Images from Observing Systems</p>
+        <div class="links">
+            <a href="https://telespazio-tim.github.io/karios" target="_blank">Website</a> |
+            <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
 
 class HtmlReportGenerator:
     """Generator for HTML reports."""
@@ -242,17 +378,30 @@ class HtmlReportGenerator:
 
     def _copy_assets(self):
         """Copy required assets to output directory."""
-        logo_src = Path("karios/report/logo_telespazio.png")
-        if logo_src.exists():
-            shutil.copy(logo_src, self.output_dir / "logo_telespazio.png")
+        banner_src = Path(__file__).parent / "karios_index_banner.webp"
+        if banner_src.exists():
+            shutil.copy(banner_src, self.output_dir / "karios_index_banner.webp")
         else:
-            logger.warning("Logo image not found at %s", logo_src)
+            logger.warning("Banner image not found at %s", banner_src)
+
+        footer_logo_src = Path(__file__).parent / "footer_logo.svg"
+        if footer_logo_src.exists():
+            shutil.copy(footer_logo_src, self.output_dir / "footer_logo.svg")
+        else:
+            logger.warning("Footer logo image not found at %s", footer_logo_src)
 
     def generate(self) -> Path:
-        """Generate the HTML report file."""
+        """Generate the HTML report file(s)."""
         logger.info("Generating HTML report")
 
         self._copy_assets()
+
+        # Check for products and chips to build navigation
+        has_products = len(self.report_paths.products) > 0
+        has_chips = self.runtime_config.generate_kp_chips
+
+        products_link = '<a href="products.html">Products</a>' if has_products else ""
+        chips_link = '<a href="chips.html">Chips</a>' if has_chips else ""
 
         dem_plots_html = ""
         if self.report_paths.dem_plots:
@@ -270,8 +419,11 @@ class HtmlReportGenerator:
                 </div>"""
             dem_plots_html += "</div>"
 
-        # Prepare paths to be relative to the HTML report file (assumed to be in output_dir)
-        html_content = HTML_TEMPLATE.format(
+        # 1. Generate Summary Page (report.html)
+        summary_content = HTML_TEMPLATE.format(
+            css_styles=CSS_STYLES,
+            products_link=products_link,
+            chips_link=chips_link,
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             monitored_image=self.match_result.monitored_image.file_name,
             reference_image=self.match_result.reference_image.file_name,
@@ -301,7 +453,50 @@ class HtmlReportGenerator:
 
         report_file = self.output_dir / "report.html"
         with open(report_file, "w", encoding="utf-8") as f:
-            f.write(html_content)
+            f.write(summary_content)
+
+        # 2. Generate Products Page if needed
+        if has_products:
+            products_rows = ""
+            for p in self.report_paths.products:
+                p_path = Path(p)
+                p_name = p_path.name
+                p_type = "Vector (GeoJSON)" if p_name.endswith(".json") else "Raster (GeoTIFF)"
+                if "mask" in p_name:
+                    p_type = "Mask (GeoTIFF)"
+                
+                products_rows += f"""
+                <tr>
+                    <td>{p_type}</td>
+                    <td>{p_name}</td>
+                    <td><a href="{p_name}" download>Download</a></td>
+                </tr>"""
+
+            products_content = PRODUCTS_TEMPLATE.format(
+                css_styles=CSS_STYLES,
+                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                chips_link=chips_link,
+                products_rows=products_rows,
+            )
+            with open(self.output_dir / "products.html", "w", encoding="utf-8") as f:
+                f.write(products_content)
+
+        # 3. Generate Chips Page if needed
+        if has_chips:
+            mon_vrt = f"chips/{self.match_result.monitored_image.file_name}/monitored_chips.vrt"
+            ref_vrt = f"chips/{self.match_result.reference_image.file_name}/reference_chips.vrt"
+            
+            chips_vrt_links = f'<li><a href="{mon_vrt}">Monitored Chips VRT</a></li>'
+            chips_vrt_links += f'<li><a href="{ref_vrt}">Reference Chips VRT</a></li>'
+
+            chips_content = CHIPS_TEMPLATE.format(
+                css_styles=CSS_STYLES,
+                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                products_link=products_link,
+                chips_vrt_links=chips_vrt_links,
+            )
+            with open(self.output_dir / "chips.html", "w", encoding="utf-8") as f:
+                f.write(chips_content)
 
         logger.info("HTML report generated at %s", report_file)
         return report_file
