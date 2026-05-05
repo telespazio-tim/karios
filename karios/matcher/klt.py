@@ -21,6 +21,7 @@
 import itertools
 import logging
 import os
+from collections import Counter
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 
@@ -186,6 +187,7 @@ class KLT:
         self._conf: KLTConfiguration = conf
         self._gen_laplacian = gen_laplacian
         self._out_dir = out_dir
+        self._auto_selected_ksizes: list[tuple[int, int]] = []
 
     def match(
         self,
@@ -269,6 +271,8 @@ class KLT:
         ksize = self._conf.laplacian_kernel_size
         if ksize == "auto":
             results, _, best_ksize = self._match_tile_auto_ksize(img_box, ref_box, mask_box)
+            if best_ksize is not None:
+                self._auto_selected_ksizes.append(best_ksize)
             if self._gen_laplacian and best_ksize is not None:
                 mon_ksize, ref_ksize = best_ksize
                 io.imsave(
@@ -340,6 +344,13 @@ class KLT:
 
         points.sort_values(by=["x0", "y0"], inplace=True)
         return points
+
+    @property
+    def auto_selected_ksize(self) -> tuple[int, int] | None:
+        """Return the most-common (mon_ksize, ref_ksize) pair chosen across all auto-mode tiles."""
+        if not self._auto_selected_ksizes:
+            return None
+        return Counter(self._auto_selected_ksizes).most_common(1)[0][0]
 
     def _apply_laplacian_and_track(self, img_box, ref_box, mask_box, mon_ksize, ref_ksize):
         lap_img = cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize)

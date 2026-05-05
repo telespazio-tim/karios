@@ -20,6 +20,7 @@
 Provides command line interface for KARIOS functionality.
 """
 
+import json
 import logging
 import os
 import shutil
@@ -304,8 +305,25 @@ def process(
             monitored_image, reference_image, mask_file, dem_file, resume
         )
 
-        # Copy configuration to output directory
-        shutil.copy(conf, output_dir)
+        # Copy configuration to output directory, updating laplacian_kernel_size when auto mode was used
+        klt_conf = processing_configuration.klt_configuration
+        if klt_conf.laplacian_kernel_size == "auto":
+            selected = api.klt_auto_selected_ksize
+            if selected is not None:
+                mon_k, ref_k = selected
+                with open(conf, encoding="utf-8") as f:
+                    conf_data = json.load(f)
+                conf_data["processing_configuration"]["klt_matching"]["laplacian_kernel_size"] = {
+                    "mon": mon_k, "ref": ref_k
+                }
+                out_conf_path = output_dir / Path(conf).name
+                with open(out_conf_path, "w", encoding="utf-8") as f:
+                    json.dump(conf_data, f, indent=4)
+                logger.info("Auto laplacian kernel sizes written to config: mon=%s ref=%s", mon_k, ref_k)
+            else:
+                shutil.copy(conf, output_dir)
+        else:
+            shutil.copy(conf, output_dir)
 
         logger.info("Processing completed successfully")
         logger.info("Results written to %s", output_dir)

@@ -157,6 +157,11 @@ class KariosAPI:
         # Prepare output dir
         self._check_output_dir()
 
+    @property
+    def klt_auto_selected_ksize(self) -> tuple[int, int] | None:
+        """Return the kernel sizes chosen by auto mode, or None if not in auto mode."""
+        return self._klt.auto_selected_ksize
+
     def match_images(
         self,
         monitored_image_path: Path,
