@@ -18,6 +18,7 @@
 
 """KTL module."""
 
+import itertools
 import logging
 import os
 from collections.abc import Iterator
@@ -32,6 +33,18 @@ from karios.core.configuration import KLTConfiguration
 from karios.core.image import GdalRasterImage
 
 logger = logging.getLogger(__name__)
+
+LAPLACIAN_AUTO_CANDIDATES = [3, 5, 7, 9, 11]
+
+
+def _to_uint8(arr: np.ndarray) -> np.ndarray:
+    """Normalize an array to uint8, no-op if already uint8."""
+    if arr.dtype == np.uint8:
+        return arr
+    arr_min, arr_max = float(np.nanmin(arr)), float(np.nanmax(arr))
+    if arr_max > arr_min:
+        return ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
+    return np.zeros_like(arr, dtype=np.uint8)
 
 
 def __filter_outliers(x0, y0, x1, y1, score):
@@ -253,33 +266,52 @@ class KLT:
 
         # laplacian
         ksize = self._conf.laplacian_kernel_size
-        mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
-        ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
-        img_box = cv2.Laplacian(img_box, cv2.CV_8U, ksize=mon_ksize)
-        ref_box = cv2.Laplacian(ref_box, cv2.CV_8U, ksize=ref_ksize)
+        if ksize == "auto":
+            results, _, best_ksize = self._match_tile_auto_ksize(img_box, ref_box, mask_box)
+            if self._gen_laplacian and best_ksize is not None:
+                mon_ksize, ref_ksize = best_ksize
+                io.imsave(
+                    os.path.join(
+                        self._out_dir,
+                        f"mon_laplacian_k{mon_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                    ),
+                    cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize),
+                )
+                io.imsave(
+                    os.path.join(
+                        self._out_dir,
+                        f"ref_laplacian_k{ref_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                    ),
+                    cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize),
+                )
+        else:
+            mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
+            ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
+            img_box = cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize)
+            ref_box = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
 
-        if self._gen_laplacian:
-            io.imsave(
-                os.path.join(
-                    self._out_dir,
-                    f"mon_laplacian_{x_off}_{y_off}_{x_size}_{y_size}.tif",
-                ),
-                img_box,
-            )
-            io.imsave(
-                os.path.join(
-                    self._out_dir,
-                    f"ref_laplacian_{x_off}_{y_off}_{x_size}_{y_size}.tif",
-                ),
+            if self._gen_laplacian:
+                io.imsave(
+                    os.path.join(
+                        self._out_dir,
+                        f"mon_laplacian_k{mon_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                    ),
+                    img_box,
+                )
+                io.imsave(
+                    os.path.join(
+                        self._out_dir,
+                        f"ref_laplacian_k{ref_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                    ),
+                    ref_box,
+                )
+
+            results = klt_tracker(
                 ref_box,
+                img_box,
+                mask_box,
+                self._conf,
             )
-
-        results = klt_tracker(
-            ref_box,
-            img_box,
-            mask_box,
-            self._conf,
-        )
 
         # clean large dataset
         ref_box = None
@@ -307,3 +339,43 @@ class KLT:
 
         points.sort_values(by=["x0", "y0"], inplace=True)
         return points
+
+    def _apply_laplacian_and_track(self, img_box, ref_box, mask_box, mon_ksize, ref_ksize):
+        lap_img = cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize)
+        lap_ref = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
+        return klt_tracker(lap_ref, lap_img, mask_box, self._conf)
+
+    def _match_tile_auto_ksize(self, img_box, ref_box, mask_box):
+        """Try all (mon_ksize, ref_ksize) combinations and return the result with the highest inlier ratio.
+
+        Returns:
+            tuple[tuple[DataFrame, int] | None, dict[tuple[int, int], float]]: best klt_tracker
+                result and scores dict mapping each (mon_ksize, ref_ksize) pair to its inlier ratio.
+        """
+        scores: dict[tuple[int, int], float] = {}
+        best_result = None
+        best_ratio = -1.0
+        best_ksize = None
+
+        for mon_ksize, ref_ksize in itertools.product(LAPLACIAN_AUTO_CANDIDATES, repeat=2):
+                logger.info("Auto laplacian: trying mon_ksize=%s ref_ksize=%s", mon_ksize, ref_ksize)
+                result = self._apply_laplacian_and_track(img_box, ref_box, mask_box, mon_ksize, ref_ksize)
+                if result is None:
+                    scores[(mon_ksize, ref_ksize)] = 0.0
+                    logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> no result", mon_ksize, ref_ksize)
+                    continue
+                points, ninit = result
+                ratio = len(points) / ninit if ninit > 0 else 0.0
+                scores[(mon_ksize, ref_ksize)] = ratio
+                logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> inlier ratio=%.3f (%d/%d)",
+                            mon_ksize, ref_ksize, ratio, len(points), ninit)
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_result = result
+                    best_ksize = (mon_ksize, ref_ksize)
+
+        logger.info("Auto laplacian selected: mon_ksize=%s ref_ksize=%s (inlier ratio=%.3f)",
+                    best_ksize[0] if best_ksize else None,
+                    best_ksize[1] if best_ksize else None,
+                    best_ratio)
+        return best_result, scores, best_ksize

@@ -26,7 +26,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 
 from karios.core.errors import ConfigurationError
 
@@ -45,7 +45,7 @@ class KLTConfiguration:
     qualityLevel: float
     xStart: int
     tile_size: int
-    laplacian_kernel_size: Union[int, Dict[str, int]]
+    laplacian_kernel_size: Union[int, Dict[str, int], Literal["auto"]]
     outliers_filtering: bool
 
 
