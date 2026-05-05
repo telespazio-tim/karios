@@ -23,6 +23,7 @@ import os
 import shutil
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pandas as pd
 from osgeo import gdal
@@ -31,6 +32,15 @@ from pandas import DataFrame, Series
 from karios.core.image import GdalRasterImage, open_gdal_dataset
 
 logger = logging.getLogger(__name__)
+
+
+def _to_uint8(arr: np.ndarray) -> np.ndarray:
+    if arr.dtype == np.uint8:
+        return arr
+    arr_min, arr_max = float(np.nanmin(arr)), float(np.nanmax(arr))
+    if arr_max > arr_min:
+        return ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
+    return np.zeros_like(arr, dtype=np.uint8)
 
 
 class CenterAndQuarterCellPointSelector:
@@ -379,6 +389,7 @@ class ChipService:
 
     def __init__(self):
         self._ouput_dir_name: str = "chips"
+        self._laplacian_output_dir_name: str = "chips_laplacian"
         self._chip_size = 57
         # to avoid recompute it for each KP
         self._chip_margin = int((self._chip_size - 1) / 2)
@@ -390,6 +401,7 @@ class ChipService:
         points: DataFrame,
         confident_threshold: float,
         output_dir: str | Path,
+        laplacian_ksize: dict[str, int] | None = None,
     ):
         """
         This function generates a maximum of 100 chip images of KP for monitored and reference images.
@@ -442,6 +454,16 @@ class ChipService:
         os.mkdir(chips_dir_path / monitored.file_name)
         os.mkdir(chips_dir_path / reference.file_name)
 
+        laplacian_dir_path = None
+        if laplacian_ksize is not None:
+            laplacian_dir_path = Path(os.path.join(output_dir, self._laplacian_output_dir_name))
+            if os.path.exists(laplacian_dir_path):
+                logger.warning("Laplacian chips output dir already exists, clean it")
+                shutil.rmtree(laplacian_dir_path)
+            os.mkdir(laplacian_dir_path)
+            os.mkdir(laplacian_dir_path / monitored.file_name)
+            os.mkdir(laplacian_dir_path / reference.file_name)
+
         # load only once mon and ref gdal dataset
         with open_gdal_dataset(monitored.filepath) as mon_dataset:
             with open_gdal_dataset(reference.filepath) as ref_dataset:
@@ -454,6 +476,8 @@ class ChipService:
                     out_dir=chips_dir_path,
                     monitored_filename=monitored.file_name,
                     reference_filename=reference.file_name,
+                    laplacian_ksize=laplacian_ksize,
+                    out_dir_laplacian=laplacian_dir_path,
                 )
 
         logger.info("Chips generated in %s", chips_dir_path)
@@ -462,6 +486,11 @@ class ChipService:
 
         self._create_vrt(chips_dir_path / monitored.file_name, "monitored_chips.vrt")
         self._create_vrt(chips_dir_path / reference.file_name, "reference_chips.vrt")
+
+        if laplacian_dir_path is not None:
+            logger.info("Laplacian chips generated in %s", laplacian_dir_path)
+            self._create_vrt(laplacian_dir_path / monitored.file_name, "monitored_chips.vrt")
+            self._create_vrt(laplacian_dir_path / reference.file_name, "reference_chips.vrt")
 
     def _create_vrt(self, directory_path: Path, output_vrt_name="chips.vrt"):
         """
@@ -520,6 +549,8 @@ class ChipService:
         out_dir: Path,  # for out folder
         monitored_filename: str,  # for out folder
         reference_filename: str,  # for out folder
+        laplacian_ksize: dict[str, int] | None = None,
+        out_dir_laplacian: Path | None = None,
     ):
         """
         Generate KP chip using gdal translate for monitored and reference dataset in corresponding output dir.
@@ -577,3 +608,33 @@ class ChipService:
         dataset = gdal.Translate(mon_chip_path, monitored, options=options)
         dataset.FlushCache()
         dataset = None
+
+        if laplacian_ksize is not None and out_dir_laplacian is not None:
+            ref_ksize = laplacian_ksize.get("ref", laplacian_ksize.get("mon", 1))
+            mon_ksize = laplacian_ksize.get("mon", laplacian_ksize.get("ref", 1))
+            self._write_laplacian_chip(
+                reference, x0_offset, y0_offset, ref_ksize,
+                out_dir_laplacian / reference_filename / f"REF_{x0}_{y0}.TIFF",
+            )
+            self._write_laplacian_chip(
+                monitored, x1_offset, y1_offset, mon_ksize,
+                out_dir_laplacian / monitored_filename / f"MON_{x0}_{y0}.TIFF",
+            )
+
+    def _write_laplacian_chip(
+        self,
+        dataset: gdal.Dataset,
+        xoff: int,
+        yoff: int,
+        ksize: int,
+        out_path: Path,
+    ):
+        data = dataset.GetRasterBand(1).ReadAsArray(xoff, yoff, self._chip_size, self._chip_size)
+        if data is None:
+            return
+        lap = cv2.Laplacian(_to_uint8(data), cv2.CV_8U, ksize=ksize)
+        driver = gdal.GetDriverByName("GTiff")
+        ds = driver.Create(str(out_path), self._chip_size, self._chip_size, 1, gdal.GDT_Byte)
+        ds.GetRasterBand(1).WriteArray(lap)
+        ds.FlushCache()
+        ds = None

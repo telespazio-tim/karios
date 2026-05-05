@@ -353,7 +353,20 @@ class KariosAPI:
             match_result.points,
             self._processing_configuration.accuracy_analysis_configuration.confidence_threshold,
             self._runtime_configuration.output_directory,
+            laplacian_ksize=self._resolve_laplacian_ksize(),
         )
+
+    def _resolve_laplacian_ksize(self) -> dict[str, int] | None:
+        ksize = self._processing_configuration.klt_configuration.laplacian_kernel_size
+        if ksize == "auto":
+            selected = self._klt.auto_selected_ksize
+            if selected is None:
+                return None
+            mon_k, ref_k = selected
+            return {"mon": mon_k, "ref": ref_k}
+        if isinstance(ksize, dict):
+            return ksize
+        return {"mon": ksize, "ref": ksize}
 
     def process(
         self,
