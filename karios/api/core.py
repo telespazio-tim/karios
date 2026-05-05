@@ -43,6 +43,7 @@ from karios.matcher.large_offset import LargeOffsetMatcher
 from karios.matcher.zncc_service import ZNCCService
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
+from karios.report.html_report import HtmlReportGenerator
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
 from karios.report.shift_by_alt_plot import MeanShiftByAltitudeGroupPlot
@@ -98,6 +99,7 @@ class ReportPaths:
     ce_plot: str
     dem_plots: list[str]
     products: list[str]
+    html_report: Optional[str] = None
 
 
 class KariosAPI:
@@ -313,10 +315,7 @@ class KariosAPI:
         # Generate DEM plots if DEM is provided
         dem_plots = self._generate_dem_plots(match_result, output_dir, dem_file_path)
 
-        # make sure all are closed
-        plt.close("all")
-
-        return ReportPaths(
+        report_paths = ReportPaths(
             overview_plot=str(overview_path),
             dx_plot=str(dx_plot_path),
             dy_plot=str(dy_plot_path),
@@ -324,6 +323,22 @@ class KariosAPI:
             dem_plots=dem_plots,
             products=product_paths,
         )
+
+        # Always generate HTML report
+        html_generator = HtmlReportGenerator(
+            Path(output_dir),
+            match_result,
+            accuracy_analysis,
+            report_paths,
+            self._runtime_configuration,
+            dem_file_path,
+        )
+        report_paths.html_report = str(html_generator.generate())
+
+        # make sure all are closed
+        plt.close("all")
+
+        return report_paths
 
     def _generate_chips(self, match_result: MatchResult):
         chips_service = ChipService()
