@@ -460,9 +460,7 @@ def test_klt_match_tile_invalid_offsets():
     # This simple assertion tests that the configuration is properly stored
 
 
-@patch("karios.matcher.klt.klt_tracker")
-@patch("karios.matcher.klt.cv2")
-def test_match_tile_auto_ksize_selects_best_inlier_ratio(mock_cv2, mock_klt_tracker):
+def test_match_tile_auto_ksize_selects_best_inlier_ratio():
     """Test _match_tile_auto_ksize picks the (mon, ref) pair with the highest inlier ratio."""
     from karios.matcher.klt import LAPLACIAN_AUTO_CANDIDATES
 
@@ -480,27 +478,20 @@ def test_match_tile_auto_ksize_selects_best_inlier_ratio(mock_cv2, mock_klt_trac
     klt = KLT(conf)
 
     tile = np.ones((50, 50), dtype=np.uint8) * 128
-    mock_cv2.Laplacian.return_value = tile
-    mock_cv2.CV_8U = 0
 
-    # Best pair is (CANDIDATES[1], CANDIDATES[2]); all others return 1 inlier out of 10.
     ninit = 10
     best_mon = LAPLACIAN_AUTO_CANDIDATES[1]
     best_ref = LAPLACIAN_AUTO_CANDIDATES[2]
     best_count = 8
 
-    call_iter = iter(itertools.product(LAPLACIAN_AUTO_CANDIDATES, repeat=2))
-
-    def side_effect(*args, **kwargs):
-        mon_ksize, ref_ksize = next(call_iter)
+    def mock_apply(img_box, ref_box, mask_box, mon_ksize, ref_ksize):
         count = best_count if (mon_ksize, ref_ksize) == (best_mon, best_ref) else 1
         df = pd.DataFrame({"x0": list(range(count)), "y0": list(range(count)),
                            "dx": [0] * count, "dy": [0] * count, "score": [0.9] * count})
         return df, ninit
 
-    mock_klt_tracker.side_effect = side_effect
-
-    best_result, scores, selected_ksize = klt._match_tile_auto_ksize(tile, tile, np.ones((50, 50), dtype=np.uint8))
+    with patch.object(klt, "_apply_laplacian_and_track", side_effect=mock_apply):
+        best_result, scores, selected_ksize = klt._match_tile_auto_ksize(tile, tile, np.ones((50, 50), dtype=np.uint8))
 
     n = len(LAPLACIAN_AUTO_CANDIDATES)
     assert len(scores) == n * n

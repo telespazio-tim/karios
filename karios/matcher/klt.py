@@ -22,6 +22,7 @@ import itertools
 import logging
 import os
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -352,27 +353,34 @@ class KLT:
             tuple[tuple[DataFrame, int] | None, dict[tuple[int, int], float]]: best klt_tracker
                 result and scores dict mapping each (mon_ksize, ref_ksize) pair to its inlier ratio.
         """
+        combinations = list(itertools.product(LAPLACIAN_AUTO_CANDIDATES, repeat=2))
+
+        def _run(mon_ksize, ref_ksize):
+            logger.info("Auto laplacian: trying mon_ksize=%s ref_ksize=%s", mon_ksize, ref_ksize)
+            result = self._apply_laplacian_and_track(img_box, ref_box, mask_box, mon_ksize, ref_ksize)
+            if result is None:
+                logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> no result", mon_ksize, ref_ksize)
+                return (mon_ksize, ref_ksize), 0.0, None
+            points, ninit = result
+            ratio = len(points) / ninit if ninit > 0 else 0.0
+            logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> inlier ratio=%.3f (%d/%d)",
+                        mon_ksize, ref_ksize, ratio, len(points), ninit)
+            return (mon_ksize, ref_ksize), ratio, result
+
+        with ThreadPoolExecutor() as executor:
+            run_results = executor.map(lambda args: _run(*args), combinations)
+
         scores: dict[tuple[int, int], float] = {}
         best_result = None
         best_ratio = -1.0
         best_ksize = None
 
-        for mon_ksize, ref_ksize in itertools.product(LAPLACIAN_AUTO_CANDIDATES, repeat=2):
-                logger.info("Auto laplacian: trying mon_ksize=%s ref_ksize=%s", mon_ksize, ref_ksize)
-                result = self._apply_laplacian_and_track(img_box, ref_box, mask_box, mon_ksize, ref_ksize)
-                if result is None:
-                    scores[(mon_ksize, ref_ksize)] = 0.0
-                    logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> no result", mon_ksize, ref_ksize)
-                    continue
-                points, ninit = result
-                ratio = len(points) / ninit if ninit > 0 else 0.0
-                scores[(mon_ksize, ref_ksize)] = ratio
-                logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> inlier ratio=%.3f (%d/%d)",
-                            mon_ksize, ref_ksize, ratio, len(points), ninit)
-                if ratio > best_ratio:
-                    best_ratio = ratio
-                    best_result = result
-                    best_ksize = (mon_ksize, ref_ksize)
+        for pair, ratio, result in run_results:
+            scores[pair] = ratio
+            if result is not None and ratio > best_ratio:
+                best_ratio = ratio
+                best_result = result
+                best_ksize = pair
 
         logger.info("Auto laplacian selected: mon_ksize=%s ref_ksize=%s (inlier ratio=%.3f)",
                     best_ksize[0] if best_ksize else None,
