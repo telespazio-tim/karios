@@ -459,6 +459,42 @@ def test_klt_match_tile_invalid_offsets():
     # This simple assertion tests that the configuration is properly stored
 
 
+@patch("karios.matcher.klt.klt_tracker")
+@patch("karios.matcher.klt.cv2")
+def test_match_tile_dict_kernel_size(mock_cv2, mock_klt_tracker):
+    """Test _match_tile passes per-image kernel sizes to cv2.Laplacian when laplacian_kernel_size is a dict."""
+    conf = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size={"mon": 3, "ref": 5},
+        outliers_filtering=True,
+    )
+    klt = KLT(conf)
+
+    tile = np.ones((100, 100), dtype=np.uint8) * 128
+    mon_img = Mock(spec=GdalRasterImage)
+    ref_img = Mock(spec=GdalRasterImage)
+    mon_img.x_size = 100
+    mon_img.y_size = 100
+    mon_img.read.return_value = tile
+    ref_img.read.return_value = tile
+
+    mock_cv2.Laplacian.return_value = tile
+    mock_klt_tracker.return_value = None
+
+    klt._match_tile(0, 0, mon_img, ref_img, None)
+
+    calls = mock_cv2.Laplacian.call_args_list
+    assert len(calls) == 2
+    assert calls[0].kwargs["ksize"] == 3  # mon
+    assert calls[1].kwargs["ksize"] == 5  # ref
+
+
 if __name__ == "__main__":
     test_filter_outliers()
     test_filter_outliers_no_outliers()

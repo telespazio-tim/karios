@@ -252,8 +252,11 @@ class KLT:
         logger.info("Nb valid pixels: %s/%s", valid_pixels, x_size * y_size)
 
         # laplacian
-        img_box = cv2.Laplacian(img_box, cv2.CV_8U, ksize=self._conf.laplacian_kernel_size)
-        ref_box = cv2.Laplacian(ref_box, cv2.CV_8U, ksize=self._conf.laplacian_kernel_size)
+        ksize = self._conf.laplacian_kernel_size
+        mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
+        ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
+        img_box = cv2.Laplacian(img_box, cv2.CV_8U, ksize=mon_ksize)
+        ref_box = cv2.Laplacian(ref_box, cv2.CV_8U, ksize=ref_ksize)
 
         if self._gen_laplacian:
             io.imsave(
