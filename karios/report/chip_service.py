@@ -583,31 +583,27 @@ class ChipService:
 
         ref_chip_path = out_dir / reference_filename / f"REF_{x0}_{y0}.TIFF"
         options = gdal.TranslateOptions(
-            srcWin=[
-                x0_offset,
-                y0_offset,
-                self._chip_size,
-                self._chip_size,
-            ],  # [xoff, yoff, xsize, ysize]
+            srcWin=[x0_offset, y0_offset, self._chip_size, self._chip_size],
             format="GTiff",
         )
         dataset = gdal.Translate(ref_chip_path, reference, options=options)
         dataset.FlushCache()
+        ref_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
+        if ref_data is not None:
+            cv2.imwrite(str(ref_chip_path.with_suffix(".png")), _to_uint8(ref_data))
 
         mon_chip_path = out_dir / monitored_filename / f"MON_{x0}_{y0}.TIFF"
         options = gdal.TranslateOptions(
-            srcWin=[
-                x1_offset,
-                y1_offset,
-                self._chip_size,
-                self._chip_size,
-            ],  # [xoff, yoff, xsize, ysize]
+            srcWin=[x1_offset, y1_offset, self._chip_size, self._chip_size],
             format="GTiff",
         )
         dataset = gdal.Translate(mon_chip_path, monitored, options=options)
         dataset.FlushCache()
+        mon_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
+        if mon_data is not None:
+            cv2.imwrite(str(mon_chip_path.with_suffix(".png")), _to_uint8(mon_data))
 
         if laplacian_ksize is not None and out_dir_laplacian is not None:
             ref_ksize = laplacian_ksize.get("ref", laplacian_ksize.get("mon", 1))
@@ -638,3 +634,4 @@ class ChipService:
         ds.GetRasterBand(1).WriteArray(lap)
         ds.FlushCache()
         ds = None
+        cv2.imwrite(str(out_path.with_suffix(".png")), lap)

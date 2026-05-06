@@ -419,11 +419,11 @@ class KariosAPI:
 
         accuracy = self.analyze_accuracy(match_result)
 
-        reports = self.generate_reports(match_result, accuracy, dem_file_path)
-
-        # do not generate chips if large shift applied
+        # Generate chips before reports so chips.html can scan the chip directories
         if self._runtime_configuration.generate_kp_chips and not self._large_shift_applied:
             self._generate_chips(match_result)
+
+        reports = self.generate_reports(match_result, accuracy, dem_file_path)
 
         return match_result, accuracy, reports
 

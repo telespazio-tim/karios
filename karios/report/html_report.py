@@ -155,6 +155,60 @@ CSS_STYLES = """
         .nav a:hover {
             background: #34495e;
         }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 2px solid #2c3e50;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 24px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1em;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            color: #555;
+        }
+        .tab-btn.active {
+            border-bottom-color: #3498db;
+            color: #3498db;
+            font-weight: bold;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .chips-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .chip-pair {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 8px;
+            background: #fafafa;
+            text-align: center;
+        }
+        .chip-label {
+            font-size: 0.72em;
+            color: #888;
+            margin-bottom: 6px;
+        }
+        .chip-images { display: flex; gap: 6px; }
+        .chip-item { text-align: center; }
+        .chip-sublabel {
+            font-size: 0.7em;
+            color: #aaa;
+            margin-bottom: 2px;
+        }
+        .chip-item img {
+            width: 114px;
+            height: 114px;
+            image-rendering: pixelated;
+            display: block;
+            border: 1px solid #ccc;
+        }
 """
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -327,23 +381,21 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
 
     <div class="section">
         <h1>Key Point Chips</h1>
-        <p>Visual verification chips for selected key points.</p>
+        <p>Visual verification chips for selected key points. Each pair shows reference (left) and monitored (right).</p>
         <div class="grid">
             <div class="stats-card">
                 <h3>VRT Files</h3>
-                <p>These files can be opened in QGIS to see all chips mosaicked:</p>
-                <ul>
-                    {chips_vrt_links}
-                </ul>
+                <p>Open in QGIS to see all chips mosaicked:</p>
+                <ul>{chips_vrt_links}</ul>
             </div>
-        </div>
-        <div class="grid">
             <div class="stats-card">
-                <h3>Chips CSV</h3>
-                <p>Full list of selected key points used for chips: <a href="chips/chips.csv">chips.csv</a></p>
+                <h3>CSV</h3>
+                <p><a href="chips/chips.csv">chips.csv</a> — full list of selected key points</p>
             </div>
         </div>
     </div>
+
+    {chips_section_html}
 
     <div class="footer">
         <p>KARIOS - KLT-based Algorithm for Registration of Images from Observing Systems</p>
@@ -352,6 +404,14 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
             <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
         </div>
     </div>
+    <script>
+        function showTab(tabId) {{
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            document.querySelector('[data-tab="' + tabId + '"]').classList.add('active');
+        }}
+    </script>
 </body>
 </html>
 """
@@ -375,6 +435,38 @@ class HtmlReportGenerator:
         self.report_paths = report_paths
         self.runtime_config = runtime_config
         self.dem_file_path = dem_file_path
+
+    def _build_chip_pairs_html(self, chips_dir_name: str, ref_name: str, mon_name: str) -> str:
+        """Scan a chips directory and build an HTML grid of REF+MON chip pairs."""
+        ref_dir = self.output_dir / chips_dir_name / ref_name
+        mon_dir = self.output_dir / chips_dir_name / mon_name
+
+        if not ref_dir.exists():
+            return "<p>No chips found.</p>"
+
+        ref_pngs = sorted(ref_dir.glob("REF_*.png"))
+        if not ref_pngs:
+            return "<p>No chip images found.</p>"
+
+        items = []
+        for ref_png in ref_pngs:
+            parts = ref_png.stem.split("_")
+            if len(parts) < 3:
+                continue
+            x0, y0 = parts[1], parts[2]
+            mon_png = mon_dir / f"MON_{x0}_{y0}.png"
+            ref_src = f"{chips_dir_name}/{ref_name}/{ref_png.name}"
+            mon_src = f"{chips_dir_name}/{mon_name}/{mon_png.name}" if mon_png.exists() else None
+            mon_img = f'<img src="{mon_src}" alt="MON {x0} {y0}">' if mon_src else "<span>N/A</span>"
+            items.append(f"""<div class="chip-pair">
+                <div class="chip-label">({x0}, {y0})</div>
+                <div class="chip-images">
+                    <div class="chip-item"><div class="chip-sublabel">Ref</div><img src="{ref_src}" alt="REF {x0} {y0}"></div>
+                    <div class="chip-item"><div class="chip-sublabel">Mon</div>{mon_img}</div>
+                </div>
+            </div>""")
+
+        return f'<div class="chips-grid">{"".join(items)}</div>'
 
     def _copy_assets(self):
         """Copy required assets to output directory."""
@@ -483,17 +575,38 @@ class HtmlReportGenerator:
 
         # 3. Generate Chips Page if needed
         if has_chips:
-            mon_vrt = f"chips/{self.match_result.monitored_image.file_name}/monitored_chips.vrt"
-            ref_vrt = f"chips/{self.match_result.reference_image.file_name}/reference_chips.vrt"
-            
+            mon_name = self.match_result.monitored_image.file_name
+            ref_name = self.match_result.reference_image.file_name
+
+            mon_vrt = f"chips/{mon_name}/monitored_chips.vrt"
+            ref_vrt = f"chips/{ref_name}/reference_chips.vrt"
             chips_vrt_links = f'<li><a href="{mon_vrt}">Monitored Chips VRT</a></li>'
             chips_vrt_links += f'<li><a href="{ref_vrt}">Reference Chips VRT</a></li>'
+
+            raw_pairs = self._build_chip_pairs_html("chips", ref_name, mon_name)
+            lap_dir = self.output_dir / "chips_laplacian"
+            has_laplacian = lap_dir.exists() and any(lap_dir.rglob("*.png"))
+
+            if has_laplacian:
+                lap_pairs = self._build_chip_pairs_html("chips_laplacian", ref_name, mon_name)
+                chips_section_html = f"""
+    <div class="section">
+        <div class="tab-buttons">
+            <button class="tab-btn active" data-tab="tab-raw" onclick="showTab('tab-raw')">Raw</button>
+            <button class="tab-btn" data-tab="tab-laplacian" onclick="showTab('tab-laplacian')">Laplacian</button>
+        </div>
+        <div id="tab-raw" class="tab-content active">{raw_pairs}</div>
+        <div id="tab-laplacian" class="tab-content">{lap_pairs}</div>
+    </div>"""
+            else:
+                chips_section_html = f'<div class="section"><h2>Chips</h2>{raw_pairs}</div>'
 
             chips_content = CHIPS_TEMPLATE.format(
                 css_styles=CSS_STYLES,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
                 products_link=products_link,
                 chips_vrt_links=chips_vrt_links,
+                chips_section_html=chips_section_html,
             )
             with open(self.output_dir / "chips.html", "w", encoding="utf-8") as f:
                 f.write(chips_content)
