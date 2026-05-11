@@ -155,28 +155,6 @@ CSS_STYLES = """
         .nav a:hover {
             background: #34495e;
         }
-        .tab-buttons {
-            display: flex;
-            border-bottom: 2px solid #2c3e50;
-            margin-bottom: 20px;
-        }
-        .tab-btn {
-            padding: 10px 24px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            font-size: 1em;
-            border-bottom: 3px solid transparent;
-            margin-bottom: -2px;
-            color: #555;
-        }
-        .tab-btn.active {
-            border-bottom-color: #3498db;
-            color: #3498db;
-            font-weight: bold;
-        }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
         .chips-grid {
             display: flex;
             flex-wrap: wrap;
@@ -188,53 +166,45 @@ CSS_STYLES = """
             border-radius: 6px;
             padding: 8px;
             background: #fafafa;
-            text-align: center;
         }
         .chip-label {
             font-size: 0.72em;
             color: #888;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
+            font-weight: bold;
         }
-        .chip-images { display: flex; gap: 6px; }
-        .chip-item { text-align: center; position: relative; }
-        .chip-sublabel {
+        .chip-info {
             font-size: 0.7em;
+            color: #666;
+            margin-bottom: 6px;
+            display: flex;
+            gap: 10px;
+        }
+        .chip-info-label { color: #aaa; }
+        .chip-info-value { font-weight: bold; color: #333; }
+        .chip-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+        .chip-col { text-align: center; }
+        .chip-sublabel {
+            font-size: 0.65em;
             color: #aaa;
             margin-bottom: 2px;
         }
-        .chip-item img {
+        .chip-img-wrap {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        .chip-img-wrap img {
             width: 114px;
             height: 114px;
             image-rendering: pixelated;
             display: block;
             border: 1px solid #ccc;
         }
-        .xor-overlay {
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 20;
-            pointer-events: none;
-            border: 1px solid #888;
-            background: #111;
-        }
-        .xor-overlay img {
-            width: 114px;
-            height: 114px;
-            display: block;
-            image-rendering: pixelated;
-            border: none;
-        }
-        .xor-label {
-            font-size: 0.62em;
-            text-align: center;
-            background: rgba(30,30,30,0.85);
-            color: #ccc;
-            padding: 1px 4px;
-            letter-spacing: 0.03em;
-        }
-        .chip-item.xor-chip:hover .xor-overlay { display: block; }
 """
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -430,14 +400,6 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
             <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
         </div>
     </div>
-    <script>
-        function showTab(tabId) {{
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            document.querySelector('[data-tab="' + tabId + '"]').classList.add('active');
-        }}
-    </script>
 </body>
 </html>
 """
@@ -462,82 +424,145 @@ class HtmlReportGenerator:
         self.runtime_config = runtime_config
         self.dem_file_path = dem_file_path
 
-    def _generate_laplacian_xor_diffs(self, ref_name: str, mon_name: str) -> bool:
-        """Pre-compute bitwise-XOR diff images for each laplacian chip pair."""
-        import cv2
-        import numpy as np
+    def _load_chips_data(self) -> dict:
+        """Load chips/chips.csv and return a dict keyed by (x0, y0) int tuples."""
+        import pandas as pd
 
-        ref_dir = self.output_dir / "chips_laplacian" / ref_name
-        mon_dir = self.output_dir / "chips_laplacian" / mon_name
-        xor_dir = self.output_dir / "chips_laplacian_xor"
-        xor_dir.mkdir(exist_ok=True)
+        csv_path = self.output_dir / "chips" / "chips.csv"
+        if not csv_path.exists():
+            return {}
+        try:
+            df = pd.read_csv(csv_path, sep=";")
+            result = {}
+            for _, row in df.iterrows():
+                key = (int(row["x0"]), int(row["y0"]))
+                result[key] = row
+            return result
+        except Exception as exc:
+            logger.warning("Could not load chips.csv: %s", exc)
+            return {}
 
-        count = 0
-        for ref_png in sorted(ref_dir.glob("REF_*.png")):
-            parts = ref_png.stem.split("_")
-            if len(parts) < 3:
-                continue
-            x0, y0 = parts[1], parts[2]
-            mon_png = mon_dir / f"MON_{x0}_{y0}.png"
-            if not mon_png.exists():
-                continue
-            ref_img = cv2.imread(str(ref_png))
-            mon_img = cv2.imread(str(mon_png))
-            if ref_img is None or mon_img is None:
-                continue
-            xor_img = cv2.bitwise_xor(ref_img, mon_img)
-            cv2.imwrite(str(xor_dir / f"XOR_{x0}_{y0}.png"), xor_img)
-            count += 1
+    def _make_crosshair_svg(self, cx: float, cy: float, size: int = 114) -> str:
+        """Generate an SVG crosshair at (cx, cy) overlaid on a chip image."""
+        outline = "rgba(0,0,0,0.55)"
+        color = "rgba(255,60,60,0.95)"
+        s = size
+        lines = (
+            f'<line x1="{cx:.1f}" y1="0" x2="{cx:.1f}" y2="{s}" stroke="{outline}" stroke-width="2.5"/>'
+            f'<line x1="0" y1="{cy:.1f}" x2="{s}" y2="{cy:.1f}" stroke="{outline}" stroke-width="2.5"/>'
+            f'<line x1="{cx:.1f}" y1="0" x2="{cx:.1f}" y2="{s}" stroke="{color}" stroke-width="1"/>'
+            f'<line x1="0" y1="{cy:.1f}" x2="{s}" y2="{cy:.1f}" stroke="{color}" stroke-width="1"/>'
+        )
+        return (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" '
+            f'style="position:absolute;top:0;left:0;pointer-events:none;">{lines}</svg>'
+        )
 
-        logger.debug("Generated %d XOR diff images in %s", count, xor_dir)
-        return count > 0
+    def _build_combined_chips_html(self, ref_name: str, mon_name: str) -> str:
+        """Build chip grid: each card shows raw + laplacian rows with crosshairs and stats."""
+        import math
 
-    def _build_chip_pairs_html(
-        self, chips_dir_name: str, ref_name: str, mon_name: str, xor_dir_name: str = ""
-    ) -> str:
-        """Scan a chips directory and build an HTML grid of REF+MON chip pairs."""
-        ref_dir = self.output_dir / chips_dir_name / ref_name
-        mon_dir = self.output_dir / chips_dir_name / mon_name
-
-        if not ref_dir.exists():
+        ref_raw_dir = self.output_dir / "chips" / ref_name
+        if not ref_raw_dir.exists():
             return "<p>No chips found.</p>"
 
-        ref_pngs = sorted(ref_dir.glob("REF_*.png"))
+        ref_pngs = sorted(ref_raw_dir.glob("REF_*.png"))
         if not ref_pngs:
             return "<p>No chip images found.</p>"
+
+        chips_data = self._load_chips_data()
+        has_laplacian = (self.output_dir / "chips_laplacian").exists()
+
+        CHIP_DISPLAY = 114
+        CHIP_SIZE = 57
+        SCALE = CHIP_DISPLAY / CHIP_SIZE  # 2.0
+
+        def img_col(src: str | None, sublabel: str, ch_svg: str) -> str:
+            if src:
+                return (
+                    f'<div class="chip-col">'
+                    f'<div class="chip-sublabel">{sublabel}</div>'
+                    f'<div class="chip-img-wrap"><img src="{src}" alt="{sublabel}">{ch_svg}</div>'
+                    f'</div>'
+                )
+            return (
+                f'<div class="chip-col">'
+                f'<div class="chip-sublabel">{sublabel}</div>'
+                f'<div style="width:114px;height:114px;border:1px solid #eee;display:inline-block;background:#f0f0f0;"></div>'
+                f'</div>'
+            )
 
         items = []
         for ref_png in ref_pngs:
             parts = ref_png.stem.split("_")
             if len(parts) < 3:
                 continue
-            x0, y0 = parts[1], parts[2]
-            mon_png = mon_dir / f"MON_{x0}_{y0}.png"
-            ref_src = f"{chips_dir_name}/{ref_name}/{ref_png.name}"
-            mon_src = (
-                f"{chips_dir_name}/{mon_name}/{mon_png.name}"
-                if mon_png.exists()
-                else None
+            x0, y0 = int(parts[1]), int(parts[2])
+
+            chip_data = chips_data.get((x0, y0))
+            dx = float(chip_data["dx"]) if chip_data is not None else 0.0
+            dy = float(chip_data["dy"]) if chip_data is not None else 0.0
+            zncc_raw = chip_data.get("zncc_score") if chip_data is not None else None
+            try:
+                zncc = float(zncc_raw)
+                zncc_str = f"{zncc:.3f}" if not math.isnan(zncc) else "N/A"
+            except (TypeError, ValueError):
+                zncc_str = "N/A"
+
+            # Crosshair positions in display coords
+            ref_cx = CHIP_SIZE / 2 * SCALE   # 57.0
+            ref_cy = CHIP_SIZE / 2 * SCALE   # 57.0
+            mon_cx = max(2.0, min(CHIP_DISPLAY - 2.0, ref_cx - dx * SCALE))
+            mon_cy = max(2.0, min(CHIP_DISPLAY - 2.0, ref_cy - dy * SCALE))
+
+            ref_ch = self._make_crosshair_svg(ref_cx, ref_cy, CHIP_DISPLAY)
+            mon_ch = self._make_crosshair_svg(mon_cx, mon_cy, CHIP_DISPLAY)
+
+            ref_raw_src = f"chips/{ref_name}/{ref_png.name}"
+            mon_raw_path = self.output_dir / "chips" / mon_name / f"MON_{x0}_{y0}.png"
+            mon_raw_src = (
+                f"chips/{mon_name}/MON_{x0}_{y0}.png" if mon_raw_path.exists() else None
             )
 
-            if xor_dir_name and mon_src:
-                xor_src = f"{xor_dir_name}/XOR_{x0}_{y0}.png"
-                xor_overlay = f'<div class="xor-overlay"><div class="xor-label">diff</div><img src="{xor_src}" alt="XOR diff"></div>'
-                ref_item = f'<div class="chip-item xor-chip"><div class="chip-sublabel">Ref</div><img src="{ref_src}" alt="REF {x0} {y0}">{xor_overlay}</div>'
-                mon_item = f'<div class="chip-item xor-chip"><div class="chip-sublabel">Mon</div><img src="{mon_src}" alt="MON {x0} {y0}">{xor_overlay}</div>'
-            else:
-                mon_img = (
-                    f'<img src="{mon_src}" alt="MON {x0} {y0}">'
-                    if mon_src
-                    else "<span>N/A</span>"
-                )
-                ref_item = f'<div class="chip-item"><div class="chip-sublabel">Ref</div><img src="{ref_src}" alt="REF {x0} {y0}"></div>'
-                mon_item = f'<div class="chip-item"><div class="chip-sublabel">Mon</div>{mon_img}</div>'
+            raw_row = (
+                f'<div class="chip-row">'
+                f'{img_col(ref_raw_src, "Ref", ref_ch)}'
+                f'{img_col(mon_raw_src, "Mon", mon_ch)}'
+                f'</div>'
+            )
 
-            items.append(f"""<div class="chip-pair">
-                <div class="chip-label">({x0}, {y0})</div>
-                <div class="chip-images">{ref_item}{mon_item}</div>
-            </div>""")
+            lap_row = ""
+            if has_laplacian:
+                ref_lap_path = self.output_dir / "chips_laplacian" / ref_name / f"REF_{x0}_{y0}.png"
+                mon_lap_path = self.output_dir / "chips_laplacian" / mon_name / f"MON_{x0}_{y0}.png"
+                ref_lap_src = (
+                    f"chips_laplacian/{ref_name}/REF_{x0}_{y0}.png"
+                    if ref_lap_path.exists()
+                    else None
+                )
+                mon_lap_src = (
+                    f"chips_laplacian/{mon_name}/MON_{x0}_{y0}.png"
+                    if mon_lap_path.exists()
+                    else None
+                )
+                lap_row = (
+                    f'<div class="chip-row">'
+                    f'{img_col(ref_lap_src, "Ref △", ref_ch)}'
+                    f'{img_col(mon_lap_src, "Mon △", mon_ch)}'
+                    f'</div>'
+                )
+
+            items.append(
+                f'<div class="chip-pair">'
+                f'<div class="chip-label">({x0}, {y0})</div>'
+                f'<div class="chip-info">'
+                f'<span><span class="chip-info-label">dx</span> <span class="chip-info-value">{dx:+.2f}</span></span>'
+                f'<span><span class="chip-info-label">dy</span> <span class="chip-info-value">{dy:+.2f}</span></span>'
+                f'<span><span class="chip-info-label">zncc</span> <span class="chip-info-value">{zncc_str}</span></span>'
+                f'</div>'
+                f'{raw_row}{lap_row}'
+                f'</div>'
+            )
 
         return f'<div class="chips-grid">{"".join(items)}</div>'
 
@@ -669,29 +694,8 @@ class HtmlReportGenerator:
             chips_vrt_links = f'<li><a href="{mon_vrt}">Monitored Chips VRT</a></li>'
             chips_vrt_links += f'<li><a href="{ref_vrt}">Reference Chips VRT</a></li>'
 
-            raw_pairs = self._build_chip_pairs_html("chips", ref_name, mon_name)
-            lap_dir = self.output_dir / "chips_laplacian"
-            has_laplacian = lap_dir.exists() and any(lap_dir.rglob("*.png"))
-
-            if has_laplacian:
-                has_xor = self._generate_laplacian_xor_diffs(ref_name, mon_name)
-                xor_dir_name = "chips_laplacian_xor" if has_xor else ""
-                lap_pairs = self._build_chip_pairs_html(
-                    "chips_laplacian", ref_name, mon_name, xor_dir_name=xor_dir_name
-                )
-                chips_section_html = f"""
-    <div class="section">
-        <div class="tab-buttons">
-            <button class="tab-btn active" data-tab="tab-raw" onclick="showTab('tab-raw')">Raw</button>
-            <button class="tab-btn" data-tab="tab-laplacian" onclick="showTab('tab-laplacian')">Laplacian</button>
-        </div>
-        <div id="tab-raw" class="tab-content active">{raw_pairs}</div>
-        <div id="tab-laplacian" class="tab-content">{lap_pairs}</div>
-    </div>"""
-            else:
-                chips_section_html = (
-                    f'<div class="section"><h2>Chips</h2>{raw_pairs}</div>'
-                )
+            chips_grid = self._build_combined_chips_html(ref_name, mon_name)
+            chips_section_html = f'<div class="section">{chips_grid}</div>'
 
             chips_content = CHIPS_TEMPLATE.format(
                 css_styles=CSS_STYLES,
