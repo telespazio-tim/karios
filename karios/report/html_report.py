@@ -196,7 +196,7 @@ CSS_STYLES = """
             margin-bottom: 6px;
         }
         .chip-images { display: flex; gap: 6px; }
-        .chip-item { text-align: center; }
+        .chip-item { text-align: center; position: relative; }
         .chip-sublabel {
             font-size: 0.7em;
             color: #aaa;
@@ -209,6 +209,32 @@ CSS_STYLES = """
             display: block;
             border: 1px solid #ccc;
         }
+        .xor-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 20;
+            pointer-events: none;
+            border: 1px solid #888;
+            background: #111;
+        }
+        .xor-overlay img {
+            width: 114px;
+            height: 114px;
+            display: block;
+            image-rendering: pixelated;
+            border: none;
+        }
+        .xor-label {
+            font-size: 0.62em;
+            text-align: center;
+            background: rgba(30,30,30,0.85);
+            color: #ccc;
+            padding: 1px 4px;
+            letter-spacing: 0.03em;
+        }
+        .chip-item.xor-chip:hover .xor-overlay { display: block; }
 """
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -436,7 +462,39 @@ class HtmlReportGenerator:
         self.runtime_config = runtime_config
         self.dem_file_path = dem_file_path
 
-    def _build_chip_pairs_html(self, chips_dir_name: str, ref_name: str, mon_name: str) -> str:
+    def _generate_laplacian_xor_diffs(self, ref_name: str, mon_name: str) -> bool:
+        """Pre-compute bitwise-XOR diff images for each laplacian chip pair."""
+        import cv2
+        import numpy as np
+
+        ref_dir = self.output_dir / "chips_laplacian" / ref_name
+        mon_dir = self.output_dir / "chips_laplacian" / mon_name
+        xor_dir = self.output_dir / "chips_laplacian_xor"
+        xor_dir.mkdir(exist_ok=True)
+
+        count = 0
+        for ref_png in sorted(ref_dir.glob("REF_*.png")):
+            parts = ref_png.stem.split("_")
+            if len(parts) < 3:
+                continue
+            x0, y0 = parts[1], parts[2]
+            mon_png = mon_dir / f"MON_{x0}_{y0}.png"
+            if not mon_png.exists():
+                continue
+            ref_img = cv2.imread(str(ref_png))
+            mon_img = cv2.imread(str(mon_png))
+            if ref_img is None or mon_img is None:
+                continue
+            xor_img = cv2.bitwise_xor(ref_img, mon_img)
+            cv2.imwrite(str(xor_dir / f"XOR_{x0}_{y0}.png"), xor_img)
+            count += 1
+
+        logger.debug("Generated %d XOR diff images in %s", count, xor_dir)
+        return count > 0
+
+    def _build_chip_pairs_html(
+        self, chips_dir_name: str, ref_name: str, mon_name: str, xor_dir_name: str = ""
+    ) -> str:
         """Scan a chips directory and build an HTML grid of REF+MON chip pairs."""
         ref_dir = self.output_dir / chips_dir_name / ref_name
         mon_dir = self.output_dir / chips_dir_name / mon_name
@@ -456,14 +514,29 @@ class HtmlReportGenerator:
             x0, y0 = parts[1], parts[2]
             mon_png = mon_dir / f"MON_{x0}_{y0}.png"
             ref_src = f"{chips_dir_name}/{ref_name}/{ref_png.name}"
-            mon_src = f"{chips_dir_name}/{mon_name}/{mon_png.name}" if mon_png.exists() else None
-            mon_img = f'<img src="{mon_src}" alt="MON {x0} {y0}">' if mon_src else "<span>N/A</span>"
+            mon_src = (
+                f"{chips_dir_name}/{mon_name}/{mon_png.name}"
+                if mon_png.exists()
+                else None
+            )
+
+            if xor_dir_name and mon_src:
+                xor_src = f"{xor_dir_name}/XOR_{x0}_{y0}.png"
+                xor_overlay = f'<div class="xor-overlay"><div class="xor-label">diff</div><img src="{xor_src}" alt="XOR diff"></div>'
+                ref_item = f'<div class="chip-item xor-chip"><div class="chip-sublabel">Ref</div><img src="{ref_src}" alt="REF {x0} {y0}">{xor_overlay}</div>'
+                mon_item = f'<div class="chip-item xor-chip"><div class="chip-sublabel">Mon</div><img src="{mon_src}" alt="MON {x0} {y0}">{xor_overlay}</div>'
+            else:
+                mon_img = (
+                    f'<img src="{mon_src}" alt="MON {x0} {y0}">'
+                    if mon_src
+                    else "<span>N/A</span>"
+                )
+                ref_item = f'<div class="chip-item"><div class="chip-sublabel">Ref</div><img src="{ref_src}" alt="REF {x0} {y0}"></div>'
+                mon_item = f'<div class="chip-item"><div class="chip-sublabel">Mon</div>{mon_img}</div>'
+
             items.append(f"""<div class="chip-pair">
                 <div class="chip-label">({x0}, {y0})</div>
-                <div class="chip-images">
-                    <div class="chip-item"><div class="chip-sublabel">Ref</div><img src="{ref_src}" alt="REF {x0} {y0}"></div>
-                    <div class="chip-item"><div class="chip-sublabel">Mon</div>{mon_img}</div>
-                </div>
+                <div class="chip-images">{ref_item}{mon_item}</div>
             </div>""")
 
         return f'<div class="chips-grid">{"".join(items)}</div>'
@@ -502,7 +575,10 @@ class HtmlReportGenerator:
             for plot_path in self.report_paths.dem_plots:
                 relative_path = Path(plot_path).name
                 title = (
-                    relative_path.replace("dem_", "").replace(".png", "").replace("_", " ").title()
+                    relative_path.replace("dem_", "")
+                    .replace(".png", "")
+                    .replace("_", " ")
+                    .title()
                 )
                 dem_plots_html += f"""
                 <div class="image-container">
@@ -519,11 +595,17 @@ class HtmlReportGenerator:
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             monitored_image=self.match_result.monitored_image.file_name,
             reference_image=self.match_result.reference_image.file_name,
-            mask_file=self.match_result.mask.file_name if self.match_result.mask else "None",
+            mask_file=self.match_result.mask.file_name
+            if self.match_result.mask
+            else "None",
             dem_file=self.dem_file_path.name if self.dem_file_path else "None",
-            pixel_size=self.runtime_config.pixel_size if self.runtime_config.pixel_size else "Auto",
+            pixel_size=self.runtime_config.pixel_size
+            if self.runtime_config.pixel_size
+            else "Auto",
             large_shift_detection=(
-                "Enabled" if self.runtime_config.enable_large_shift_detection else "Disabled"
+                "Enabled"
+                if self.runtime_config.enable_large_shift_detection
+                else "Disabled"
             ),
             title_prefix=self.runtime_config.title_prefix or "None",
             matched_points=len(self.match_result.points),
@@ -553,10 +635,14 @@ class HtmlReportGenerator:
             for p in self.report_paths.products:
                 p_path = Path(p)
                 p_name = p_path.name
-                p_type = "Vector (GeoJSON)" if p_name.endswith(".json") else "Raster (GeoTIFF)"
+                p_type = (
+                    "Vector (GeoJSON)"
+                    if p_name.endswith(".json")
+                    else "Raster (GeoTIFF)"
+                )
                 if "mask" in p_name:
                     p_type = "Mask (GeoTIFF)"
-                
+
                 products_rows += f"""
                 <tr>
                     <td>{p_type}</td>
@@ -588,7 +674,11 @@ class HtmlReportGenerator:
             has_laplacian = lap_dir.exists() and any(lap_dir.rglob("*.png"))
 
             if has_laplacian:
-                lap_pairs = self._build_chip_pairs_html("chips_laplacian", ref_name, mon_name)
+                has_xor = self._generate_laplacian_xor_diffs(ref_name, mon_name)
+                xor_dir_name = "chips_laplacian_xor" if has_xor else ""
+                lap_pairs = self._build_chip_pairs_html(
+                    "chips_laplacian", ref_name, mon_name, xor_dir_name=xor_dir_name
+                )
                 chips_section_html = f"""
     <div class="section">
         <div class="tab-buttons">
@@ -599,7 +689,9 @@ class HtmlReportGenerator:
         <div id="tab-laplacian" class="tab-content">{lap_pairs}</div>
     </div>"""
             else:
-                chips_section_html = f'<div class="section"><h2>Chips</h2>{raw_pairs}</div>'
+                chips_section_html = (
+                    f'<div class="section"><h2>Chips</h2>{raw_pairs}</div>'
+                )
 
             chips_content = CHIPS_TEMPLATE.format(
                 css_styles=CSS_STYLES,
