@@ -205,6 +205,29 @@ CSS_STYLES = """
             display: block;
             border: 1px solid #ccc;
         }
+        .sort-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .sort-bar-label {
+            font-size: 0.85em;
+            color: #666;
+            font-weight: bold;
+        }
+        .sort-btn {
+            padding: 4px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f8f9fa;
+            cursor: pointer;
+            font-size: 0.82em;
+            color: #444;
+        }
+        .sort-btn:hover { background: #e2e6ea; }
+        .sort-btn.active { background: #2c3e50; color: white; border-color: #2c3e50; }
 """
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -405,6 +428,49 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+_SORT_BAR_HTML = (
+    '<div class="sort-bar">'
+    '<span class="sort-bar-label">Sort by:</span>'
+    '<button class="sort-btn active" data-key="idx" data-label="Chip #">Chip # ↑</button>'
+    '<button class="sort-btn" data-key="dist" data-label="Distance">Distance</button>'
+    '<button class="sort-btn" data-key="score" data-label="Score">Score</button>'
+    '</div>'
+)
+
+_SORT_SCRIPT = """<script>
+(function () {
+    var key = 'idx', dir = 1;
+    function updateBtns() {
+        document.querySelectorAll('.sort-btn').forEach(function (b) {
+            var active = b.dataset.key === key;
+            b.classList.toggle('active', active);
+            b.textContent = b.dataset.label + (active ? (dir === 1 ? ' ↑' : ' ↓') : '');
+        });
+    }
+    function sort() {
+        var grid = document.querySelector('.chips-grid');
+        var items = Array.from(grid.children);
+        items.sort(function (a, b) {
+            var av = parseFloat(a.dataset[key]);
+            var bv = parseFloat(b.dataset[key]);
+            if (isNaN(av) && isNaN(bv)) return 0;
+            if (isNaN(av)) return 1;
+            if (isNaN(bv)) return -1;
+            return dir * (av - bv);
+        });
+        items.forEach(function (el) { grid.appendChild(el); });
+    }
+    document.querySelectorAll('.sort-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (this.dataset.key === key) { dir *= -1; } else { key = this.dataset.key; dir = 1; }
+            updateBtns();
+            sort();
+        });
+    });
+}());
+</script>"""
+
+
 class HtmlReportGenerator:
     """Generator for HTML reports."""
 
@@ -493,7 +559,7 @@ class HtmlReportGenerator:
             )
 
         items = []
-        for ref_png in ref_pngs:
+        for i, ref_png in enumerate(ref_pngs):
             parts = ref_png.stem.split("_")
             if len(parts) < 3:
                 continue
@@ -506,8 +572,11 @@ class HtmlReportGenerator:
             try:
                 zncc = float(zncc_raw)
                 zncc_str = f"{zncc:.3f}" if not math.isnan(zncc) else "N/A"
+                score_val = "nan" if math.isnan(zncc) else f"{zncc:.6f}"
             except (TypeError, ValueError):
                 zncc_str = "N/A"
+                score_val = "nan"
+            dist = dx ** 2 + dy ** 2
 
             # Crosshair positions in display coords
             ref_cx = CHIP_SIZE / 2 * SCALE   # 57.0
@@ -553,7 +622,7 @@ class HtmlReportGenerator:
                 )
 
             items.append(
-                f'<div class="chip-pair">'
+                f'<div class="chip-pair" data-idx="{i}" data-dist="{dist:.4f}" data-score="{score_val}">'
                 f'<div class="chip-label">({x0}, {y0})</div>'
                 f'<div class="chip-info">'
                 f'<span><span class="chip-info-label">dx</span> <span class="chip-info-value">{dx:+.2f}</span></span>'
@@ -564,7 +633,8 @@ class HtmlReportGenerator:
                 f'</div>'
             )
 
-        return f'<div class="chips-grid">{"".join(items)}</div>'
+        grid = f'<div class="chips-grid">{"".join(items)}</div>'
+        return _SORT_BAR_HTML + grid + _SORT_SCRIPT
 
     def _copy_assets(self):
         """Copy required assets to output directory."""
