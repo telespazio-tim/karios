@@ -637,21 +637,21 @@ class HtmlReportGenerator:
                 )
                 lap_row = (
                     f'<div class="chip-row">'
-                    f"{img_col(ref_lap_src, 'Ref △', ref_ch)}"
-                    f"{img_col(mon_lap_src, 'Mon △', mon_ch)}"
+                    f"{img_col(ref_lap_src, 'Ref Laplacian', ref_ch)}"
+                    f"{img_col(mon_lap_src, 'Mon Laplacian', mon_ch)}"
                     f"</div>"
                 )
 
             items.append(
                 f'<div class="chip-pair" data-idx="{i}" data-dist="{dist:.4f}" data-score="{score_val}" data-nmi="{mi_val}">'
-                f'<div class="chip-label">({x0}, {y0})</div>'
+                f'<div class="chip-label">#{i} ({x0}, {y0})</div>'
+                f"{raw_row}{lap_row}"
                 f'<div class="chip-info">'
                 f'<span><span class="chip-info-label">dx</span> <span class="chip-info-value">{dx:+.2f}</span></span>'
                 f'<span><span class="chip-info-label">dy</span> <span class="chip-info-value">{dy:+.2f}</span></span>'
                 f'<span><span class="chip-info-label">zncc</span> <span class="chip-info-value">{zncc_str}</span></span>'
                 f'<span><span class="chip-info-label">nmi</span> <span class="chip-info-value">{mi_str}</span></span>'
                 f"</div>"
-                f"{raw_row}{lap_row}"
                 f"</div>"
             )
 
