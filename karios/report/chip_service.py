@@ -576,8 +576,19 @@ class ChipService:
         x1_offset = x1 - self._chip_margin
         y1_offset = y1 - self._chip_margin
 
-        if x0_offset < 0 or y0_offset < 0 or x1_offset < 0 or y1_offset < 0:
-            # TODO: complete for right and bottom
+        ref_out_of_bounds = (
+            x0_offset < 0
+            or y0_offset < 0
+            or x0_offset + self._chip_size > reference.RasterXSize
+            or y0_offset + self._chip_size > reference.RasterYSize
+        )
+        mon_out_of_bounds = (
+            x1_offset < 0
+            or y1_offset < 0
+            or x1_offset + self._chip_size > monitored.RasterXSize
+            or y1_offset + self._chip_size > monitored.RasterYSize
+        )
+        if ref_out_of_bounds or mon_out_of_bounds:
             logger.warning("Chip to close to image boundaries, skip it")
             return
 
