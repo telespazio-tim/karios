@@ -382,7 +382,7 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KARIOS Key Point Chips - {title_prefix}</title>
+    <title>KARIOS Key Point Image Chips - {title_prefix}</title>
     <style>
         {css_styles}
     </style>
@@ -399,7 +399,7 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
     </nav>
 
     <div class="section">
-        <h1>Key Point Chips</h1>
+        <h1>Key Point Image Chips</h1>
         <p>Visual verification chips for selected key points. Each pair shows reference (left) and monitored (right).</p>
         <div class="grid">
             <div class="stats-card">
