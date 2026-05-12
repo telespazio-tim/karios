@@ -511,8 +511,8 @@ class HtmlReportGenerator:
 
     def _make_crosshair_svg(self, cx: float, cy: float, size: int = 114) -> str:
         """Generate an SVG crosshair at (cx, cy) overlaid on a chip image."""
-        outline = "rgba(0,0,0,0.55)"
-        color = "rgba(255,60,60,0.95)"
+        outline = "rgba(0,0,0,0)"
+        color = "rgba(255,60,60,0)"
         s = size
         lines = (
             f'<line x1="{cx:.1f}" y1="0" x2="{cx:.1f}" y2="{s}" stroke="{outline}" stroke-width="2.5"/>'
