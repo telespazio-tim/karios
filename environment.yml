@@ -1,4 +1,4 @@
-name: karios-laplacian
+name: karios
 channels:
   - conda-forge
 dependencies:
