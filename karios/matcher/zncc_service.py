@@ -126,6 +126,31 @@ def _zncc2(img1: NDArray, img2: NDArray, u1: int, v1: int, u2: int, v2: int, n: 
     return float(np.mean(patch1_norm * patch2_norm))
 
 
+def _mutual_information(patch1: NDArray, patch2: NDArray, bins: int = 32) -> float:
+    """Compute Normalized Mutual Information (NMI) between two image patches.
+
+    NMI = 2 * MI(X,Y) / (H(X) + H(Y)), ranging from 0 (independent) to 1 (fully dependent).
+    """
+    p1 = patch1.ravel().astype(np.float64)
+    p2 = patch2.ravel().astype(np.float64)
+
+    joint_hist, _, _ = np.histogram2d(p1, p2, bins=bins)
+    joint_prob = joint_hist / joint_hist.sum()
+
+    def _entropy(p: NDArray) -> float:
+        p = p[p > 0]
+        return float(-np.sum(p * np.log2(p)))
+
+    h_x = _entropy(joint_prob.sum(axis=1))
+    h_y = _entropy(joint_prob.sum(axis=0))
+    h_xy = _entropy(joint_prob.ravel())
+
+    denom = h_x + h_y
+    if denom == 0:
+        return np.nan
+    return float(2.0 * (h_x + h_y - h_xy) / denom)
+
+
 class ZNCCService:
     """Service class to compute Zero-mean Normalized Cross-Correlation (ZNCC) between two image patches"""
 
@@ -210,6 +235,55 @@ class ZNCCService:
                 exc_info=e,
                 stack_info=True,
             )
+            return np.nan
+
+    def compute_mi(
+        self, df: DataFrame, monitored: GdalRasterImage, reference: GdalRasterImage
+    ) -> Series:
+        """Compute NMI for each KP of the given dataframe.
+
+        Args:
+            df (DataFrame): dataframe with columns x0, y0, dx, dy
+            monitored (GdalRasterImage): monitored image to extract patches
+            reference (GdalRasterImage): reference image to extract patches
+
+        Returns:
+            Series: NMI score series, same index as df, NaN where not computed
+        """
+        logger.info("Compute NMI for %s points", len(df))
+        score = df.apply(self._compute_mi, axis=1, monitored=monitored, reference=reference)
+        monitored.clear_cache()
+        reference.clear_cache()
+        logger.info("NMI computation finish")
+        return score
+
+    def _compute_mi(self, series: Series, monitored, reference):
+        x0 = int(series["x0"])
+        y0 = int(series["y0"])
+        x0_offset = x0 - self._chip_margin
+        y0_offset = y0 - self._chip_margin
+
+        x1 = round(series["x0"] + series["dx"])
+        y1 = round(series["y0"] + series["dy"])
+        x1_offset = x1 - self._chip_margin
+        y1_offset = y1 - self._chip_margin
+
+        x0_max = reference.x_size - self._chip_margin
+        y0_max = reference.y_size - self._chip_margin
+        x1_max = monitored.x_size - self._chip_margin
+        y1_max = monitored.y_size - self._chip_margin
+
+        if x0_offset < 0 or y0_offset < 0 or x1_offset < 0 or y1_offset < 0:
+            return np.nan
+        if x0 > x0_max or y0 > y0_max or x1 > x1_max or y1 > y1_max:
+            return np.nan
+
+        chip_ref = self._extract_chip(x0, y0, reference)
+        chip_mon = self._extract_chip(x1, y1, monitored)
+        try:
+            return _mutual_information(chip_ref, chip_mon)
+        except Exception as e:
+            logger.error("Error while computing NMI", exc_info=e, stack_info=True)
             return np.nan
 
     def _extract_chip(self, x: int, y: int, image: GdalRasterImage):

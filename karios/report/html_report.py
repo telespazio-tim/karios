@@ -433,8 +433,9 @@ _SORT_BAR_HTML = (
     '<span class="sort-bar-label">Sort by:</span>'
     '<button class="sort-btn active" data-key="idx" data-label="Chip #">Chip # ↑</button>'
     '<button class="sort-btn" data-key="dist" data-label="Distance">Distance</button>'
-    '<button class="sort-btn" data-key="score" data-label="Score">Score</button>'
-    '</div>'
+    '<button class="sort-btn" data-key="score" data-label="ZNCC">ZNCC</button>'
+    '<button class="sort-btn" data-key="nmi" data-label="NMI">NMI</button>'
+    "</div>"
 )
 
 _SORT_SCRIPT = """<script>
@@ -549,13 +550,13 @@ class HtmlReportGenerator:
                     f'<div class="chip-col">'
                     f'<div class="chip-sublabel">{sublabel}</div>'
                     f'<div class="chip-img-wrap"><img src="{src}" alt="{sublabel}">{ch_svg}</div>'
-                    f'</div>'
+                    f"</div>"
                 )
             return (
                 f'<div class="chip-col">'
                 f'<div class="chip-sublabel">{sublabel}</div>'
                 f'<div style="width:114px;height:114px;border:1px solid #eee;display:inline-block;background:#f0f0f0;"></div>'
-                f'</div>'
+                f"</div>"
             )
 
         items = []
@@ -576,11 +577,21 @@ class HtmlReportGenerator:
             except (TypeError, ValueError):
                 zncc_str = "N/A"
                 score_val = "nan"
-            dist = dx ** 2 + dy ** 2
+
+            mi_raw = chip_data.get("mi_score") if chip_data is not None else None
+            try:
+                mi = float(mi_raw)
+                mi_str = f"{mi:.3f}" if not math.isnan(mi) else "N/A"
+                mi_val = "nan" if math.isnan(mi) else f"{mi:.6f}"
+            except (TypeError, ValueError):
+                mi_str = "N/A"
+                mi_val = "nan"
+
+            dist = dx**2 + dy**2
 
             # Crosshair positions in display coords
-            ref_cx = CHIP_SIZE / 2 * SCALE   # 57.0
-            ref_cy = CHIP_SIZE / 2 * SCALE   # 57.0
+            ref_cx = CHIP_SIZE / 2 * SCALE  # 57.0
+            ref_cy = CHIP_SIZE / 2 * SCALE  # 57.0
             mon_cx = max(2.0, min(CHIP_DISPLAY - 2.0, ref_cx - dx * SCALE))
             mon_cy = max(2.0, min(CHIP_DISPLAY - 2.0, ref_cy - dy * SCALE))
 
@@ -595,15 +606,25 @@ class HtmlReportGenerator:
 
             raw_row = (
                 f'<div class="chip-row">'
-                f'{img_col(ref_raw_src, "Ref", ref_ch)}'
-                f'{img_col(mon_raw_src, "Mon", mon_ch)}'
-                f'</div>'
+                f"{img_col(ref_raw_src, 'Ref', ref_ch)}"
+                f"{img_col(mon_raw_src, 'Mon', mon_ch)}"
+                f"</div>"
             )
 
             lap_row = ""
             if has_laplacian:
-                ref_lap_path = self.output_dir / "chips_laplacian" / ref_name / f"REF_{x0}_{y0}.png"
-                mon_lap_path = self.output_dir / "chips_laplacian" / mon_name / f"MON_{x0}_{y0}.png"
+                ref_lap_path = (
+                    self.output_dir
+                    / "chips_laplacian"
+                    / ref_name
+                    / f"REF_{x0}_{y0}.png"
+                )
+                mon_lap_path = (
+                    self.output_dir
+                    / "chips_laplacian"
+                    / mon_name
+                    / f"MON_{x0}_{y0}.png"
+                )
                 ref_lap_src = (
                     f"chips_laplacian/{ref_name}/REF_{x0}_{y0}.png"
                     if ref_lap_path.exists()
@@ -616,21 +637,22 @@ class HtmlReportGenerator:
                 )
                 lap_row = (
                     f'<div class="chip-row">'
-                    f'{img_col(ref_lap_src, "Ref △", ref_ch)}'
-                    f'{img_col(mon_lap_src, "Mon △", mon_ch)}'
-                    f'</div>'
+                    f"{img_col(ref_lap_src, 'Ref △', ref_ch)}"
+                    f"{img_col(mon_lap_src, 'Mon △', mon_ch)}"
+                    f"</div>"
                 )
 
             items.append(
-                f'<div class="chip-pair" data-idx="{i}" data-dist="{dist:.4f}" data-score="{score_val}">'
+                f'<div class="chip-pair" data-idx="{i}" data-dist="{dist:.4f}" data-score="{score_val}" data-nmi="{mi_val}">'
                 f'<div class="chip-label">({x0}, {y0})</div>'
                 f'<div class="chip-info">'
                 f'<span><span class="chip-info-label">dx</span> <span class="chip-info-value">{dx:+.2f}</span></span>'
                 f'<span><span class="chip-info-label">dy</span> <span class="chip-info-value">{dy:+.2f}</span></span>'
                 f'<span><span class="chip-info-label">zncc</span> <span class="chip-info-value">{zncc_str}</span></span>'
-                f'</div>'
-                f'{raw_row}{lap_row}'
-                f'</div>'
+                f'<span><span class="chip-info-label">nmi</span> <span class="chip-info-value">{mi_str}</span></span>'
+                f"</div>"
+                f"{raw_row}{lap_row}"
+                f"</div>"
             )
 
         grid = f'<div class="chips-grid">{"".join(items)}</div>'

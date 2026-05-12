@@ -700,6 +700,13 @@ class KariosAPI:
                 # Assign the computed scores back to the original dataframe using the same indices
                 dataframe.loc[zncc_candidates.index, "zncc_score"] = zncc_scores
 
+                # Compute NMI scores for the same candidates
+                dataframe["mi_score"] = np.nan
+                mi_scores = self._zncc_service.compute_mi(
+                    zncc_candidates, monitored_image, reference_image
+                )
+                dataframe.loc[zncc_candidates.index, "mi_score"] = mi_scores
+
             else:
                 logger.warning("Large shift applied, skip ZNCC")
 
