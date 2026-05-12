@@ -226,6 +226,22 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
   --out ./existing_results
 ```
 
+#### With DN Value Filtering
+
+```bash
+# Filter out key points with zero DN values
+karios process monitored.tif reference.tif --no-value 0
+
+# Filter out multiple DN values (e.g., 0 and 255)
+karios process monitored.tif reference.tif --no-value 0 --no-value 255
+
+# Combine with other options
+karios process monitored.tif reference.tif mask.tif \
+  --no-value 0 \
+  --out ./results \
+  --generate-key-points-mask
+```
+
 ### CLI Options
 
 #### Processing Options
@@ -245,6 +261,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
 | `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
 | `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products |
+| `--no-value` | INTEGER | Filter out key points where reference or monitored image has this DN value. Can be used multiple times (e.g., `--no-value 0 --no-value 255`) |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resampled to 10m") |
 
 #### Advanced Options
@@ -300,6 +317,7 @@ runtime_config = RuntimeConfiguration(
     pixel_size=10.0,  # meters
     enable_large_shift_detection=False,
     generate_kp_chips=True,
+    no_values=[0, 255],  # Optional: filter out key points with DN values 0 and 255
 )
 
 # Initialize API
@@ -387,7 +405,8 @@ runtime_config = RuntimeConfiguration(
     gen_delta_raster=True,        # Generate displacement raster
     generate_kp_chips=True,      # Enable chip generation
     dem_description="SRTM 30m",   # Optional DEM description for plots
-    enable_large_shift_detection=False
+    enable_large_shift_detection=False,
+    no_values=[0, 255]            # Optional: filter out key points with these DN values
 )
 ```
 

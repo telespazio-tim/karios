@@ -51,6 +51,8 @@ class RuntimeConfiguration:
         generate_kp_chips: Whether to generate KP chip images
         dem_description: Optional DEM source description for plots
         enable_large_shift_detection: Whether to detect and correct large pixel shifts
+        no_values: Optional list of DN (Digital Number) values to filter out from key points.
+                   Key points where reference or monitored image has these values will be excluded.
     """
 
     output_directory: Path
@@ -61,3 +63,4 @@ class RuntimeConfiguration:
     generate_kp_chips: bool
     dem_description: Optional[str]
     enable_large_shift_detection: bool
+    no_values: Optional[list[int]] = None

@@ -60,6 +60,7 @@ click.rich_click.OPTION_GROUPS = {
                 "--generate-key-points-mask",
                 "--generate-intermediate-product",
                 "--generate-kp-chips",
+                "--no-value",
                 "--dem-description",
             ],
         },
