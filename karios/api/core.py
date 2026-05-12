@@ -868,6 +868,8 @@ class KariosAPI:
             match_result.reference_image,
             match_result.points,
             self._runtime_configuration.title_prefix,
+            mask=match_result.mask,
+            no_values=self._runtime_configuration.no_values,
         )
         overview_path = output_dir / "01_overview.png"
         overview_plot.plot(overview_path)

@@ -48,6 +48,8 @@ class OverviewPlot(AbstractPlot):
         ref_image: GdalRasterImage,
         points: DataFrame,
         prefix: str | None,
+        mask: GdalRasterImage | None = None,
+        no_values: list[int] | None = None,
     ):
         """Constructor
 
@@ -57,12 +59,18 @@ class OverviewPlot(AbstractPlot):
             ref_image (GdalRasterImage): reference image
             points (DataFrame): KP data frame with series x0, y0, dx, dy
             prefix (str|None): figure title prefix
+            mask (GdalRasterImage|None): optional mask applied to the monitored image
+                when plotting. Pixels where mask == 0 are hidden.
+            no_values (list[int]|None): optional list of DN values to hide in both
+                monitored and reference image displays, matching the CLI --no-value filter.
         """
         super().__init__(prefix, config.fig_size)
         self._config = config
         self._mon_img = mon_image
         self._ref_img = ref_image
         self._points = points
+        self._mask = mask
+        self._no_values = no_values
 
     ####################################################
     # Abstract implementation
@@ -104,8 +112,10 @@ class OverviewPlot(AbstractPlot):
 
         # Plot images and errors first
         self._setup_header(header_ax)
-        self._plot_image(mon_img_ax, self._mon_img, "Monitored")
-        self._plot_image(ref_img_ax, self._ref_img, "Reference")
+        mon_invalid = self._build_invalid_mask(self._mon_img, apply_user_mask=True)
+        ref_invalid = self._build_invalid_mask(self._ref_img, apply_user_mask=False)
+        self._plot_image(mon_img_ax, self._mon_img, "Monitored", invalid=mon_invalid)
+        self._plot_image(ref_img_ax, self._ref_img, "Reference", invalid=ref_invalid)
 
         # Plot errors with colorbars
         self._plot_radial_error(rad_err_ax)
@@ -121,17 +131,44 @@ class OverviewPlot(AbstractPlot):
         text = f"Monitored : {self._mon_img.file_name}\nReference : {self._ref_img.file_name}".expandtabs()
         axes.text(x=0, y=0.5, s=text, size="14", ha="left", va="center")
 
-    def _plot_image(self, axes: Axes, img: GdalRasterImage, title: str) -> None:
+    def _build_invalid_mask(
+        self, img: GdalRasterImage, apply_user_mask: bool
+    ) -> np.ndarray | None:
+        """Combine the user-provided mask and the --no-value DN filter into a
+        boolean array marking pixels to hide. Returns None when there is nothing
+        to hide so the caller can skip masked-array construction.
+        """
+        invalid = None
+        if apply_user_mask and self._mask is not None:
+            invalid = self._mask.array == 0
+        if self._no_values:
+            no_value_invalid = np.isin(img.array, self._no_values)
+            invalid = no_value_invalid if invalid is None else (invalid | no_value_invalid)
+        return invalid if invalid is not None and invalid.any() else None
+
+    def _plot_image(
+        self,
+        axes: Axes,
+        img: GdalRasterImage,
+        title: str,
+        invalid: np.ndarray | None = None,
+    ) -> None:
         """Plot image with adaptive contrast for satellite imagery.
 
         Uses cumulative count cut (0.5%-99.5%) for consistent visualization.
+        Pixels marked True in `invalid` are hidden and excluded from the
+        contrast computation.
         """
         axes.set_title(title)
 
-        valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0)]
+        if invalid is not None:
+            valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0) & ~invalid]
+        else:
+            valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0)]
+
         if len(valid_pixels) > 0:
             v_min = np.percentile(valid_pixels, 0.5)
-            v_max = np.percentile(valid_pixels, 99.5)                
+            v_max = np.percentile(valid_pixels, 99.5)
         else:
             v_min = np.nanmin(img.array)
             v_max = np.nanmax(img.array)
@@ -145,7 +182,12 @@ class OverviewPlot(AbstractPlot):
             v_max,
         )
 
-        axes.imshow(img.array, cmap="gray", vmin=v_min, vmax=v_max)
+        display_array = (
+            np.ma.masked_array(img.array, mask=invalid) if invalid is not None else img.array
+        )
+        cmap = plt.get_cmap("gray").copy()
+        cmap.set_bad(color="magenta")
+        axes.imshow(display_array, cmap=cmap, vmin=v_min, vmax=v_max)
 
     def _plot_radial_error(self, axes: Axes) -> None:
         """Plot radial error with dedicated colorbar"""
