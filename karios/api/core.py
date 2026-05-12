@@ -169,6 +169,7 @@ class KariosAPI:
         reference_image_path: Path,
         mask_file_path: Optional[Path] = None,
         resume: bool = False,
+        vector_mask_path: Optional[Path] = None,
     ) -> MatchResult:
         """Match the monitored image against the reference image.
 
@@ -178,6 +179,8 @@ class KariosAPI:
             mask_file_path: Optional path to mask file for excluding pixels from matching.
                 Mask should be compatible with the monitored image.
             resume: Whether to resume from previous analysis
+            vector_mask_path: Optional path to vector mask file (GeoJSON, Shapefile, etc.)
+                for excluding pixels from matching. Will be rasterized to match the monitored image.
 
         Returns:
             MatchResult: Object containing match points and statistics
@@ -188,8 +191,8 @@ class KariosAPI:
             reference_image_path, monitored_image_path
         )
 
-        # Load mask if provided
-        mask = self._load_mask(monitored_image, mask_file_path)
+        # Load mask if provided (raster or vector)
+        mask = self._load_mask(monitored_image, mask_file_path, vector_mask_path)
 
         # Handle large offset detection if enabled
         if self._runtime_configuration.enable_large_shift_detection:
@@ -214,6 +217,11 @@ class KariosAPI:
                 points = self._get_match_points(resume, monitored_image, reference_image, mask)
         else:
             points = self._get_match_points(resume, monitored_image, reference_image, mask)
+
+        # Filter out key points with specified DN values
+        points = self._filter_by_dn_values(
+            points, monitored_image, reference_image, self._runtime_configuration.no_values
+        )
 
         return MatchResult(
             points=points,
@@ -376,6 +384,7 @@ class KariosAPI:
         mask_file_path: Optional[Path] = None,
         dem_file_path: Optional[Path] = None,
         resume: bool = False,
+        vector_mask_path: Optional[Path] = None,
     ) -> tuple[MatchResult, AccuracyAnalysis, ReportPaths]:
         """Complete processing pipeline combining matching, analysis and reporting.
 
@@ -396,6 +405,9 @@ class KariosAPI:
             dem_file_path: Optional Path to DEM file for altitude-based analysis.
                         DEM should be compatible with the reference image.
             resume: Whether to resume from previous analysis (skip KLT if CSV exists)
+            vector_mask_path: Optional Path to vector mask file (GeoJSON, Shapefile, etc.)
+                        for excluding pixels from matching. Will be rasterized to match
+                        the monitored image.
 
         Returns:
             Tuple containing:
@@ -415,7 +427,7 @@ class KariosAPI:
         logger.info("Process %s", monitored_image_path)
 
         match_result = self.match_images(
-            monitored_image_path, reference_image_path, mask_file_path, resume
+            monitored_image_path, reference_image_path, mask_file_path, resume, vector_mask_path
         )
 
         accuracy = self.analyze_accuracy(match_result)
@@ -486,13 +498,17 @@ class KariosAPI:
         return reference_image, monitored_image
 
     def _load_mask(
-        self, monitored_image: GdalRasterImage, mask_file_path: Optional[Path]
+        self, monitored_image: GdalRasterImage, mask_file_path: Optional[Path], vector_mask_path: Optional[Path] = None
     ) -> Optional[GdalRasterImage]:
         """Load mask as GdalRasterImage and check compatibility with monitored image.
 
+        When both raster and vector masks are provided, they are combined with a logical AND:
+        A pixel is valid only if it is valid in BOTH masks (raster AND vector).
+
         Args:
             monitored_image: Monitored image to check compatibility against
-            mask_file_path: Path to mask file
+            mask_file_path: Path to raster mask file
+            vector_mask_path: Optional path to vector mask file (GeoJSON, Shapefile, etc.)
 
         Raises:
             KariosException: If mask is not compatible with monitored image
@@ -500,20 +516,70 @@ class KariosAPI:
         Returns:
             Mask if compatible with monitored image, None if no mask provided
         """
-        if not mask_file_path:
+        import numpy as np
+        
+        raster_mask = None
+        vector_mask = None
+
+        # Load raster mask if provided
+        if mask_file_path:
+            logger.info("Load raster mask file %s", mask_file_path)
+            raster_mask = GdalRasterImage(mask_file_path)
+            if not raster_mask.is_compatible_with(monitored_image):
+                raise KariosException(
+                    f"""Mask geo info not compatible with monitored image:
+            * Mask image : {raster_mask.image_information}
+            * Monitored image : {monitored_image.image_information}
+            """
+                )
+            logger.info("Raster mask loaded")
+
+        # Load vector mask if provided
+        if vector_mask_path:
+            logger.info("Load vector mask file %s", vector_mask_path)
+            from karios.core.image import rasterize_vector_mask
+            vector_mask = rasterize_vector_mask(str(vector_mask_path), monitored_image)
+            logger.info("Vector mask rasterized and loaded")
+
+        # If no masks provided, return None
+        if raster_mask is None and vector_mask is None:
             logger.info("No mask provided")
             return None
 
-        logger.info("Load mask file %s", mask_file_path)
-        mask = GdalRasterImage(mask_file_path)
-        if not mask.is_compatible_with(monitored_image):
-            raise KariosException(
-                f"""Mask geo info not compatible with monitored image:
-            * Mask image : {mask.image_information}
-            * Monitored image : {monitored_image.image_information}
-            """
-            )
-        return mask
+        # If only one mask, return it
+        if raster_mask is None:
+            return vector_mask
+        if vector_mask is None:
+            return raster_mask
+
+        # Combine both masks with AND logic
+        logger.info("Combining raster and vector masks with AND logic")
+        combined_array = np.logical_and(
+            raster_mask.array > 0,
+            vector_mask.array > 0
+        ).astype(np.uint8)
+
+        # Create combined mask
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+        temp_path = temp_file.name
+        temp_file.close()
+
+        raster_mask.to_raster(temp_path, combined_array)
+        combined_mask = GdalRasterImage(temp_path)
+
+        # Log statistics
+        raster_valid = np.sum(raster_mask.array > 0)
+        vector_valid = np.sum(vector_mask.array > 0)
+        combined_valid = np.sum(combined_array > 0)
+        logger.info(
+            "Mask combination: raster=%d valid pixels, vector=%d valid pixels, combined=%d valid pixels (AND logic)",
+            raster_valid,
+            vector_valid,
+            combined_valid
+        )
+
+        return combined_mask
 
     def _load_dem(
         self, reference_image: GdalRasterImage, dem_file_path: Optional[Path]
@@ -542,6 +608,65 @@ class KariosAPI:
             """
             )
         return dem
+
+    def _filter_by_dn_values(
+        self,
+        points: pd.DataFrame,
+        monitored_image: GdalRasterImage,
+        reference_image: GdalRasterImage,
+        no_values: Optional[list[int]],
+    ) -> pd.DataFrame:
+        """Filter out key points where reference or monitored image has specified DN values.
+
+        Args:
+            points: DataFrame containing match points with x0, y0 coordinates
+            monitored_image: Monitored image GdalRasterImage object
+            reference_image: Reference image GdalRasterImage object
+            no_values: List of DN values to filter out. If None or empty, no filtering is applied.
+
+        Returns:
+            Filtered DataFrame with key points having excluded DN values removed
+        """
+        if not no_values:
+            logger.info("No DN value filtering requested")
+            return points
+
+        logger.info("Filtering key points with DN values: %s", no_values)
+
+        # Convert coordinates to integers for pixel access
+        x_coords = points["x0"].astype(int).values
+        y_coords = points["y0"].astype(int).values
+
+        # Get DN values at key point locations for both images
+        ref_values = reference_image.array[y_coords, x_coords]
+        mon_values = monitored_image.array[y_coords, x_coords]
+
+        # Create mask for points to keep (points where neither image has excluded values)
+        keep_mask = np.ones(len(points), dtype=bool)
+
+        for no_value in no_values:
+            # Mark points where reference or monitored image has the excluded value
+            exclude_mask = (ref_values == no_value) | (mon_values == no_value)
+            keep_mask &= ~exclude_mask
+            excluded_count = np.sum(exclude_mask)
+            if excluded_count > 0:
+                logger.info(
+                    "Excluded %d key points with DN value %d (reference or monitored image)",
+                    excluded_count,
+                    no_value,
+                )
+
+        # Apply filter
+        filtered_points = points[keep_mask].copy()
+
+        logger.info(
+            "Filtered %d/%d key points (%.2f%% removed)",
+            len(points) - len(filtered_points),
+            len(points),
+            (len(points) - len(filtered_points)) / len(points) * 100 if len(points) > 0 else 0,
+        )
+
+        return filtered_points
 
     def _detect_large_offset(
         self, reference_image: GdalRasterImage, monitored_image: GdalRasterImage
