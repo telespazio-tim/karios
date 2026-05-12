@@ -81,7 +81,11 @@ def __filter_outliers(x0, y0, x1, y1, score):
 
 
 def klt_tracker(
-    ref_data: NDArray, image_data: NDArray, mask: NDArray, conf: KLTConfiguration
+    ref_data: NDArray,
+    image_data: NDArray,
+    mask: NDArray,
+    conf: KLTConfiguration,
+    p0: NDArray | None = None,
 ) -> tuple[DataFrame, int] | None:
     """Run KLT.
     See :
@@ -93,27 +97,28 @@ def klt_tracker(
         image_data (NDArray): data to match
         mask (NDArray): Optional region of interest.
             It specifies the region in which the corners are detected for `cv2.goodFeaturesToTrack`.
-        max_corners (int, optional): Maximum number of corners.
-            Used for matching with `cv2.goodFeaturesToTrack`. Defaults to 20000.
-        matching_winsize (int, optional): Size of the search window at each pyramid level.
-            Used by `cv2.calcOpticalFlowPyrLK` call. . Defaults to 25.
-        outliers_filtering (bool, optional): apply outliers filtering. Defaults to False.
+        conf (KLTConfiguration): KLT configuration.
+        p0 (NDArray | None): Optional pre-computed features to track.
+            If None, they will be computed with `cv2.goodFeaturesToTrack`.
 
     Returns:
         tuple[DataFrame, int] | None: data frame of x, y, dx, dy, score
     """
     logger.info("Start tracking")
-    # compute the initial point set
-    # goodFeaturesToTrack input parameters
-    feature_params = {
-        "maxCorners": conf.maxCorners,
-        "qualityLevel": conf.qualityLevel,
-        "minDistance": conf.minDistance,
-        "blockSize": conf.blocksize,
-    }
 
-    # goodFeaturesToTrack corner extraction-ShiThomasi Feature Detector
-    p0 = cv2.goodFeaturesToTrack(ref_data, mask=mask, **feature_params)
+    if p0 is None:
+        # compute the initial point set
+        # goodFeaturesToTrack input parameters
+        feature_params = {
+            "maxCorners": conf.maxCorners,
+            "qualityLevel": conf.qualityLevel,
+            "minDistance": conf.minDistance,
+            "blockSize": conf.blocksize,
+        }
+
+        # goodFeaturesToTrack corner extraction-ShiThomasi Feature Detector
+        p0 = cv2.goodFeaturesToTrack(ref_data, mask=mask, **feature_params)
+
     if p0 is None:
         logger.info("No features extracted")
         return None
@@ -366,9 +371,49 @@ class KLT:
         """
         combinations = list(itertools.product(LAPLACIAN_AUTO_CANDIDATES, repeat=2))
 
+        # Pre-compute uint8 conversions once
+        img_uint8 = _to_uint8(img_box)
+        ref_uint8 = _to_uint8(ref_box)
+
+        # Pre-compute Laplacians for each candidate kernel size
+        mon_laplacians = {
+            k: cv2.Laplacian(img_uint8, cv2.CV_8U, ksize=k) for k in LAPLACIAN_AUTO_CANDIDATES
+        }
+        ref_laplacians = {
+            k: cv2.Laplacian(ref_uint8, cv2.CV_8U, ksize=k) for k in LAPLACIAN_AUTO_CANDIDATES
+        }
+
+        # Pre-compute features to track for each reference Laplacian
+        feature_params = {
+            "maxCorners": self._conf.maxCorners,
+            "qualityLevel": self._conf.qualityLevel,
+            "minDistance": self._conf.minDistance,
+            "blockSize": self._conf.blocksize,
+        }
+        ref_p0s = {
+            k: cv2.goodFeaturesToTrack(lap, mask=mask_box, **feature_params)
+            for k, lap in ref_laplacians.items()
+        }
+
         def _run(mon_ksize, ref_ksize):
             logger.info("Auto laplacian: trying mon_ksize=%s ref_ksize=%s", mon_ksize, ref_ksize)
-            result = self._apply_laplacian_and_track(img_box, ref_box, mask_box, mon_ksize, ref_ksize)
+
+            p0 = ref_p0s[ref_ksize]
+            if p0 is None:
+                logger.info(
+                    "Auto laplacian: ref_ksize=%s -> no features extracted",
+                    ref_ksize,
+                )
+                return (mon_ksize, ref_ksize), 0.0, None
+
+            result = klt_tracker(
+                ref_laplacians[ref_ksize],
+                mon_laplacians[mon_ksize],
+                mask_box,
+                self._conf,
+                p0=p0,
+            )
+
             if result is None:
                 logger.info("Auto laplacian: mon_ksize=%s ref_ksize=%s -> no result", mon_ksize, ref_ksize)
                 return (mon_ksize, ref_ksize), 0.0, None
