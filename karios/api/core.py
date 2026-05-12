@@ -40,6 +40,7 @@ from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
+from karios.matcher.mutual_info_service import MutualInfoService
 from karios.matcher.zncc_service import ZNCCService
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
@@ -148,8 +149,8 @@ class KariosAPI:
             self._runtime_configuration.output_directory,
         )
 
-        # Initialize ZNCC Service
         self._zncc_service = ZNCCService()
+        self._mutual_info_service = MutualInfoService()
 
         #
         self._large_shift_applied = False
@@ -689,16 +690,21 @@ class KariosAPI:
 
                 zncc_candidates = dataframe[dataframe["score"] >= threshold]
 
-                # Initialize zncc_score column with NaN values
+                # Initialize score columns with NaN values
                 dataframe["zncc_score"] = np.nan
+                dataframe["mutual_info_score"] = np.nan
 
-                # Compute ZNCC scores only for the candidates
+                # Compute ZNCC and mutual information scores only for the candidates
                 zncc_scores = self._zncc_service.compute_zncc(
+                    zncc_candidates, monitored_image, reference_image
+                )
+                mutual_info_scores = self._mutual_info_service.compute_mutual_info(
                     zncc_candidates, monitored_image, reference_image
                 )
 
                 # Assign the computed scores back to the original dataframe using the same indices
                 dataframe.loc[zncc_candidates.index, "zncc_score"] = zncc_scores
+                dataframe.loc[zncc_candidates.index, "mutual_info_score"] = mutual_info_scores
 
                 # Compute NMI scores for the same candidates
                 dataframe["mi_score"] = np.nan

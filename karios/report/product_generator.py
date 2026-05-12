@@ -224,6 +224,8 @@ class ProductGenerator:
         columns_to_export = ["dx", "dy", "score", "radial error", "angle"]
         if "zncc_score" in self._points.columns:
             columns_to_export.append("zncc_score")
+        if "mutual_info_score" in self._points.columns:
+            columns_to_export.append("mutual_info_score")
 
         # creates feature for each dataframe rows
         feature_as_series = self._points.apply(
