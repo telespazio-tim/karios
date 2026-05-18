@@ -116,7 +116,7 @@ class MutualInfoService:
             logger.warning("Point to close to image top or left boundaries, skip it")
             return np.nan
 
-        if x0 > x0_max or y0 > y0_max or x1 > x1_max or y1 > y1_max:
+        if x0 >= x0_max or y0 >= y0_max or x1 >= x1_max or y1 >= y1_max:
             logger.warning("Point to close to image bottom or right boundaries, skip it")
             return np.nan
 
