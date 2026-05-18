@@ -134,9 +134,10 @@ class OverviewPlot(AbstractPlot):
     def _build_invalid_mask(
         self, img: GdalRasterImage, apply_user_mask: bool
     ) -> np.ndarray | None:
-        """Combine the user-provided mask and the --no-value DN filter into a
-        boolean array marking pixels to hide. Returns None when there is nothing
-        to hide so the caller can skip masked-array construction.
+        """Combine the user-provided mask, the --no-value DN filter, and the
+        image's GDAL no-data value into a boolean array marking pixels to hide.
+        Returns None when there is nothing to hide so the caller can skip
+        masked-array construction.
         """
         invalid = None
         if apply_user_mask and self._mask is not None:
@@ -144,6 +145,9 @@ class OverviewPlot(AbstractPlot):
         if self._no_values:
             no_value_invalid = np.isin(img.array, self._no_values)
             invalid = no_value_invalid if invalid is None else (invalid | no_value_invalid)
+        if img.no_data_value is not None:
+            nd_invalid = img.array == img.no_data_value
+            invalid = nd_invalid if invalid is None else (invalid | nd_invalid)
         return invalid if invalid is not None and invalid.any() else None
 
     def _plot_image(

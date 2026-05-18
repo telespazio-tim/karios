@@ -262,6 +262,10 @@ class KLT:
             mask_box = mask.read(1, x_off, y_off, x_size, y_size)
         else:
             mask_box = (img_box != 0) & (ref_box != 0) & np.isfinite(ref_box) & np.isfinite(img_box)
+            if mon_img.no_data_value is not None:
+                mask_box &= img_box != mon_img.no_data_value
+            if ref_img.no_data_value is not None:
+                mask_box &= ref_box != ref_img.no_data_value
             mask_box = mask_box.astype(np.uint8)
 
         # check mask

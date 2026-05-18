@@ -320,6 +320,15 @@ class GdalRasterImage:
             self.projection = dataset.GetProjection()
             self.spatial_ref = dataset.GetSpatialRef()
 
+            band = dataset.GetRasterBand(1)
+            self._no_data_value = band.GetNoDataValue()
+            band = None
+
+    @property
+    def no_data_value(self) -> float | None:
+        """No-data sentinel declared by the raster band, or None if unset."""
+        return self._no_data_value
+
     def have_pixel_resolution(self) -> bool:
         """Indicate if the image have a pixel size
 

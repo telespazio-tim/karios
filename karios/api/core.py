@@ -618,20 +618,32 @@ class KariosAPI:
     ) -> pd.DataFrame:
         """Filter out key points where reference or monitored image has specified DN values.
 
+        In addition to user-provided no_values (applied to both images), each
+        image's GDAL-declared no-data value is excluded from that image only.
+
         Args:
             points: DataFrame containing match points with x0, y0 coordinates
             monitored_image: Monitored image GdalRasterImage object
             reference_image: Reference image GdalRasterImage object
-            no_values: List of DN values to filter out. If None or empty, no filtering is applied.
+            no_values: List of DN values to filter out. If None or empty, only
+                per-image no-data values from the rasters are applied.
 
         Returns:
             Filtered DataFrame with key points having excluded DN values removed
         """
-        if not no_values:
+        ref_nd = reference_image.no_data_value
+        mon_nd = monitored_image.no_data_value
+
+        if not no_values and ref_nd is None and mon_nd is None:
             logger.info("No DN value filtering requested")
             return points
 
-        logger.info("Filtering key points with DN values: %s", no_values)
+        if no_values:
+            logger.info("Filtering key points with DN values: %s", no_values)
+        if ref_nd is not None:
+            logger.info("Reference image no-data value: %s (auto-applied)", ref_nd)
+        if mon_nd is not None:
+            logger.info("Monitored image no-data value: %s (auto-applied)", mon_nd)
 
         # Convert coordinates to integers for pixel access
         x_coords = points["x0"].astype(int).values
@@ -644,7 +656,7 @@ class KariosAPI:
         # Create mask for points to keep (points where neither image has excluded values)
         keep_mask = np.ones(len(points), dtype=bool)
 
-        for no_value in no_values:
+        for no_value in no_values or []:
             # Mark points where reference or monitored image has the excluded value
             exclude_mask = (ref_values == no_value) | (mon_values == no_value)
             keep_mask &= ~exclude_mask
@@ -654,6 +666,24 @@ class KariosAPI:
                     "Excluded %d key points with DN value %d (reference or monitored image)",
                     excluded_count,
                     no_value,
+                )
+
+        # Per-image auto no-data exclusion (each value applies only to its source image)
+        for label, image_nd, image_values in (
+            ("reference", ref_nd, ref_values),
+            ("monitored", mon_nd, mon_values),
+        ):
+            if image_nd is None:
+                continue
+            exclude_mask = image_values == image_nd
+            keep_mask &= ~exclude_mask
+            excluded_count = np.sum(exclude_mask)
+            if excluded_count > 0:
+                logger.info(
+                    "Excluded %d key points with no-data value %s (%s image)",
+                    excluded_count,
+                    image_nd,
+                    label,
                 )
 
         # Apply filter
