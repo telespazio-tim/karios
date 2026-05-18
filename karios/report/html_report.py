@@ -266,7 +266,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div>
                 <h3>Configuration</h3>
                 <table>
-                    <tr><th>Pixel Size</th><td>{pixel_size} m</td></tr>
+                    <tr><th>Pixel Size</th><td>{pixel_size}</td></tr>
                     <tr><th>Large Shift Detection</th><td>{large_shift_detection}</td></tr>
                     <tr><th>Laplacian Kernel Size</th><td>{laplacian_ksize}</td></tr>
                     <tr><th>Laplacian Polarity</th><td>{laplacian_polarity}</td></tr>
@@ -722,7 +722,7 @@ class HtmlReportGenerator:
             if self.match_result.mask
             else "None",
             dem_file=self.dem_file_path.name if self.dem_file_path else "None",
-            pixel_size=self.runtime_config.pixel_size
+            pixel_size=f"{self.runtime_config.pixel_size} m"
             if self.runtime_config.pixel_size
             else "Auto",
             large_shift_detection=(
