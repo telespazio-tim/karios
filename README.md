@@ -421,6 +421,7 @@ When using the CLI, runtime configuration is automatically created from command-
 - `xStart`: X margin to skip during matching
 - `tile_size`: Tile size for memory-efficient processing
 - `laplacian_kernel_size`: Aperture size for Laplacian filtering
+- `laplacian_invert_polarity`: Controls monitored-image polarity before Laplacian. `false` (default) keeps pixels as-is, `true` always inverts them (`255 - pixel`), and `"auto"` runs both per tile and keeps the higher-inlier-ratio result. Useful when the two images have opposite feature polarity (e.g. cross-sensor or signed elevation data).
 
 The following parameter allows to control how to find the most prominent corners in the
 reference image, as described by the OpenCV documentation goodFeaturesToTrack, after applying Laplacian.

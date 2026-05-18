@@ -163,6 +163,25 @@ class KariosAPI:
         """Return the kernel sizes chosen by auto mode, or None if not in auto mode."""
         return self._klt.auto_selected_ksize
 
+    @property
+    def klt_resolved_invert_polarity(self) -> bool:
+        """Resolved monitored-pixel inversion: configured value, or auto's dominant choice."""
+        mode = self._processing_configuration.klt_configuration.laplacian_invert_polarity
+        if mode == "auto":
+            return self._klt.auto_selected_polarity == "inverted"
+        return bool(mode)
+
+    @property
+    def klt_polarity_label(self) -> str:
+        """Human-readable label for the Laplacian polarity used during matching."""
+        mode = self._processing_configuration.klt_configuration.laplacian_invert_polarity
+        if mode == "auto":
+            dominant = self._klt.auto_selected_polarity
+            if dominant is None:
+                return "Auto (no tile selected)"
+            return f"Auto - {dominant} (dominant)"
+        return "Inverted" if mode else "Normal"
+
     def match_images(
         self,
         monitored_image_path: Path,
@@ -346,6 +365,7 @@ class KariosAPI:
             report_paths,
             self._runtime_configuration,
             dem_file_path,
+            laplacian_polarity_label=self.klt_polarity_label,
         )
         report_paths.html_report = str(html_generator.generate())
 

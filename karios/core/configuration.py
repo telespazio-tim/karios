@@ -47,6 +47,7 @@ class KLTConfiguration:
     tile_size: int
     laplacian_kernel_size: Union[int, Dict[str, int], Literal["auto"]]
     outliers_filtering: bool
+    laplacian_invert_polarity: Union[bool, Literal["auto"]] = False
 
 
 @dataclass

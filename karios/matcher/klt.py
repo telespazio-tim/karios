@@ -193,6 +193,7 @@ class KLT:
         self._gen_laplacian = gen_laplacian
         self._out_dir = out_dir
         self._auto_selected_ksizes: list[tuple[int, int]] = []
+        self._selected_polarities: list[str] = []
 
     def match(
         self,
@@ -214,6 +215,7 @@ class KLT:
 
         logger.info("KLT...")
         logger.info("%s %s", mon_img.x_size, mon_img.y_size)
+        self._log_polarity_setting()
 
         # iterate over N*N boxes : aim is to limit memory consumption.
         for x_off in range(0, mon_img.x_size, self._conf.tile_size):
@@ -228,6 +230,8 @@ class KLT:
                     continue
 
                 yield points
+
+        self._log_polarity_summary()
 
     def _match_tile(self, x_off, y_off, mon_img, ref_img, mask) -> DataFrame | None:
         logger.info("Tile: %s %s (%s %s)", x_off, y_off, mon_img.x_size, mon_img.y_size)
@@ -276,56 +280,46 @@ class KLT:
 
         logger.info("Nb valid pixels: %s/%s", valid_pixels, x_size * y_size)
 
-        # laplacian
-        ksize = self._conf.laplacian_kernel_size
-        if ksize == "auto":
-            results, _, best_ksize = self._match_tile_auto_ksize(img_box, ref_box, mask_box)
-            if best_ksize is not None:
-                self._auto_selected_ksizes.append(best_ksize)
-            if self._gen_laplacian and best_ksize is not None:
-                mon_ksize, ref_ksize = best_ksize
-                io.imsave(
-                    os.path.join(
-                        self._out_dir,
-                        f"mon_laplacian_k{mon_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
-                    ),
-                    cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize),
-                )
-                io.imsave(
-                    os.path.join(
-                        self._out_dir,
-                        f"ref_laplacian_k{ref_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
-                    ),
-                    cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize),
-                )
-        else:
-            mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
-            ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
-            img_box = cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize)
-            ref_box = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
-
-            if self._gen_laplacian:
-                io.imsave(
-                    os.path.join(
-                        self._out_dir,
-                        f"mon_laplacian_k{mon_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
-                    ),
-                    img_box,
-                )
-                io.imsave(
-                    os.path.join(
-                        self._out_dir,
-                        f"ref_laplacian_k{ref_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
-                    ),
-                    ref_box,
-                )
-
-            results = klt_tracker(
-                ref_box,
-                img_box,
-                mask_box,
-                self._conf,
+        # laplacian + tracking. `laplacian_invert_polarity` controls polarity:
+        #   False  -> normal Laplacian (default)
+        #   True   -> always invert monitored pixels before Laplacian
+        #   "auto" -> run both and keep the higher-inlier-ratio result
+        polarity_mode = self._conf.laplacian_invert_polarity
+        if polarity_mode == "auto":
+            normal_res, normal_dump = self._laplacian_track_once(
+                img_box, ref_box, mask_box, invert_mon=False
             )
+            inverted_res, inverted_dump = self._laplacian_track_once(
+                img_box, ref_box, mask_box, invert_mon=True
+            )
+            results, dump = self._select_best_polarity(
+                normal_res, normal_dump, inverted_res, inverted_dump
+            )
+        else:
+            results, dump = self._laplacian_track_once(
+                img_box, ref_box, mask_box, invert_mon=bool(polarity_mode)
+            )
+
+        if dump is not None:
+            img_lap, ref_lap, mon_ksize, ref_ksize, invert_mon = dump
+            if self._conf.laplacian_kernel_size == "auto":
+                self._auto_selected_ksizes.append((mon_ksize, ref_ksize))
+            if self._gen_laplacian:
+                suffix = "_inv" if invert_mon else ""
+                io.imsave(
+                    os.path.join(
+                        self._out_dir,
+                        f"mon_laplacian{suffix}_k{mon_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                    ),
+                    img_lap,
+                )
+                io.imsave(
+                    os.path.join(
+                        self._out_dir,
+                        f"ref_laplacian_k{ref_ksize}_{x_off}_{y_off}_{x_size}_{y_size}.tif",
+                    ),
+                    ref_lap,
+                )
 
         # clean large dataset
         ref_box = None
@@ -365,6 +359,108 @@ class KLT:
         lap_img = cv2.Laplacian(_to_uint8(img_box), cv2.CV_8U, ksize=mon_ksize)
         lap_ref = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
         return klt_tracker(lap_ref, lap_img, mask_box, self._conf)
+
+    def _log_polarity_setting(self) -> None:
+        """Announce, at the start of a run, what polarity mode will be used."""
+        mode = self._conf.laplacian_invert_polarity
+        if mode == "auto":
+            logger.info(
+                "Laplacian polarity: 'auto' - each tile will run twice (normal and "
+                "inverted monitored pixels), and the run with the higher inlier "
+                "ratio will be kept"
+            )
+        elif mode:
+            logger.info(
+                "Laplacian polarity: 'inverted' - monitored pixels are inverted "
+                "(255 - pixel) before Laplacian"
+            )
+        else:
+            logger.info("Laplacian polarity: 'normal' - no inversion before Laplacian")
+
+    def _log_polarity_summary(self) -> None:
+        """When auto polarity was on, log the dominant choice across all tiles."""
+        if self._conf.laplacian_invert_polarity != "auto":
+            return
+        if not self._selected_polarities:
+            logger.info("Auto polarity: no tile produced a result")
+            return
+        counts = Counter(self._selected_polarities)
+        total = sum(counts.values())
+        dominant, dominant_count = counts.most_common(1)[0]
+        details = ", ".join(f"{name}={n}/{total}" for name, n in counts.most_common())
+        logger.info(
+            "Auto polarity dominant choice: '%s' (%d/%d tiles, %s)",
+            dominant,
+            dominant_count,
+            total,
+            details,
+        )
+
+    @property
+    def auto_selected_polarity(self) -> str | None:
+        """Return the most-common polarity ('normal' or 'inverted') chosen across tiles
+        when `laplacian_invert_polarity` is 'auto'."""
+        if not self._selected_polarities:
+            return None
+        return Counter(self._selected_polarities).most_common(1)[0][0]
+
+    def _laplacian_track_once(self, img_box, ref_box, mask_box, invert_mon: bool):
+        """Run the Laplacian + KLT pipeline once.
+
+        When invert_mon is True, the monitored image pixels are inverted
+        (255 - uint8) before computing the Laplacian, which flips the feature
+        polarity relative to the reference.
+
+        Returns:
+            tuple[result, dump]: result is the klt_tracker return value (or None);
+                dump is (img_lap, ref_lap, mon_ksize, ref_ksize, invert_mon) for
+                later optional writing, or None when no Laplacian was produced.
+        """
+        img_for_lap = (255 - _to_uint8(img_box)) if invert_mon else img_box
+
+        ksize = self._conf.laplacian_kernel_size
+        if ksize == "auto":
+            result, _, best_ksize = self._match_tile_auto_ksize(img_for_lap, ref_box, mask_box)
+            if best_ksize is None:
+                return result, None
+            mon_ksize, ref_ksize = best_ksize
+            img_lap = cv2.Laplacian(_to_uint8(img_for_lap), cv2.CV_8U, ksize=mon_ksize)
+            ref_lap = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
+            return result, (img_lap, ref_lap, mon_ksize, ref_ksize, invert_mon)
+
+        mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
+        ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
+        img_lap = cv2.Laplacian(_to_uint8(img_for_lap), cv2.CV_8U, ksize=mon_ksize)
+        ref_lap = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
+        result = klt_tracker(ref_lap, img_lap, mask_box, self._conf)
+        return result, (img_lap, ref_lap, mon_ksize, ref_ksize, invert_mon)
+
+    def _select_best_polarity(self, normal_res, normal_dump, inverted_res, inverted_dump):
+        """Pick whichever polarity produced the higher inlier ratio.
+
+        Records the winner's label so the dominant polarity can be reported at
+        the end of the run. Returns (result, dump) of the winner.
+        """
+        candidates = []
+        for label, res, dump in (
+            ("normal", normal_res, normal_dump),
+            ("inverted", inverted_res, inverted_dump),
+        ):
+            if res is None:
+                continue
+            points, ninit = res
+            ratio = len(points) / ninit if ninit > 0 else 0.0
+            candidates.append((label, ratio, res, dump))
+
+        if not candidates:
+            logger.info("Auto polarity: no candidate produced a result")
+            return None, None
+
+        candidates.sort(key=lambda c: c[1], reverse=True)
+        label, ratio, result, dump = candidates[0]
+        self._selected_polarities.append(label)
+        logger.info("Auto polarity selected: %s (inlier ratio=%.3f)", label, ratio)
+        return result, dump
 
     def _match_tile_auto_ksize(self, img_box, ref_box, mask_box):
         """Try all (mon_ksize, ref_ksize) combinations and return the result with the highest inlier ratio.

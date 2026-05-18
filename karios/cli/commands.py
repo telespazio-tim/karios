@@ -325,23 +325,40 @@ def process(
             monitored_image, reference_image, mask_file, dem_file, resume, vector_mask
         )
 
-        # Copy configuration to output directory, updating laplacian_kernel_size when auto mode was used
+        # Copy configuration to the output directory. When any klt_matching field was
+        # in "auto" mode, replace it with the resolved value so the output config
+        # reflects what actually ran.
         klt_conf = processing_configuration.klt_configuration
+        ksize_resolved = None
         if klt_conf.laplacian_kernel_size == "auto":
             selected = api.klt_auto_selected_ksize
             if selected is not None:
                 mon_k, ref_k = selected
-                with open(conf, encoding="utf-8") as f:
-                    conf_data = json.load(f)
-                conf_data["processing_configuration"]["klt_matching"]["laplacian_kernel_size"] = {
-                    "mon": mon_k, "ref": ref_k
-                }
-                out_conf_path = output_dir / Path(conf).name
-                with open(out_conf_path, "w", encoding="utf-8") as f:
-                    json.dump(conf_data, f, indent=4)
-                logger.info("Auto laplacian kernel sizes written to config: mon=%s ref=%s", mon_k, ref_k)
-            else:
-                shutil.copy(conf, output_dir)
+                ksize_resolved = {"mon": mon_k, "ref": ref_k}
+        polarity_resolved = None
+        if klt_conf.laplacian_invert_polarity == "auto":
+            polarity_resolved = api.klt_resolved_invert_polarity
+
+        if ksize_resolved is not None or polarity_resolved is not None:
+            with open(conf, encoding="utf-8") as f:
+                conf_data = json.load(f)
+            klt_section = conf_data["processing_configuration"]["klt_matching"]
+            if ksize_resolved is not None:
+                klt_section["laplacian_kernel_size"] = ksize_resolved
+                logger.info(
+                    "Auto laplacian kernel sizes written to config: mon=%s ref=%s",
+                    ksize_resolved["mon"],
+                    ksize_resolved["ref"],
+                )
+            if polarity_resolved is not None:
+                klt_section["laplacian_invert_polarity"] = polarity_resolved
+                logger.info(
+                    "Auto laplacian polarity written to config: %s",
+                    polarity_resolved,
+                )
+            out_conf_path = output_dir / Path(conf).name
+            with open(out_conf_path, "w", encoding="utf-8") as f:
+                json.dump(conf_data, f, indent=4)
         else:
             shutil.copy(conf, output_dir)
 
