@@ -268,7 +268,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <table>
                     <tr><th>Pixel Size</th><td>{pixel_size} m</td></tr>
                     <tr><th>Large Shift Detection</th><td>{large_shift_detection}</td></tr>
-                    <tr><th>Used Laplacian Polarity</th><td>{laplacian_polarity}</td></tr>
+                    <tr><th>Laplacian Kernel Size</th><td>{laplacian_ksize}</td></tr>
+                    <tr><th>Laplacian Polarity</th><td>{laplacian_polarity}</td></tr>
                     <tr><th>Title Prefix</th><td>{title_prefix}</td></tr>
                 </table>
             </div>
@@ -485,6 +486,7 @@ class HtmlReportGenerator:
         runtime_config: "RuntimeConfiguration",
         dem_file_path: Optional[Path] = None,
         laplacian_polarity_label: Optional[str] = None,
+        laplacian_ksize_label: Optional[str] = None,
     ):
         self.output_dir = output_dir
         self.match_result = match_result
@@ -493,6 +495,7 @@ class HtmlReportGenerator:
         self.runtime_config = runtime_config
         self.dem_file_path = dem_file_path
         self.laplacian_polarity_label = laplacian_polarity_label or "Normal"
+        self.laplacian_ksize_label = laplacian_ksize_label or "Unknown"
 
     def _load_chips_data(self) -> dict:
         """Load chips/chips.csv and return a dict keyed by (x0, y0) int tuples."""
@@ -727,6 +730,7 @@ class HtmlReportGenerator:
                 if self.runtime_config.enable_large_shift_detection
                 else "Disabled"
             ),
+            laplacian_ksize=self.laplacian_ksize_label,
             laplacian_polarity=self.laplacian_polarity_label,
             title_prefix=self.runtime_config.title_prefix or "None",
             matched_points=len(self.match_result.points),

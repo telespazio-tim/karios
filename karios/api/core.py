@@ -172,6 +172,22 @@ class KariosAPI:
         return bool(mode)
 
     @property
+    def klt_ksize_label(self) -> str:
+        """Human-readable label for the Laplacian kernel size used during matching."""
+        ksize = self._processing_configuration.klt_configuration.laplacian_kernel_size
+        if ksize == "auto":
+            selected = self._klt.auto_selected_ksize
+            if selected is None:
+                return "Auto (no tile selected)"
+            mon_k, ref_k = selected
+            return f"mon={mon_k}, ref={ref_k} (auto)"
+        if isinstance(ksize, dict):
+            mon_k = ksize.get("mon", ksize.get("ref"))
+            ref_k = ksize.get("ref", ksize.get("mon"))
+            return f"mon={mon_k}, ref={ref_k}"
+        return str(ksize)
+
+    @property
     def klt_polarity_label(self) -> str:
         """Human-readable label for the Laplacian polarity used during matching."""
         mode = self._processing_configuration.klt_configuration.laplacian_invert_polarity
@@ -179,7 +195,7 @@ class KariosAPI:
             dominant = self._klt.auto_selected_polarity
             if dominant is None:
                 return "Auto (no tile selected)"
-            return f"Auto - {dominant} (dominant)"
+            return f"{dominant} (auto)"
         return "Inverted" if mode else "Normal"
 
     def match_images(
@@ -366,6 +382,7 @@ class KariosAPI:
             self._runtime_configuration,
             dem_file_path,
             laplacian_polarity_label=self.klt_polarity_label,
+            laplacian_ksize_label=self.klt_ksize_label,
         )
         report_paths.html_report = str(html_generator.generate())
 
