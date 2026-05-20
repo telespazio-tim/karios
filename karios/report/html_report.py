@@ -303,6 +303,15 @@ CSS_STYLES = """
             display: block;
             border: 1px solid #ccc;
         }
+        .chip-sprite {
+            width: 114px;
+            height: 114px;
+            display: inline-block;
+            border: 1px solid #ccc;
+            background-repeat: no-repeat;
+            background-size: auto 114px;
+            image-rendering: pixelated;
+        }
         .sort-bar {
             display: flex;
             align-items: center;
@@ -774,50 +783,65 @@ class HtmlReportGenerator:
         )
 
     def _build_combined_chips_html(self, ref_name: str, mon_name: str) -> str:
-        """Build chip grid: each card shows raw + laplacian rows with crosshairs and stats."""
+        """Build chip grid backed by sprite PNGs.
+
+        All raw chips for the reference image live in one sprite
+        (chips/<ref_name>/sprite.png) and likewise for the monitored image.
+        Each card here positions a fixed-size <div> over the right slice via
+        background-image / background-position. Crosshair SVGs sit on top.
+        """
         import math
 
-        ref_raw_dir = self.output_dir / "chips" / ref_name
-        if not ref_raw_dir.exists():
+        chips_dir = self.output_dir / "chips"
+        if not chips_dir.exists():
             return "<p>No chips found.</p>"
 
-        ref_pngs = sorted(ref_raw_dir.glob("REF_*.png"))
-        if not ref_pngs:
-            return "<p>No chip images found.</p>"
+        ref_sprite_path = chips_dir / ref_name / "sprite.png"
+        mon_sprite_path = chips_dir / mon_name / "sprite.png"
+        if not ref_sprite_path.exists() or not mon_sprite_path.exists():
+            return "<p>No chip sprites found.</p>"
 
-        chips_data = self._load_chips_data()
-        has_laplacian = (self.output_dir / "chips_laplacian").exists()
+        rows = list(self._load_chips_data().values())
+        rows = [r for r in rows if int(r.get("sprite_idx", -1)) >= 0]
+        if not rows:
+            return "<p>No chip images found.</p>"
+        rows.sort(key=lambda r: int(r["sprite_idx"]))
+
+        has_laplacian = (self.output_dir / "chips_laplacian" / ref_name / "sprite.png").exists()
 
         CHIP_DISPLAY = 114
         CHIP_SIZE = 57
         SCALE = CHIP_DISPLAY / CHIP_SIZE  # 2.0
 
-        def img_col(src: str | None, sublabel: str, ch_svg: str) -> str:
-            if src:
-                return (
-                    f'<div class="chip-col">'
-                    f'<div class="chip-sublabel">{sublabel}</div>'
-                    f'<div class="chip-img-wrap"><img src="{src}" alt="{sublabel}">{ch_svg}</div>'
-                    f"</div>"
-                )
+        ref_sprite_src = f"chips/{ref_name}/sprite.png"
+        mon_sprite_src = f"chips/{mon_name}/sprite.png"
+        ref_lap_sprite_src = f"chips_laplacian/{ref_name}/sprite.png"
+        mon_lap_sprite_src = f"chips_laplacian/{mon_name}/sprite.png"
+
+        def sprite_col(src: str, sprite_idx: int, sublabel: str, ch_svg: str) -> str:
+            offset = -sprite_idx * CHIP_DISPLAY
+            style = (
+                f"background-image:url({src});"
+                f"background-position:{offset}px 0px;"
+            )
             return (
                 f'<div class="chip-col">'
                 f'<div class="chip-sublabel">{sublabel}</div>'
-                f'<div style="width:114px;height:114px;border:1px solid #eee;display:inline-block;background:#f0f0f0;"></div>'
+                f'<div class="chip-img-wrap">'
+                f'<div class="chip-sprite" style="{style}"></div>'
+                f"{ch_svg}"
+                f"</div>"
                 f"</div>"
             )
 
         items = []
-        for i, ref_png in enumerate(ref_pngs):
-            parts = ref_png.stem.split("_")
-            if len(parts) < 3:
-                continue
-            x0, y0 = int(parts[1]), int(parts[2])
+        for i, row in enumerate(rows):
+            x0, y0 = int(row["x0"]), int(row["y0"])
+            sprite_idx = int(row["sprite_idx"])
+            dx = float(row.get("dx", 0.0) or 0.0)
+            dy = float(row.get("dy", 0.0) or 0.0)
 
-            chip_data = chips_data.get((x0, y0))
-            dx = float(chip_data["dx"]) if chip_data is not None else 0.0
-            dy = float(chip_data["dy"]) if chip_data is not None else 0.0
-            zncc_raw = chip_data.get("zncc_score") if chip_data is not None else None
+            zncc_raw = row.get("zncc_score")
             try:
                 zncc = float(zncc_raw)
                 zncc_str = f"{zncc:.3f}" if not math.isnan(zncc) else "N/A"
@@ -826,7 +850,7 @@ class HtmlReportGenerator:
                 zncc_str = "N/A"
                 score_val = "nan"
 
-            mi_raw = chip_data.get("mi_score") if chip_data is not None else None
+            mi_raw = row.get("mi_score")
             try:
                 mi = float(mi_raw)
                 mi_str = f"{mi:.3f}" if not math.isnan(mi) else "N/A"
@@ -837,7 +861,6 @@ class HtmlReportGenerator:
 
             dist = dx**2 + dy**2
 
-            # Crosshair positions in display coords
             ref_cx = CHIP_SIZE / 2 * SCALE  # 57.0
             ref_cy = CHIP_SIZE / 2 * SCALE  # 57.0
             mon_cx = max(2.0, min(CHIP_DISPLAY - 2.0, ref_cx - dx * SCALE))
@@ -846,36 +869,19 @@ class HtmlReportGenerator:
             ref_ch = self._make_crosshair_svg(ref_cx, ref_cy, CHIP_DISPLAY)
             mon_ch = self._make_crosshair_svg(mon_cx, mon_cy, CHIP_DISPLAY)
 
-            ref_raw_src = _url("chips", ref_name, ref_png.name)
-            mon_raw_path = self.output_dir / "chips" / mon_name / f"MON_{x0}_{y0}.png"
-            mon_png = f"MON_{x0}_{y0}.png"
-            mon_raw_src = _url("chips", mon_name, mon_png) if mon_raw_path.exists() else None
-
             raw_row = (
                 f'<div class="chip-row">'
-                f"{img_col(ref_raw_src, 'Ref', ref_ch)}"
-                f"{img_col(mon_raw_src, 'Mon', mon_ch)}"
+                f"{sprite_col(ref_sprite_src, sprite_idx, 'Ref', ref_ch)}"
+                f"{sprite_col(mon_sprite_src, sprite_idx, 'Mon', mon_ch)}"
                 f"</div>"
             )
 
             lap_row = ""
             if has_laplacian:
-                ref_lap_path = self.output_dir / "chips_laplacian" / ref_name / f"REF_{x0}_{y0}.png"
-                mon_lap_path = self.output_dir / "chips_laplacian" / mon_name / f"MON_{x0}_{y0}.png"
-                ref_lap_src = (
-                    _url("chips_laplacian", ref_name, f"REF_{x0}_{y0}.png")
-                    if ref_lap_path.exists()
-                    else None
-                )
-                mon_lap_src = (
-                    _url("chips_laplacian", mon_name, f"MON_{x0}_{y0}.png")
-                    if mon_lap_path.exists()
-                    else None
-                )
                 lap_row = (
                     f'<div class="chip-row">'
-                    f"{img_col(ref_lap_src, 'Ref Laplacian', ref_ch)}"
-                    f"{img_col(mon_lap_src, 'Mon Laplacian', mon_ch)}"
+                    f"{sprite_col(ref_lap_sprite_src, sprite_idx, 'Ref Laplacian', ref_ch)}"
+                    f"{sprite_col(mon_lap_sprite_src, sprite_idx, 'Mon Laplacian', mon_ch)}"
                     f"</div>"
                 )
 
