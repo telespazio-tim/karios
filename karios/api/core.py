@@ -44,6 +44,7 @@ from karios.api.config import RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.errors import KariosException
 from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
+from karios.core.image_downsampling import downsample_raster
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
@@ -248,6 +249,11 @@ class KariosAPI:
 
         # Load mask if provided (raster or vector)
         mask = self._load_mask(monitored_image, mask_file_path, vector_mask_path)
+
+        # Optionally downsample inputs before any further processing.
+        monitored_image, reference_image, mask = self._maybe_downsample(
+            monitored_image, reference_image, mask
+        )
 
         # Load DEM if provided, to add elevation to the output CSV
         dem = self._load_dem(reference_image, dem_file_path)
@@ -622,6 +628,35 @@ class KariosAPI:
             return span <= 0.01 * abs(high) if high else True
 
         return span <= 10
+
+    def _maybe_downsample(
+        self,
+        monitored_image: GdalRasterImage,
+        reference_image: GdalRasterImage,
+        mask: Optional[GdalRasterImage],
+    ) -> tuple[GdalRasterImage, GdalRasterImage, Optional[GdalRasterImage]]:
+        """Apply integer block_reduce downsampling when the config requests it.
+
+        Writes downsampled GeoTIFFs into the output directory so the rest of
+        the pipeline (chips, plots, products) works against the reduced
+        resolution. The mask is reduced with np.min so any masked sub-pixel
+        causes the resulting pixel to be masked.
+        """
+        ds_conf = self._processing_configuration.image_downsampling_configuration
+        ratio = ds_conf.ratio if ds_conf is not None else 1
+        if ratio <= 1:
+            return monitored_image, reference_image, mask
+
+        logger.info("Image downsampling enabled: ratio=%d", ratio)
+        out_dir = Path(self._runtime_configuration.output_directory)
+        mon_path = out_dir / f"downsampled_x{ratio}_{monitored_image.file_name}"
+        ref_path = out_dir / f"downsampled_x{ratio}_{reference_image.file_name}"
+        monitored_image = downsample_raster(monitored_image, ratio, mon_path)
+        reference_image = downsample_raster(reference_image, ratio, ref_path)
+        if mask is not None:
+            mask_path = out_dir / f"downsampled_x{ratio}_{mask.file_name}"
+            mask = downsample_raster(mask, ratio, mask_path)
+        return monitored_image, reference_image, mask
 
     def _load_images(
         self, ref_file_path: Path, mon_file_path: Path
