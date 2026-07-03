@@ -352,6 +352,128 @@ def test_configuration_dataclass_immutability():
     assert hasattr(klt_config, "outliers_filtering")
 
 
+def test_klt_configuration_auto_kernel_size():
+    """Test KLTConfiguration accepts 'auto' for laplacian_kernel_size."""
+    config = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size="auto",
+        outliers_filtering=True,
+    )
+
+    assert config.laplacian_kernel_size == "auto"
+
+
+def test_processing_configuration_from_dict_auto_kernel_size():
+    """Test ProcessingConfiguration.from_dict with laplacian_kernel_size='auto'."""
+    config_dict = {
+        "processing_configuration": {
+            "klt_matching": {
+                "minDistance": 10,
+                "blocksize": 15,
+                "maxCorners": 20000,
+                "matching_winsize": 25,
+                "qualityLevel": 0.01,
+                "xStart": 0,
+                "tile_size": 1000,
+                "laplacian_kernel_size": "auto",
+                "outliers_filtering": True,
+            },
+            "shift_image_processing": {"bias_correction_min_threshold": 5},
+            "accuracy_analysis": {"confidence_threshold": 0.95},
+        },
+        "plot_configuration": {
+            "overview": {
+                "fig_size": 10,
+                "shift_colormap": "viridis",
+                "shift_auto_axes_limit": True,
+                "shift_axes_limit": 5.0,
+                "theta_colormap": "plasma",
+            },
+            "shift": {
+                "fig_size": 12,
+                "scatter_colormap": "jet",
+                "scatter_auto_limit": True,
+                "scatter_min_limit": -10.0,
+                "scatter_max_limit": 10.0,
+                "histo_mean_bin_size": 5,
+            },
+            "dem": {"fig_size": 8, "show_fliers": False, "histo_mean_bin_size": 10},
+            "ce": {"fig_size": 15, "ce_scatter_colormap": "hot"},
+        },
+    }
+
+    config = ProcessingConfiguration.from_dict(config_dict)
+
+    assert config.klt_configuration.laplacian_kernel_size == "auto"
+
+
+def test_klt_configuration_dict_kernel_size():
+    """Test KLTConfiguration accepts a dict for laplacian_kernel_size."""
+    config = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size={"mon": 3, "ref": 5},
+        outliers_filtering=True,
+    )
+
+    assert config.laplacian_kernel_size == {"mon": 3, "ref": 5}
+
+
+def test_processing_configuration_from_dict_dict_kernel_size():
+    """Test ProcessingConfiguration.from_dict with a dict laplacian_kernel_size."""
+    config_dict = {
+        "processing_configuration": {
+            "klt_matching": {
+                "minDistance": 10,
+                "blocksize": 15,
+                "maxCorners": 20000,
+                "matching_winsize": 25,
+                "qualityLevel": 0.01,
+                "xStart": 0,
+                "tile_size": 1000,
+                "laplacian_kernel_size": {"mon": 3, "ref": 5},
+                "outliers_filtering": True,
+            },
+            "shift_image_processing": {"bias_correction_min_threshold": 5},
+            "accuracy_analysis": {"confidence_threshold": 0.95},
+        },
+        "plot_configuration": {
+            "overview": {
+                "fig_size": 10,
+                "shift_colormap": "viridis",
+                "shift_auto_axes_limit": True,
+                "shift_axes_limit": 5.0,
+                "theta_colormap": "plasma",
+            },
+            "shift": {
+                "fig_size": 12,
+                "scatter_colormap": "jet",
+                "scatter_auto_limit": True,
+                "scatter_min_limit": -10.0,
+                "scatter_max_limit": 10.0,
+                "histo_mean_bin_size": 5,
+            },
+            "dem": {"fig_size": 8, "show_fliers": False, "histo_mean_bin_size": 10},
+            "ce": {"fig_size": 15, "ce_scatter_colormap": "hot"},
+        },
+    }
+
+    config = ProcessingConfiguration.from_dict(config_dict)
+
+    assert config.klt_configuration.laplacian_kernel_size == {"mon": 3, "ref": 5}
+
+
 if __name__ == "__main__":
     test_klt_configuration()
     test_overview_plot_configuration()

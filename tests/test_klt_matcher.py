@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for KLT matcher functionality."""
 
+import itertools
 from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
@@ -457,6 +458,150 @@ def test_klt_match_tile_invalid_offsets():
     # Let's instead just verify the xStart property is accessible
     assert klt._conf.xStart == 50
     # This simple assertion tests that the configuration is properly stored
+
+
+def test_match_tile_auto_ksize_selects_best_inlier_ratio():
+    """Test _match_tile_auto_ksize picks the (mon, ref) pair with the highest inlier ratio."""
+    from karios.matcher.klt import LAPLACIAN_AUTO_CANDIDATES
+
+    conf = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size="auto",
+        outliers_filtering=False,
+    )
+    klt = KLT(conf)
+
+    tile = np.ones((50, 50), dtype=np.uint8) * 128
+
+    ninit = 10
+    best_mon = LAPLACIAN_AUTO_CANDIDATES[1]
+    best_ref = LAPLACIAN_AUTO_CANDIDATES[2]
+    best_count = 8
+
+    def mock_tracker(ref_data, image_data, mask, conf, p0=None):
+        # In the optimized code, p0 is passed from our pre-computed ref_p0s dict.
+        # We've mocked cv2.goodFeaturesToTrack to return a MagicMock for p0.
+        # We can use the mock's 'idx' attribute to identify which ksize was used.
+        p0_idx = getattr(p0, "idx", -1)
+        count = best_count if p0_idx == 2 else 1
+        df = pd.DataFrame({"x0": list(range(count)), "y0": list(range(count)),
+                           "dx": [0] * count, "dy": [0] * count, "score": [0.9] * count})
+        return df, ninit
+
+    # Mock cv2.goodFeaturesToTrack to return a unique mock per ksize
+    def mock_gftt(lap, mask, **kwargs):
+        # lap is a MagicMock for a Laplacian for a specific ksize
+        p0 = MagicMock(spec=np.ndarray)
+        p0.idx = getattr(lap, "ksize_idx", -1)
+        return p0
+
+    # Mock cv2.Laplacian to return tagged MagicMocks
+    def mock_laplacian(src, ddepth, ksize):
+        lap = MagicMock(spec=np.ndarray)
+        lap.ksize_idx = LAPLACIAN_AUTO_CANDIDATES.index(ksize)
+        # Mock shape and dtype which might be used
+        lap.shape = (50, 50)
+        lap.dtype = np.uint8
+        return lap
+
+    with patch("karios.matcher.klt.klt_tracker", side_effect=mock_tracker), \
+         patch("karios.matcher.klt.cv2.goodFeaturesToTrack", side_effect=mock_gftt), \
+         patch("karios.matcher.klt.cv2.Laplacian", side_effect=mock_laplacian):
+        best_result, scores, selected_ksize = klt._match_tile_auto_ksize(tile, tile, np.ones((50, 50), dtype=np.uint8))
+
+    n = len(LAPLACIAN_AUTO_CANDIDATES)
+    assert len(scores) == n * n
+    assert all(isinstance(k, tuple) and len(k) == 2 for k in scores)
+    assert best_result is not None
+    points, _ = best_result
+    assert len(points) == best_count
+    assert selected_ksize == (best_mon, best_ref)
+    assert scores[(best_mon, best_ref)] == pytest.approx(best_count / ninit)
+    assert all(v == pytest.approx(1 / ninit) for k, v in scores.items() if k != (best_mon, best_ref))
+
+
+@patch("karios.matcher.klt.klt_tracker")
+@patch("karios.matcher.klt.cv2")
+def test_match_tile_uses_auto_ksize(mock_cv2, mock_klt_tracker):
+    """Test _match_tile routes to auto selection when laplacian_kernel_size='auto'."""
+    from karios.matcher.klt import LAPLACIAN_AUTO_CANDIDATES
+
+    conf = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size="auto",
+        outliers_filtering=False,
+    )
+    klt = KLT(conf)
+
+    tile = np.ones((100, 100), dtype=np.uint8) * 128
+    mon_img = Mock(spec=GdalRasterImage)
+    ref_img = Mock(spec=GdalRasterImage)
+    mon_img.x_size = 100
+    mon_img.y_size = 100
+    mon_img.read.return_value = tile
+    ref_img.read.return_value = tile
+
+    mock_cv2.Laplacian.return_value = tile
+    mock_cv2.CV_8U = 0
+    mock_cv2.goodFeaturesToTrack.return_value = np.array([[[10, 20]]], dtype=np.float32)
+
+    best_df = pd.DataFrame({"x0": [10, 20], "y0": [10, 20], "dx": [1, -1], "dy": [1, -1], "score": [0.9, 0.8]})
+    mock_klt_tracker.return_value = (best_df, 5)
+
+    result = klt._match_tile(0, 0, mon_img, ref_img, None)
+
+    n = len(LAPLACIAN_AUTO_CANDIDATES)
+    assert result is not None
+    # Optimized: calls Laplacian once for each candidate ksize per image (mon + ref)
+    assert len(mock_cv2.Laplacian.call_args_list) == 2 * n
+
+
+@patch("karios.matcher.klt.klt_tracker")
+@patch("karios.matcher.klt.cv2")
+def test_match_tile_dict_kernel_size(mock_cv2, mock_klt_tracker):
+    """Test _match_tile passes per-image kernel sizes to cv2.Laplacian when laplacian_kernel_size is a dict."""
+    conf = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size={"mon": 3, "ref": 5},
+        outliers_filtering=True,
+    )
+    klt = KLT(conf)
+
+    tile = np.ones((100, 100), dtype=np.uint8) * 128
+    mon_img = Mock(spec=GdalRasterImage)
+    ref_img = Mock(spec=GdalRasterImage)
+    mon_img.x_size = 100
+    mon_img.y_size = 100
+    mon_img.read.return_value = tile
+    ref_img.read.return_value = tile
+
+    mock_cv2.Laplacian.return_value = tile
+    mock_klt_tracker.return_value = None
+
+    klt._match_tile(0, 0, mon_img, ref_img, None)
+
+    calls = mock_cv2.Laplacian.call_args_list
+    assert len(calls) == 2
+    assert calls[0].kwargs["ksize"] == 3  # mon
+    assert calls[1].kwargs["ksize"] == 5  # ref
 
 
 if __name__ == "__main__":

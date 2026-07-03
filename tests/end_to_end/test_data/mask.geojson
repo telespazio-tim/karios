@@ -1,0 +1,45 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              710940.0,
+              4289040.0
+            ],
+            [
+              798780.0,
+              4289040.0
+            ],
+            [
+              798780.0,
+              4201200.0
+            ],
+            [
+              710940.0,
+              4201200.0
+            ],
+            [
+              710940.0,
+              4289040.0
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "name": "valid_area",
+        "description": "Area to include in processing"
+      }
+    }
+  ],
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "EPSG:32612"
+    }
+  }
+}

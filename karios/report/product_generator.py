@@ -33,6 +33,18 @@ from karios.core.image import GdalRasterImage
 logger = logging.getLogger(__name__)
 
 
+def _row_slices(sorted_y: np.ndarray):
+    """Yield (row, start, end) for each unique row in a sorted integer y-index array."""
+    if len(sorted_y) == 0:
+        return
+    unique, starts = np.unique(sorted_y, return_index=True)
+    ends = np.empty_like(starts)
+    ends[:-1] = starts[1:]
+    ends[-1] = len(sorted_y)
+    for row, start, end in zip(unique, starts, ends):
+        yield int(row), int(start), int(end)
+
+
 def _to_feature(series: Series, geo_transform: tuple, properties: list[str]) -> dict:
     """Creates a GeoJSON Point feature of a panda `Series`.
     The panda Series MUST contains axis `x0`, `y0` and properties listed by `properties` parameter.
@@ -107,49 +119,101 @@ class ProductGenerator:
 
         return product_paths
 
+    def _open_output_dataset(self, file_path: str, n_bands: int, e_type: int) -> gdal.Dataset:
+        """Create an output GeoTIFF dataset with the same grid as the reference image."""
+        ref = self._reference_image
+        dataset = gdal.GetDriverByName("GTiff").Create(
+            file_path,
+            xsize=ref.x_size,
+            ysize=ref.y_size,
+            bands=n_bands,
+            eType=e_type,
+            options=["COMPRESS=LZW"],
+        )
+        if ref.projection:
+            dataset.SetProjection(ref.projection)
+        dataset.SetGeoTransform((ref.x_min, ref.x_res, 0, ref.y_max, 0, ref.y_res))
+        return dataset
+
     def _create_intermediate_raster(self):
         logger.info("Create KP raster product")
 
         x_index = self._points["x0"].to_numpy().astype(int)
         y_index = self._points["y0"].to_numpy().astype(int)
-
-        dx_band_array = np.full(
-            [self._reference_image.y_size, self._reference_image.x_size],
-            np.nan,
-            dtype=float,
-        )
-        dy_band_array = np.full(
-            [self._reference_image.y_size, self._reference_image.x_size],
-            np.nan,
-            dtype=float,
-        )
-
-        dx_band_array[y_index, x_index] = self._points["dx"]
-        dy_band_array[y_index, x_index] = self._points["dy"]
+        dx_vals = self._points["dx"].to_numpy().astype(np.float32)
+        dy_vals = self._points["dy"].to_numpy().astype(np.float32)
 
         output_file_path = os.path.join(self._config.output_directory, "kp_delta.tif")
+        dataset = self._open_output_dataset(output_file_path, 2, gdal.GDT_Float32)
 
-        self._reference_image.to_raster(
-            output_file_path,
-            [dx_band_array, dy_band_array],
-            gdal.GDT_Float32,
-        )
+        # Fill both bands with NaN at the GDAL level — no Python-side full-image array needed
+        nan32 = float(np.float32(np.nan))
+        for band_idx in (1, 2):
+            b = dataset.GetRasterBand(band_idx)
+            b.SetNoDataValue(nan32)
+            b.Fill(nan32)
+            b = None
+
+        dx_band = dataset.GetRasterBand(1)
+        dy_band = dataset.GetRasterBand(2)
+
+        # Sort KPs by row so writes are sequential
+        order = np.argsort(y_index, kind="stable")
+        ys = y_index[order]
+        xs = x_index[order]
+        dxs = dx_vals[order]
+        dys = dy_vals[order]
+
+        # One reusable row buffer — O(x_size) memory regardless of image height
+        row_buf = np.full((1, self._reference_image.x_size), nan32, dtype=np.float32)
+        for row, start, end in _row_slices(ys):
+            cols = xs[start:end]
+
+            row_buf[0, cols] = dxs[start:end]
+            dx_band.WriteArray(row_buf, 0, row)
+            row_buf[0, cols] = nan32
+
+            row_buf[0, cols] = dys[start:end]
+            dy_band.WriteArray(row_buf, 0, row)
+            row_buf[0, cols] = nan32
+
+        dx_band = None
+        dy_band = None
+        dataset.FlushCache()
+        dataset = None
 
         logger.info("KP raster product created")
-
         return output_file_path
 
     def _create_mask(self):
         logger.info("Create KP product mask")
-        # Credits Jérôme
+
         x_index = self._points["x0"].to_numpy().astype(int)
         y_index = self._points["y0"].to_numpy().astype(int)
-        final_mask = np.zeros(
-            [self._reference_image.y_size, self._reference_image.x_size], dtype=np.uint8
-        )
-        final_mask[y_index, x_index] = 1
+
         output_file_path = os.path.join(self._config.output_directory, "kp_mask.tif")
-        self._reference_image.to_raster(output_file_path, final_mask)
+        dataset = self._open_output_dataset(output_file_path, 1, gdal.GDT_Byte)
+        # GDT_Byte bands are zero-initialised by GDAL — no Fill() needed
+
+        band = dataset.GetRasterBand(1)
+
+        # Sort KPs by row so writes are sequential
+        order = np.argsort(y_index, kind="stable")
+        ys = y_index[order]
+        xs = x_index[order]
+
+        # One reusable row buffer — O(x_size) memory regardless of image height
+        row_buf = np.zeros((1, self._reference_image.x_size), dtype=np.uint8)
+        for row, start, end in _row_slices(ys):
+            cols = xs[start:end]
+            row_buf[0, cols] = 1
+            band.WriteArray(row_buf, 0, row)
+            row_buf[0, cols] = 0
+
+        band = None
+        dataset.FlushCache()
+        dataset = None
+
         logger.info("KP product mask created")
         return output_file_path
 
@@ -160,6 +224,8 @@ class ProductGenerator:
         columns_to_export = ["dx", "dy", "score", "radial error", "angle"]
         if "zncc_score" in self._points.columns:
             columns_to_export.append("zncc_score")
+        if "mutual_info_score" in self._points.columns:
+            columns_to_export.append("mutual_info_score")
 
         # creates feature for each dataframe rows
         feature_as_series = self._points.apply(

@@ -101,6 +101,96 @@ def shift_image(img: NDArray, y_off=0, x_off=0) -> NDArray:
     return img
 
 
+def rasterize_vector_mask(
+    vector_path: str,
+    reference_image: GdalRasterImage,
+    output_path: Optional[str] = None,
+) -> GdalRasterImage:
+    """Rasterize a vector file to create a mask aligned with the reference image.
+
+    Args:
+        vector_path: Path to vector file (GeoJSON, Shapefile, etc.)
+        reference_image: Reference GdalRasterImage to align the rasterized mask
+        output_path: Optional path to save the rasterized mask. If None, creates a temporary file.
+
+    Returns:
+        GdalRasterImage: Rasterized mask aligned with reference image
+
+    Raises:
+        GdalError: If vector file cannot be opened or rasterization fails
+    """
+    import tempfile
+
+    logger.info("Rasterizing vector mask: %s", vector_path)
+
+    # Open vector file
+    vector_ds = gdal.OpenEx(vector_path, gdal.OF_VECTOR)
+    if vector_ds is None:
+        raise GdalError(f"Failed to open vector file: {vector_path}")
+
+    try:
+        # Get vector layer
+        layer = vector_ds.GetLayer()
+        if layer is None:
+            raise GdalError(f"No layer found in vector file: {vector_path}")
+
+        # Create output raster
+        driver = gdal.GetDriverByName("GTiff")
+        
+        # Create temporary file if no output path provided
+        if output_path is None:
+            temp_file = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+            output_path = temp_file.name
+            temp_file.close()
+
+        # Create raster dataset with same geotransform and projection as reference
+        raster_ds = driver.Create(
+            output_path,
+            reference_image.x_size,
+            reference_image.y_size,
+            1,
+            gdal.GDT_Byte,
+        )
+
+        if raster_ds is None:
+            raise GdalError(f"Failed to create raster dataset: {output_path}")
+
+        try:
+            # Set geotransform and projection from reference image
+            raster_ds.SetGeoTransform(reference_image.geo_transform)
+            raster_ds.SetProjection(reference_image.projection)
+
+            # Initialize with zeros (background)
+            band = raster_ds.GetRasterBand(1)
+            band.Fill(0)
+
+            # Rasterize vector features
+            # Burn value 1 for features (valid pixels)
+            # Use RasterizeLayer instead of Rasterize for better GDAL 3.x compatibility
+            gdal.RasterizeLayer(
+                raster_ds,
+                [1],  # Bands to burn into
+                layer,
+                options=['BURN=1', 'ALL_TOUCHED=TRUE'],
+            )
+
+            # Flush cache to ensure data is written
+            raster_ds.FlushCache()
+
+            logger.info("Vector mask rasterized successfully: %s", output_path)
+
+            return GdalRasterImage(output_path)
+
+        except Exception as e:
+            raster_ds = None
+            raise GdalError(f"Error during rasterization: {str(e)}")
+        finally:
+            raster_ds = None
+
+    finally:
+        vector_ds = None
+
+
 def get_image_resolution(
     mon_img: GdalRasterImage,
     ref_img: GdalRasterImage,
@@ -229,6 +319,15 @@ class GdalRasterImage:
             self.y_min = self.y_max + self.y_size * self.y_res
             self.projection = dataset.GetProjection()
             self.spatial_ref = dataset.GetSpatialRef()
+
+            band = dataset.GetRasterBand(1)
+            self._no_data_value = band.GetNoDataValue()
+            band = None
+
+    @property
+    def no_data_value(self) -> float | None:
+        """No-data sentinel declared by the raster band, or None if unset."""
+        return self._no_data_value
 
     def have_pixel_resolution(self) -> bool:
         """Indicate if the image have a pixel size

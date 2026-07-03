@@ -47,6 +47,8 @@ class RuntimeConfiguration:
         gen_delta_raster: Whether to generate intermediate products (dx/dy raster)
         generate_kp_chips: Whether to generate KP chip images
         enable_large_shift_detection: Whether to detect and correct large pixel shifts
+        no_values: Optional list of DN (Digital Number) values to filter out from key points.
+                   Key points where reference or monitored image has these values will be excluded.
         pixel_size: Optional pixel size in meters. Ignored if image resolution
                    can be read from input images
         title_prefix: Optional prefix for chart titles (max 26 characters)
@@ -58,6 +60,7 @@ class RuntimeConfiguration:
     gen_delta_raster: bool
     generate_kp_chips: bool
     enable_large_shift_detection: bool
+    no_values: Optional[list[int]] = None
     pixel_size: Optional[float] = None
     title_prefix: Optional[str] = None
     dem_description: Optional[str] = None

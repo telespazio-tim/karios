@@ -1,5 +1,19 @@
 # KARIOS CHANGELOG
 
+## Unreleased
+
+### New features
+
+- **`karios align` subcommand**: standalone command that warps the monitored image onto the reference grid. Writes the primary aligned output plus one sibling per ECC-converged candidate for visual A/B comparison in QGIS.
+
+### Improvements
+
+- **Global alignment algorithm overhaul**: replaced the original rotated-template sweep (±15° rotation, ±128 px translation search via `cv2.matchTemplate`) with a SIFT + homography RANSAC + ECC pipeline. The new algorithm:
+  - estimates a full 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) instead of a 4-DOF rotation+translation+uniform-scale fit;
+  - is far more robust on cross-sensor pairs thanks to CLAHE preprocessing, SIFT descriptors, Lowe ratio + mutual cross-check, and ECC refinement on Sobel gradient magnitudes (sensor-invariant);
+  - drops the equal-size input constraint;
+  - renders the warped monitored image onto the reference's pixel grid so both outputs share a geotransform.
+
 ## 2.1.1 [20260218]
 
 ### Fix
