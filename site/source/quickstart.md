@@ -194,6 +194,7 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 | Option | Type | Description |
 |--------|------|------------|
 | `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts. |
+| `--preprocess-global-align` | FLAG | Rotated-template-matching preprocessing: detect global rotation (±15°) and translation, warp the monitored image, and crop both inputs (and mask) to their overlap before matching. |
 
 #### Logging Options
 
@@ -543,6 +544,29 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 :::{important}
 This is still an experimental feature that may use significant memory for large images.
 :::
+
+### Global Alignment Preprocessing
+
+When called with `--preprocess-global-align`, KARIOS runs a rotated-template-matching pass before any other matching:
+
+```bash
+karios process monitored.tif reference.tif --preprocess-global-align
+```
+
+The pass searches for the best (rotation, translation) pair that aligns the monitored image to the reference:
+
+- Rotation is searched in 1° steps over ±15°.
+- Translation is searched in ±128 pixels around (0, 0). The reference is zero-padded so the whole monitored image can be used as the template.
+- The best transform (highest normalized cross-correlation peak) is applied to the monitored image (and to the mask if provided) via affine warp.
+- Monitored, reference, and mask are then cropped to the bounding box of their overlap, and the cropped GeoTIFFs are written into the output directory with updated geotransforms.
+
+This is independent of, and runs before, `--enable-large-shift-detection`; the two can be combined.
+
+**Use cases**:
+
+- Aerial/satellite pairs with a small uncalibrated rotation
+- Cross-sensor data where neither input has been pre-warped to the other's grid
+- Removing systematic shift + rotation before fine KLT matching
 
 ### Resume Functionality
 

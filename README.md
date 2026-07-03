@@ -737,6 +737,38 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 **Warning**: Experimental feature that may use significant memory for large images.
 
+### Global Alignment (`karios align`)
+
+`karios align` estimates and applies a global 2D homography to bring the monitored image onto the reference's pixel grid. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
+
+```bash
+karios align monitored.tif reference.tif --out ./aligned
+karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_global_aligned.tiff
+```
+
+The pipeline:
+
+1. **Preprocess** both inputs to uint8 with a percentile stretch and CLAHE, which equalises radiometry between sensors.
+2. **Detect** SIFT keypoints and 128-dim descriptors on both images.
+3. **Match** descriptors with a brute-force L2 matcher, then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
+4. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC.
+5. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), starting from both the RANSAC fit and — when available — a geotransform-derived prior. The highest ECC wins.
+6. **Warp** the monitored image with `cv2.warpPerspective` onto the reference's pixel grid. Reference is passed through unchanged. Both outputs share the reference's geotransform so they overlay directly in QGIS.
+
+The command writes:
+
+- `<mon_stem>_global_aligned.tiff` — the monitored image warped into the reference frame
+- `<ref_stem>_global_aligned.tiff` — the reference, passed through unchanged
+- `<mon_stem>_global_aligned__<source>_ecc<score>.tiff` — one sibling per ECC-converged starting point (e.g. `__RANSAC_ecc0.221.tiff`, `__prior_ecc0.046.tiff`). On weakly-correlated cross-sensor imagery, ECC scores can be too low to discriminate reliably — opening every candidate in QGIS and overlaying on the reference lets you pick the visually best one by eye.
+
+The final 3×3 homography and an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio) are printed to stdout.
+
+**Use cases**:
+
+- Cross-sensor pairs with significant rotation, scale, or perspective differences
+- Inputs with inaccurate geotransforms (one or both products mis-registered)
+- Removing systematic geometric error before fine KLT matching
+
 ### Resume Functionality
 
 Skip KLT matching and reuse previous results:

@@ -28,12 +28,15 @@ import sys
 from pathlib import Path, PurePath
 from typing import Optional
 
+import numpy as np
 import rich_click as click
 from osgeo import gdal
 
 from karios.api import KariosAPI, RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
+from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
+from karios.matcher.global_align import apply_global_alignment
 from karios.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -371,6 +374,92 @@ def process(
 
     except Exception as e:
         logger.error("Error during processing: %s", str(e), exc_info=debug)
+        return 1
+
+
+@cli.command(
+    "align",
+    short_help="Align a monitored image to a reference (SIFT + homography RANSAC + ECC)",
+)
+@click.argument(
+    "monitored_image",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+)
+@click.argument(
+    "reference_image",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=Path("."),
+    help="Output directory for aligned images",
+    show_default=True,
+)
+@click.option("--debug", "-d", is_flag=True, help="Enable Debug mode")
+@click.option("--no-log-file", is_flag=True, help="Do not log in file")
+@click.option(
+    "--log-file-path",
+    type=click.Path(),
+    default="karios.log",
+    help="Log file path",
+    show_default=True,
+)
+def align(
+    monitored_image: Path,
+    reference_image: Path,
+    out: Path,
+    debug: bool,
+    no_log_file: bool,
+    log_file_path: str,
+) -> None:
+    """\b
+    Align MONITORED_IMAGE to REFERENCE_IMAGE by estimating a 2D homography
+    with SIFT feature matching + RANSAC, then refining with ECC on Sobel
+    gradient magnitudes. The warped mon is rendered onto ref's canvas so
+    both outputs share the same pixel grid.
+
+    \b
+    Outputs written to OUT:
+      <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
+      <ref_stem>_global_aligned<ext>       — ref (unchanged)
+      <mon_stem>_global_aligned__<…>.tiff  — alternative candidates (one per
+                                             ECC-converged starting point) for
+                                             visual A/B in QGIS
+    """
+    configure_logging(debug, not no_log_file, log_file_path)
+    logger.info("Start align")
+
+    try:
+        os.makedirs(out, exist_ok=True)
+
+        monitored = GdalRasterImage(str(monitored_image))
+        reference = GdalRasterImage(str(reference_image))
+
+        aligned_mon, ref_out_img, _, alignment = apply_global_alignment(
+            monitored, reference, None, out
+        )
+
+        m = alignment.matrix
+        rot = float(np.degrees(np.arctan2(m[1, 0], m[0, 0])))
+        sx = float(np.hypot(m[0, 0], m[0, 1]))
+        sy = float(np.hypot(m[1, 0], m[1, 1]))
+        click.echo(f"rotation:    {rot:+.3f} deg")
+        click.echo(f"scale x/y:   {sx:.4f} / {sy:.4f}")
+        click.echo(f"translation: tx={float(m[0,2]):+.2f}  ty={float(m[1,2]):+.2f}")
+        click.echo(f"perspective: {float(m[2,0]):+.6f}  {float(m[2,1]):+.6f}")
+        click.echo(f"inliers:     {alignment.n_inliers}/{alignment.n_matches} ({alignment.score*100:.1f}%)")
+        click.echo("\nHomography (mon → ref):")
+        for row in m:
+            click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
+        click.echo("\nOutputs:")
+        click.echo(f"  monitored (aligned): {aligned_mon.file_name}")
+        click.echo(f"  reference:           {ref_out_img.file_name}")
+
+        return 0
+
+    except Exception as e:
+        logger.error("Error during align: %s", str(e), exc_info=debug)
         return 1
 
 
