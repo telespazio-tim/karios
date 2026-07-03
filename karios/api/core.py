@@ -383,6 +383,7 @@ class KariosAPI:
             dem_file_path,
             laplacian_polarity_label=self.klt_polarity_label,
             laplacian_ksize_label=self.klt_ksize_label,
+            processing_config=self._processing_configuration,
         )
         report_paths.html_report = str(html_generator.generate())
 

@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from karios.api.config import RuntimeConfiguration
     from karios.api.core import AccuracyAnalysis, MatchResult, ReportPaths
+    from karios.core.configuration import ProcessingConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,23 @@ CSS_STYLES = """
         }
         .sort-btn:hover { background: #e2e6ea; }
         .sort-btn.active { background: #2c3e50; color: white; border-color: #2c3e50; }
+        details.config-details > summary {
+            cursor: pointer;
+            font-size: 1.17em;
+            font-weight: bold;
+            margin-bottom: 12px;
+            padding: 4px 0;
+            list-style: revert;
+        }
+        details.config-details > summary:hover { color: #2c3e50; }
+        details.config-details[open] > summary { margin-bottom: 16px; }
+        .config-section-header {
+            background-color: #eef2f5;
+            font-size: 0.85em;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
 """
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -253,27 +271,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <div class="section">
         <h1>KARIOS Processing Report</h1>
-        <div class="grid">
-            <div>
-                <h3>Input Images</h3>
-                <table>
-                    <tr><th>Monitored</th><td>{monitored_image}</td></tr>
-                    <tr><th>Reference</th><td>{reference_image}</td></tr>
-                    <tr><th>Mask</th><td>{mask_file}</td></tr>
-                    <tr><th>DEM</th><td>{dem_file}</td></tr>
-                </table>
-            </div>
-            <div>
-                <h3>Configuration</h3>
-                <table>
-                    <tr><th>Pixel Size</th><td>{pixel_size}</td></tr>
-                    <tr><th>Large Shift Detection</th><td>{large_shift_detection}</td></tr>
-                    <tr><th>Laplacian Kernel Size</th><td>{laplacian_ksize}</td></tr>
-                    <tr><th>Laplacian Polarity</th><td>{laplacian_polarity}</td></tr>
-                    <tr><th>Title Prefix</th><td>{title_prefix}</td></tr>
-                </table>
-            </div>
-        </div>
+        <h3>Input Images</h3>
+        <table>
+            <tr><th>Monitored</th><td>{monitored_image}</td></tr>
+            <tr><th>Reference</th><td>{reference_image}</td></tr>
+            <tr><th>Mask</th><td>{mask_file}</td></tr>
+            <tr><th>DEM</th><td>{dem_file}</td></tr>
+        </table>
+        <details class="config-details">
+            <summary>Configuration</summary>
+            <table>
+                {config_rows_html}
+            </table>
+        </details>
         <p>Generated on {generation_date}</p>
     </div>
 
@@ -487,6 +497,7 @@ class HtmlReportGenerator:
         dem_file_path: Optional[Path] = None,
         laplacian_polarity_label: Optional[str] = None,
         laplacian_ksize_label: Optional[str] = None,
+        processing_config: Optional["ProcessingConfiguration"] = None,
     ):
         self.output_dir = output_dir
         self.match_result = match_result
@@ -496,6 +507,72 @@ class HtmlReportGenerator:
         self.dem_file_path = dem_file_path
         self.laplacian_polarity_label = laplacian_polarity_label or "Normal"
         self.laplacian_ksize_label = laplacian_ksize_label or "Unknown"
+        self.processing_config = processing_config
+
+    @staticmethod
+    def _format_config_value(value) -> str:
+        """Render a configuration value for the HTML table."""
+        if value is None:
+            return "None"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, dict):
+            return ", ".join(f"{k}={v}" for k, v in value.items())
+        return str(value)
+
+    def _build_config_rows_html(self) -> str:
+        """Build the full set of <tr> rows for the collapsible Configuration table.
+
+        The first rows are the high-level summary (pixel size, large-shift, the
+        resolved Laplacian kernel size and polarity, title prefix). Below them,
+        every dataclass field from each section of processing_configuration is
+        emitted as its own row, grouped by section header.
+        """
+        import dataclasses
+
+        rows: list[str] = []
+
+        # Runtime / resolved summary
+        pixel_size_label = (
+            f"{self.runtime_config.pixel_size} m"
+            if self.runtime_config.pixel_size
+            else "Auto"
+        )
+        large_shift_label = (
+            "Enabled" if self.runtime_config.enable_large_shift_detection else "Disabled"
+        )
+        summary_rows = [
+            ("Pixel Size", pixel_size_label),
+            ("Large Shift Detection", large_shift_label),
+            ("Laplacian Kernel Size", self.laplacian_ksize_label),
+            ("Laplacian Polarity", self.laplacian_polarity_label),
+            ("Title Prefix", self.runtime_config.title_prefix or "None"),
+        ]
+        for label, value in summary_rows:
+            rows.append(f"<tr><th>{label}</th><td>{value}</td></tr>")
+
+        if self.processing_config is None:
+            return "\n".join(rows)
+
+        sections = [
+            ("KLT Matching", self.processing_config.klt_configuration),
+            (
+                "Shift Image Processing",
+                self.processing_config.shift_image_processing_configuration,
+            ),
+            ("Accuracy Analysis", self.processing_config.accuracy_analysis_configuration),
+        ]
+        for header, section in sections:
+            if section is None:
+                continue
+            rows.append(
+                f'<tr class="config-section-header"><th colspan="2">{header}</th></tr>'
+            )
+            for field in dataclasses.fields(section):
+                value = self._format_config_value(getattr(section, field.name))
+                rows.append(f"<tr><th>{field.name}</th><td>{value}</td></tr>")
+
+        return "\n                        ".join(rows)
 
     def _load_chips_data(self) -> dict:
         """Load chips/chips.csv and return a dict keyed by (x0, y0) int tuples."""
@@ -722,17 +799,7 @@ class HtmlReportGenerator:
             if self.match_result.mask
             else "None",
             dem_file=self.dem_file_path.name if self.dem_file_path else "None",
-            pixel_size=f"{self.runtime_config.pixel_size} m"
-            if self.runtime_config.pixel_size
-            else "Auto",
-            large_shift_detection=(
-                "Enabled"
-                if self.runtime_config.enable_large_shift_detection
-                else "Disabled"
-            ),
-            laplacian_ksize=self.laplacian_ksize_label,
-            laplacian_polarity=self.laplacian_polarity_label,
-            title_prefix=self.runtime_config.title_prefix or "None",
+            config_rows_html=self._build_config_rows_html(),
             matched_points=len(self.match_result.points),
             valid_pixels=self.accuracy_analysis.valid_pixels,
             total_pixels=self.accuracy_analysis.total_pixels,
