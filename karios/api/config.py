@@ -43,21 +43,21 @@ class RuntimeConfiguration:
 
     Attributes:
         output_directory: Directory where results will be written
-        pixel_size: Optional pixel size in meters. Ignored if image resolution
-                   can be read from input images
-        title_prefix: Optional prefix for chart titles (max 26 characters)
         gen_kp_mask: Whether to generate a TIFF mask based on key points
         gen_delta_raster: Whether to generate intermediate products (dx/dy raster)
         generate_kp_chips: Whether to generate KP chip images
-        dem_description: Optional DEM source description for plots
         enable_large_shift_detection: Whether to detect and correct large pixel shifts
+        pixel_size: Optional pixel size in meters. Ignored if image resolution
+                   can be read from input images
+        title_prefix: Optional prefix for chart titles (max 26 characters)
+        dem_description: Optional DEM source description for plots
     """
 
     output_directory: Path
-    pixel_size: Optional[float]
-    title_prefix: Optional[str]
     gen_kp_mask: bool
     gen_delta_raster: bool
     generate_kp_chips: bool
-    dem_description: Optional[str]
     enable_large_shift_detection: bool
+    pixel_size: Optional[float] = None
+    title_prefix: Optional[str] = None
+    dem_description: Optional[str] = None
