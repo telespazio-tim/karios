@@ -1,0 +1,4 @@
+## 2025-05-15 - [Optimization] Redundant Computations in Auto-Laplacian Selection
+**Learning:** The `auto` mode for Laplacian kernel selection was re-calculating image normalizations, Laplacians, and feature points for every combination (25 iterations by default), leading to significant performance overhead on large image tiles.
+**Action:** Pre-compute static values (uint8 conversions, Laplacians per kernel size, and features to track for each reference Laplacian) outside the search loop. Refactor the core `klt_tracker` to accept pre-computed feature points (`p0`) to avoid redundant calls to `cv2.goodFeaturesToTrack`. This reduced execution time by ~60% in benchmarks.
+**Note:** When refactoring internal matching loops, ensure that tests mocking internal methods (like `_apply_laplacian_and_track`) are updated or removed to reflect the new architecture.

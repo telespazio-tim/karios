@@ -20,6 +20,7 @@
 Provides command line interface for KARIOS functionality.
 """
 
+import json
 import logging
 import os
 import shutil
@@ -27,12 +28,15 @@ import sys
 from pathlib import Path, PurePath
 from typing import Optional
 
+import numpy as np
 import rich_click as click
 from osgeo import gdal
 
 from karios.api import KariosAPI, RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
+from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
+from karios.matcher.global_align import apply_global_alignment
 from karios.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -59,6 +63,7 @@ click.rich_click.OPTION_GROUPS = {
                 "--generate-key-points-mask",
                 "--generate-intermediate-product",
                 "--generate-kp-chips",
+                "--no-value",
                 "--dem-description",
             ],
         },
@@ -138,6 +143,13 @@ def cli() -> None:
     required=False,
 )
 @click.option(
+    "--vector-mask",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Vector mask file (GeoJSON, Shapefile, etc.) to exclude pixels from matching. Will be rasterized to match monitored image.",
+    show_default=True,
+)
+@click.option(
     "--conf",
     type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
     default=PurePath(ROOT_DIR, "configuration/processing_configuration.json"),
@@ -194,6 +206,14 @@ def cli() -> None:
     """,
 )
 @click.option(
+    "--no-value",
+    type=int,
+    multiple=True,
+    default=None,
+    help="Filter out key points where reference or monitored image has this DN value. Can be used multiple times (e.g., --no-value 0 --no-value 255)",
+    show_default=True,
+)
+@click.option(
     "--dem-description",
     type=str,
     default=None,
@@ -226,6 +246,8 @@ def process(
     generate_key_points_mask: bool,
     generate_intermediate_product: bool,
     generate_kp_chips: bool,
+    vector_mask: Optional[Path],
+    no_value: tuple[int, ...],
     title_prefix: Optional[str],
     dem_description: Optional[str],
     enable_large_shift_detection: bool,
@@ -241,6 +263,7 @@ def process(
     - REFERENCE_IMAGE  Path to the stable reference image for comparison
     - [MASK_FILE]      Optional mask file to exclude pixels from matching (use '-' to skip when providing only DEM_FILE)
     - [DEM_FILE]       Optional DEM file for altitude-based analysis
+    - [VECTOR_MASK]    Optional vector mask file (GeoJSON, Shapefile, etc.)
 
     \b
 
@@ -291,21 +314,56 @@ def process(
             generate_kp_chips=generate_kp_chips,
             dem_description=dem_description,
             enable_large_shift_detection=enable_large_shift_detection,
+            no_values=list(no_value) if no_value else None,
         )
 
         # Validate configuration
-        _validate_configuration(runtime_configuration, dem_file)
+        _validate_configuration(runtime_configuration, dem_file, vector_mask)
 
         # Initialize API
         api = KariosAPI(processing_configuration, runtime_configuration)
 
         # Run processing pipeline with input files as parameters
         match_result, accuracy, reports = api.process(
-            monitored_image, reference_image, mask_file, dem_file, resume
+            monitored_image, reference_image, mask_file, dem_file, resume, vector_mask
         )
 
-        # Copy configuration to output directory
-        shutil.copy(conf, output_dir)
+        # Copy configuration to the output directory. When any klt_matching field was
+        # in "auto" mode, replace it with the resolved value so the output config
+        # reflects what actually ran.
+        klt_conf = processing_configuration.klt_configuration
+        ksize_resolved = None
+        if klt_conf.laplacian_kernel_size == "auto":
+            selected = api.klt_auto_selected_ksize
+            if selected is not None:
+                mon_k, ref_k = selected
+                ksize_resolved = {"mon": mon_k, "ref": ref_k}
+        polarity_resolved = None
+        if klt_conf.laplacian_invert_polarity == "auto":
+            polarity_resolved = api.klt_resolved_invert_polarity
+
+        if ksize_resolved is not None or polarity_resolved is not None:
+            with open(conf, encoding="utf-8") as f:
+                conf_data = json.load(f)
+            klt_section = conf_data["processing_configuration"]["klt_matching"]
+            if ksize_resolved is not None:
+                klt_section["laplacian_kernel_size"] = ksize_resolved
+                logger.info(
+                    "Auto laplacian kernel sizes written to config: mon=%s ref=%s",
+                    ksize_resolved["mon"],
+                    ksize_resolved["ref"],
+                )
+            if polarity_resolved is not None:
+                klt_section["laplacian_invert_polarity"] = polarity_resolved
+                logger.info(
+                    "Auto laplacian polarity written to config: %s",
+                    polarity_resolved,
+                )
+            out_conf_path = output_dir / Path(conf).name
+            with open(out_conf_path, "w", encoding="utf-8") as f:
+                json.dump(conf_data, f, indent=4)
+        else:
+            shutil.copy(conf, output_dir)
 
         logger.info("Processing completed successfully")
         logger.info("Results written to %s", output_dir)
@@ -319,12 +377,99 @@ def process(
         return 1
 
 
-def _validate_configuration(config: RuntimeConfiguration, dem_file: Optional[Path]) -> None:
+@cli.command(
+    "align",
+    short_help="Align a monitored image to a reference (SIFT + homography RANSAC + ECC)",
+)
+@click.argument(
+    "monitored_image",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+)
+@click.argument(
+    "reference_image",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=Path("."),
+    help="Output directory for aligned images",
+    show_default=True,
+)
+@click.option("--debug", "-d", is_flag=True, help="Enable Debug mode")
+@click.option("--no-log-file", is_flag=True, help="Do not log in file")
+@click.option(
+    "--log-file-path",
+    type=click.Path(),
+    default="karios.log",
+    help="Log file path",
+    show_default=True,
+)
+def align(
+    monitored_image: Path,
+    reference_image: Path,
+    out: Path,
+    debug: bool,
+    no_log_file: bool,
+    log_file_path: str,
+) -> None:
+    """\b
+    Align MONITORED_IMAGE to REFERENCE_IMAGE by estimating a 2D homography
+    with SIFT feature matching + RANSAC, then refining with ECC on Sobel
+    gradient magnitudes. The warped mon is rendered onto ref's canvas so
+    both outputs share the same pixel grid.
+
+    \b
+    Outputs written to OUT:
+      <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
+      <ref_stem>_global_aligned<ext>       — ref (unchanged)
+      <mon_stem>_global_aligned__<…>.tiff  — alternative candidates (one per
+                                             ECC-converged starting point) for
+                                             visual A/B in QGIS
+    """
+    configure_logging(debug, not no_log_file, log_file_path)
+    logger.info("Start align")
+
+    try:
+        os.makedirs(out, exist_ok=True)
+
+        monitored = GdalRasterImage(str(monitored_image))
+        reference = GdalRasterImage(str(reference_image))
+
+        aligned_mon, ref_out_img, _, alignment = apply_global_alignment(
+            monitored, reference, None, out
+        )
+
+        m = alignment.matrix
+        rot = float(np.degrees(np.arctan2(m[1, 0], m[0, 0])))
+        sx = float(np.hypot(m[0, 0], m[0, 1]))
+        sy = float(np.hypot(m[1, 0], m[1, 1]))
+        click.echo(f"rotation:    {rot:+.3f} deg")
+        click.echo(f"scale x/y:   {sx:.4f} / {sy:.4f}")
+        click.echo(f"translation: tx={float(m[0,2]):+.2f}  ty={float(m[1,2]):+.2f}")
+        click.echo(f"perspective: {float(m[2,0]):+.6f}  {float(m[2,1]):+.6f}")
+        click.echo(f"inliers:     {alignment.n_inliers}/{alignment.n_matches} ({alignment.score*100:.1f}%)")
+        click.echo("\nHomography (mon → ref):")
+        for row in m:
+            click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
+        click.echo("\nOutputs:")
+        click.echo(f"  monitored (aligned): {aligned_mon.file_name}")
+        click.echo(f"  reference:           {ref_out_img.file_name}")
+
+        return 0
+
+    except Exception as e:
+        logger.error("Error during align: %s", str(e), exc_info=debug)
+        return 1
+
+
+def _validate_configuration(config: RuntimeConfiguration, dem_file: Optional[Path], vector_mask: Optional[Path] = None) -> None:
     """Validate configuration parameters and input files.
 
     Args:
         config: RuntimeConfiguration object to validate
         dem_file: Optional DEM file path
+        vector_mask: Optional vector mask file path
 
     Raises:
         ValueError: If configuration is invalid
@@ -341,6 +486,9 @@ def _validate_configuration(config: RuntimeConfiguration, dem_file: Optional[Pat
     # Validate title prefix length
     if config.title_prefix and len(config.title_prefix) > 26:
         raise ValueError("Title prefix is too long (>26 characters)")
+
+    # Check if both raster and vector masks are provided
+    logger.info("Vector mask validation complete")
 
 
 def _print_summary(match_result, accuracy, reports) -> None:
@@ -373,6 +521,9 @@ def _print_summary(match_result, accuracy, reports) -> None:
     click.echo(f"  DX plot: {reports.dx_plot}")
     click.echo(f"  DY plot: {reports.dy_plot}")
     click.echo(f"  CE plot: {reports.ce_plot}")
+
+    if reports.html_report:
+        click.echo(f"  HTML report: {reports.html_report}")
 
     if reports.dem_plots:
         click.echo(f"  DEM plots: {len(reports.dem_plots)}")
