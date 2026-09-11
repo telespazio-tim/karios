@@ -241,6 +241,8 @@ When using the CLI, runtime configuration is automatically created from command-
   - `qualityLevel`: Minimum corner quality threshold.
   - `matching_winsize`: Search window size during matching.
   - `outliers_filtering`: Enable/disable outlier filtering.
+  - `maxLevel`: Pyramid depth used when matching. Deeper pyramids capture larger displacements but, in the default matching mode, erode matching inward from every data edge.
+    Matching mode itself is a runtime switch, not a configuration key: see the `--enable-coarse-to-fine` CLI option.
 
 Refer to section [KLT param leverage](#klt-param-leverage) for details.
 

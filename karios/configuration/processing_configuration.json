@@ -15,6 +15,7 @@
       "tile_size": 20000,
       "laplacian_kernel_size": 7,
       "laplacian_invert_polarity": false,
+      "maxLevel": 1,
       "outliers_filtering": false
     },
     "accuracy_analysis": {

@@ -157,8 +157,14 @@ Requirements:
 
 Recommendation:
 
-- The user shall carefully check the dynamic range of the monitored and reference images, because KARIOS converts these input data into integers.  
-  For instance, providing float values between 0 and 1 will give very poor results. In that case, it is recommended to multiply the data by 100.
+- KARIOS converts input data to 8 bit internally, so the *shape* of the dynamic range
+  matters, not its scale. Rescaling a float image (for instance multiplying values in
+  [0, 1] by 100) makes no difference and is not needed.  
+  What does matter is extreme and non-finite pixels. For float rasters the conversion
+  takes its bounds from the 2nd and 98th percentile of the finite pixels, so a few
+  stray values are tolerated; for integer rasters it still uses the minimum and
+  maximum, where a single outlier compresses everything else. Mark such pixels as
+  no-data in the raster, or exclude them with `--no-value`.
 - Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.
 
 ## CLI Usage
@@ -268,7 +274,8 @@ karios process monitored.tif reference.tif mask.tif \
 
 | Option | Type | Description |
 |--------|------|------------|
-| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts |
+| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts. Mutually exclusive with `--enable-coarse-to-fine` |
+| `--enable-coarse-to-fine` | FLAG | Match by descending the image pyramid explicitly, keeping key points near data edges. Mutually exclusive with `--enable-large-shift-detection`, and not compatible with `laplacian_kernel_size: "auto"`. See [KLT param leverage](#maxlevel--coarse-to-fine-matching) |
 
 #### Logging Options
 
@@ -432,6 +439,11 @@ reference image, as described by the OpenCV documentation goodFeaturesToTrack, a
 - `qualityLevel`: Minimum corner quality threshold
 - `matching_winsize`: Search window size during matching
 - `outliers_filtering`: Enable/disable outlier filtering
+- `maxLevel`: Pyramid depth used when matching. Deeper pyramids capture larger
+  displacements but, in the default matching mode, erode matching inward from every
+  data edge.
+  Matching mode itself is a runtime switch, not a configuration key: see
+  `--enable-coarse-to-fine`.
 
 Refer to section [KLT param leverage](#klt-param-leverage) for details
 
@@ -638,6 +650,36 @@ You should also consider that the image can contain empty parts where KLT will n
 In order to avoid density differences in the final result, you can define a `tile_size` larger than the image with a high `maxCorners`, or a small `tile_size` and `maxCorners` in order to have tiles with almost same size.
 
 For example, for image of 20000 x 15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
+
+### maxLevel & coarse-to-fine matching
+
+`cv2.calcOpticalFlowPyrLK` uses a window of the same pixel size at every pyramid
+level, so at level L that window spans `matching_winsize * 2**L` of the original
+image. Near a data edge the window hangs off the image, the coarse estimate is
+meaningless, and it seeds every finer level, which cannot recover. Matching
+therefore erodes inward from every edge as `maxLevel` grows — the lost band is
+roughly `(matching_winsize / 2) * 2**maxLevel`, about 400 px at the defaults with
+`maxLevel: 5`.
+
+This is a real trade-off, because a displacement of more than a few pixels needs
+those coarse levels to be found at all. On a SPOT5/BSG pair misregistered by
+~13.6 px, matched in the default mode:
+
+| `maxLevel` | key points | x extent (image is 2878 px wide) |
+|-----------|------------|----------------------------------|
+| 1         | 1578       | —                                |
+| 3         | 6794       | 173–2707                         |
+| 5         | 1850       | 606–2263                         |
+
+The `--enable-coarse-to-fine` switch removes the trade-off. It descends the pyramid
+one level at a time, running each level with no internal recursion, and hands
+down a displacement field fitted to that level's reliable points instead of each
+point's own result. A point near an edge inherits a usable starting guess from
+its neighbours, so only the finest level's `matching_winsize / 2` band is lost —
+and `maxLevel` can be raised for capture range without cost. On the same pair,
+`--enable-coarse-to-fine` with `maxLevel: 5` gives 8800 key points spanning x 24–2856,
+with roughly half the standard deviation, for about 1.4-1.6x the matching time
+and no additional memory.
 
 ## About shift by altitude plot
 

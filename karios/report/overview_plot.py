@@ -50,7 +50,7 @@ class OverviewPlot(AbstractPlot):
         points: DataFrame,
         prefix: str | None,
         mask: GdalRasterImage | None = None,
-        no_values: list[int] | None = None,
+        no_values: list[float] | None = None,
     ):
         """Constructor
 
@@ -62,7 +62,7 @@ class OverviewPlot(AbstractPlot):
             prefix (str|None): figure title prefix
             mask (GdalRasterImage|None): optional mask applied to the monitored image
                 when plotting. Pixels where mask == 0 are hidden.
-            no_values (list[int]|None): optional list of DN values to hide in both
+            no_values (list[float]|None): optional list of DN values to hide in both
                 monitored and reference image displays, matching the CLI --no-value filter.
         """
         super().__init__(prefix, config.fig_size)

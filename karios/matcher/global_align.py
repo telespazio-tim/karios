@@ -42,6 +42,7 @@ import numpy as np
 from osgeo import gdal
 
 from karios.core.image import GdalRasterImage
+from karios.core.radiometry import to_uint8
 
 logger = logging.getLogger(__name__)
 
@@ -84,25 +85,9 @@ class GlobalAlignment:
         return self.n_inliers / self.n_matches if self.n_matches else 0.0
 
 
-def _to_uint8(arr: np.ndarray) -> np.ndarray:
-    if arr.dtype == np.uint8:
-        return arr
-    a = arr.astype(np.float32)
-    finite = np.isfinite(a)
-    if not finite.any():
-        return np.zeros(arr.shape, dtype=np.uint8)
-    # Percentile stretch is more robust than min/max to a few outliers.
-    lo, hi = np.percentile(a[finite], (2.0, 98.0))
-    if hi > lo:
-        a = np.clip(((a - lo) / (hi - lo)) * 255.0, 0, 255)
-    else:
-        a = np.zeros_like(a)
-    return a.astype(np.uint8)
-
-
 def _preprocess(arr: np.ndarray) -> np.ndarray:
     """uint8 stretch + CLAHE to equalize radiometry across the two images."""
-    img = _to_uint8(arr)
+    img = to_uint8(arr)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     return clahe.apply(img)
 

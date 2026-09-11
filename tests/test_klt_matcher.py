@@ -5,13 +5,21 @@
 import itertools
 from unittest.mock import MagicMock, Mock, patch
 
+import cv2
 import numpy as np
 import pandas as pd
 import pytest
 
 from karios.core.configuration import KLTConfiguration
 from karios.core.image import GdalRasterImage
-from karios.matcher.klt import KLT, __filter_outliers, klt_tracker
+from karios.matcher.klt import (
+    KLT,
+    __filter_outliers,
+    _read_with_margin,
+    _tracking_margin,
+    _valid_mask,
+    klt_tracker,
+)
 
 
 def test_filter_outliers():
@@ -489,7 +497,8 @@ def test_match_tile_auto_ksize_selects_best_inlier_ratio():
         # We've mocked cv2.goodFeaturesToTrack to return a MagicMock for p0.
         # We can use the mock's 'idx' attribute to identify which ksize was used.
         p0_idx = getattr(p0, "idx", -1)
-        count = best_count if p0_idx == 2 else 1
+        mon_idx = getattr(image_data, "ksize_idx", -1)
+        count = best_count if (p0_idx == 2 and mon_idx == 1) else 1
         df = pd.DataFrame(
             {
                 "x0": list(range(count)),
@@ -522,7 +531,7 @@ def test_match_tile_auto_ksize_selects_best_inlier_ratio():
         patch("karios.matcher.klt.cv2.goodFeaturesToTrack", side_effect=mock_gftt),
         patch("karios.matcher.klt.cv2.Laplacian", side_effect=mock_laplacian),
     ):
-        best_result, scores, selected_ksize = klt._match_tile_auto_ksize(
+        best_result, scores, selected_ksize, _ = klt._match_tile_auto_ksize(
             tile, tile, np.ones((50, 50), dtype=np.uint8)
         )
 
@@ -633,3 +642,195 @@ if __name__ == "__main__":
     test_klt_match_tile_method()
     test_klt_match_tile_invalid_offsets()
     print("All KLT matcher tests passed!")
+
+
+class _ArrayImage:
+    """Minimal GdalRasterImage stand-in backed by a numpy array."""
+
+    def __init__(self, array):
+        self._array = array
+        self.y_size, self.x_size = array.shape
+        self.no_data_value = None
+
+    def read(self, _band_id, x_off, y_off, x_size, y_size):
+        return self._array[y_off : y_off + y_size, x_off : x_off + x_size]
+
+
+def _ramp_image(width, height):
+    """Image whose every pixel value encodes its own position, so a read can be located."""
+    return (np.arange(height)[:, None] * 1000 + np.arange(width)[None, :]).astype(np.int32)
+
+
+def test_read_with_margin_returns_real_neighbours_for_interior_tile():
+    """An interior tile gets genuine surrounding pixels, not fabricated ones."""
+    image = _ArrayImage(_ramp_image(100, 100))
+
+    box, left, top = _read_with_margin(image, x_off=40, y_off=40, x_size=20, y_size=20, margin=8)
+
+    assert (left, top) == (8, 8)
+    assert box.shape == (36, 36)
+    # every pixel must equal the true raster value at that global position
+    expected = _ramp_image(100, 100)[32:68, 32:68]
+    np.testing.assert_array_equal(box, expected)
+
+
+def test_read_with_margin_clips_at_raster_edge_without_fabricating():
+    """At the true image border the margin shrinks; no invented pixels are added."""
+    image = _ArrayImage(_ramp_image(100, 100))
+
+    box, left, top = _read_with_margin(image, x_off=0, y_off=0, x_size=20, y_size=20, margin=8)
+
+    assert (left, top) == (0, 0)
+    assert box.shape == (28, 28)
+    np.testing.assert_array_equal(box, _ramp_image(100, 100)[0:28, 0:28])
+
+
+def test_read_with_margin_clips_bottom_right_edge():
+    """The far edge clips too, so the read never runs past the raster."""
+    image = _ArrayImage(_ramp_image(100, 100))
+
+    box, left, top = _read_with_margin(image, x_off=85, y_off=85, x_size=15, y_size=15, margin=8)
+
+    assert (left, top) == (8, 8)
+    assert box.shape == (23, 23)
+    np.testing.assert_array_equal(box, _ramp_image(100, 100)[77:100, 77:100])
+
+
+def _textured_pair(size, shift):
+    """A textured reference and a copy displaced by `shift` px, as uint8 rasters."""
+    rng = np.random.default_rng(1)
+    ref = cv2.GaussianBlur(rng.random((size, size)).astype(np.float32), (0, 0), 2.0)
+    ref = ((ref - ref.min()) / (ref.max() - ref.min()) * 255).astype(np.uint8)
+    mon = np.roll(np.roll(ref, shift, axis=0), shift, axis=1)
+    return ref, mon
+
+
+def _seam_config(tile_size):
+    return KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=2000000,
+        matching_winsize=25,
+        qualityLevel=0.1,
+        xStart=0,
+        tile_size=tile_size,
+        laplacian_kernel_size=7,
+        outliers_filtering=False,
+    )
+
+
+def _seam_band_count(points, tile_size, band=6):
+    """How many key points sit within `band` px of an internal tile seam."""
+    seams = np.array([tile_size, 2 * tile_size])
+    dx = np.abs(points["x0"].to_numpy()[:, None] - seams[None, :]).min(axis=1)
+    dy = np.abs(points["y0"].to_numpy()[:, None] - seams[None, :]).min(axis=1)
+    return int(((dx < band) | (dy < band)).sum())
+
+
+def test_tiling_does_not_lose_key_points_at_internal_seams():
+    """Splitting an image into tiles must not cost key points along the seams.
+
+    The same image matched as one tile is the ground truth: tiling it should
+    recover essentially the same key points at the seam positions, because each
+    tile reads real neighbouring pixels rather than stopping at its own edge.
+    """
+    size, tile_size = 300, 100
+    ref, mon = _textured_pair(size, shift=3)
+
+    untiled = pd.concat(
+        list(KLT(_seam_config(size)).match(_ArrayImage(mon), _ArrayImage(ref), None))
+    )
+    tiled = pd.concat(
+        list(KLT(_seam_config(tile_size)).match(_ArrayImage(mon), _ArrayImage(ref), None))
+    )
+
+    expected = _seam_band_count(untiled, tile_size)
+    actual = _seam_band_count(tiled, tile_size)
+
+    assert expected > 0, "test image produced no key points near the seam positions"
+    assert (
+        actual >= 0.8 * expected
+    ), f"tiling lost seam key points: {actual} kept of {expected} found without tiling"
+
+
+def test_tile_key_point_coordinates_stay_inside_the_image():
+    """The margin offset is removed, so coordinates remain valid global positions."""
+    size, tile_size = 300, 100
+    ref, mon = _textured_pair(size, shift=3)
+    klt = KLT(_seam_config(tile_size))
+
+    points = pd.concat(list(klt.match(_ArrayImage(mon), _ArrayImage(ref), None)))
+
+    assert points["x0"].min() >= 0
+    assert points["y0"].min() >= 0
+    assert points["x0"].max() <= size - 1
+    assert points["y0"].max() <= size - 1
+
+
+def _conf(**overrides):
+    base = dict(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=2000,
+        matching_winsize=25,
+        qualityLevel=0.1,
+        xStart=0,
+        tile_size=100,
+        laplacian_kernel_size=7,
+        outliers_filtering=False,
+    )
+    base.update(overrides)
+    return KLTConfiguration(**base)
+
+
+def test_klt_configuration_exposes_max_level_with_a_default():
+    """Pyramid depth is configurable, and configs that omit it still load."""
+    assert _conf().maxLevel == 1
+    assert _conf(maxLevel=2).maxLevel == 2
+
+
+def test_klt_tracker_passes_configured_max_level_to_opencv():
+    """The configured depth reaches calcOpticalFlowPyrLK rather than a constant."""
+    rng = np.random.default_rng(0)
+    data = (rng.random((120, 120)) * 255).astype(np.uint8)
+    mask = np.ones((120, 120), np.uint8)
+
+    with patch("karios.matcher.klt.cv2.calcOpticalFlowPyrLK") as mock_lk:
+        mock_lk.return_value = (
+            np.zeros((5, 1, 2), np.float32),
+            np.ones((5, 1), np.uint8),
+            np.zeros((5, 1), np.float32),
+        )
+        klt_tracker(data, data, mask, _conf(maxLevel=2), p0=np.zeros((5, 1, 2), np.float32))
+
+    assert mock_lk.call_args.kwargs["maxLevel"] == 2
+
+
+def test_tracking_margin_scales_with_max_level():
+    """Margin follows the configured pyramid depth, not a hardcoded one."""
+    assert _tracking_margin(25, 3) == (25 // 2) * 2**3
+    assert _tracking_margin(25, 5) == (25 // 2) * 2**5
+
+
+def test_valid_mask_excludes_configured_no_values():
+    """DN values listed as no-values are removed from the matching mask."""
+    img = np.full((10, 10), 50, dtype=np.uint8)
+    ref = np.full((10, 10), 60, dtype=np.uint8)
+    img[0:3, :] = 1  # sensor fill that is not the declared no-data value
+
+    mask = _valid_mask(img, ref, mon_no_data=0, ref_no_data=0, no_values=[1])
+
+    assert mask[0:3, :].sum() == 0, "fill DN must be excluded from the mask"
+    assert mask[3:, :].all(), "real data must stay valid"
+
+
+def test_valid_mask_without_no_values_keeps_declared_nodata_behaviour():
+    """With no no-values given, only zero / declared no-data is excluded."""
+    img = np.full((10, 10), 50, dtype=np.uint8)
+    ref = np.full((10, 10), 60, dtype=np.uint8)
+    img[0, :] = 0
+
+    mask = _valid_mask(img, ref, mon_no_data=0, ref_no_data=0, no_values=None)
+
+    assert mask[0, :].sum() == 0
+    assert mask[1:, :].all()

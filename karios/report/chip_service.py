@@ -30,17 +30,9 @@ from osgeo import gdal
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage, open_gdal_dataset
+from karios.core.radiometry import to_uint8
 
 logger = logging.getLogger(__name__)
-
-
-def _to_uint8(arr: np.ndarray) -> np.ndarray:
-    if arr.dtype == np.uint8:
-        return arr
-    arr_min, arr_max = float(np.nanmin(arr)), float(np.nanmax(arr))
-    if arr_max > arr_min:
-        return ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
-    return np.zeros_like(arr, dtype=np.uint8)
 
 
 class CenterAndQuarterCellPointSelector:
@@ -602,7 +594,7 @@ class ChipService:
         ref_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
         if ref_data is not None:
-            cv2.imwrite(str(ref_chip_path.with_suffix(".png")), _to_uint8(ref_data))
+            cv2.imwrite(str(ref_chip_path.with_suffix(".png")), to_uint8(ref_data))
 
         mon_chip_path = out_dir / monitored_filename / f"MON_{x0}_{y0}.TIFF"
         options = gdal.TranslateOptions(
@@ -614,7 +606,7 @@ class ChipService:
         mon_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
         if mon_data is not None:
-            cv2.imwrite(str(mon_chip_path.with_suffix(".png")), _to_uint8(mon_data))
+            cv2.imwrite(str(mon_chip_path.with_suffix(".png")), to_uint8(mon_data))
 
         if laplacian_ksize is not None and out_dir_laplacian is not None:
             ref_ksize = laplacian_ksize.get("ref", laplacian_ksize.get("mon", 1))
@@ -645,7 +637,7 @@ class ChipService:
         data = dataset.GetRasterBand(1).ReadAsArray(xoff, yoff, self._chip_size, self._chip_size)
         if data is None:
             return
-        lap = cv2.Laplacian(_to_uint8(data), cv2.CV_8U, ksize=ksize)
+        lap = cv2.Laplacian(to_uint8(data), cv2.CV_8U, ksize=ksize)
         driver = gdal.GetDriverByName("GTiff")
         ds = driver.Create(str(out_path), self._chip_size, self._chip_size, 1, gdal.GDT_Byte)
         ds.GetRasterBand(1).WriteArray(lap)

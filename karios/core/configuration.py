@@ -49,6 +49,13 @@ class KLTConfiguration:
     laplacian_kernel_size: Union[int, Dict[str, int], Literal["auto"]]
     outliers_filtering: bool
     laplacian_invert_polarity: Union[bool, Literal["auto"]] = False
+    maxLevel: int = 1
+    """Pyramid depth for `cv2.calcOpticalFlowPyrLK`. Deeper pyramids capture
+    larger shifts but erode matching inward from the image edges, because the
+    tracking window covers 2**maxLevel times more of the scene at the coarsest
+    level. Raise it only when the pair is measurably misregistered; for an
+    already-aligned pair a deeper pyramid only costs edge coverage. Prefer
+    `--enable-coarse-to-fine`, which gets the capture range without the erosion."""
 
 
 @dataclass

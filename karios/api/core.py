@@ -147,6 +147,8 @@ class KariosAPI:
             self._processing_configuration.klt_configuration,
             self._runtime_configuration.gen_delta_raster,
             self._runtime_configuration.output_directory,
+            self._runtime_configuration.no_values,
+            self._runtime_configuration.enable_coarse_to_fine,
         )
 
         self._zncc_service = ZNCCService()
@@ -286,6 +288,12 @@ class KariosAPI:
         if match_result.mask is not None:
             masked_image = np.copy(match_result.monitored_image.array)
             masked_image[match_result.mask.array == 0] = 0
+
+        if self._runtime_configuration.no_values:
+            # the mask counts these as data otherwise, overstating the overlap
+            masked_image = np.where(
+                np.isin(masked_image, self._runtime_configuration.no_values), 0, masked_image
+            )
 
         nb_valid_pixel = np.count_nonzero(masked_image)
         logger.info("NB of valid px %s", nb_valid_pixel)
@@ -497,13 +505,26 @@ class KariosAPI:
             reference_image (GdalRasterImage): reference image to check
         """
 
-        min_max = np.nanpercentile(monitored_image.array, [2, 98])
-        if min_max[1] - min_max[0] <= 10:
-            logger.warning("Low dynamic range detected for monitored, you could get poor results")
+        for label, image in (("monitored", monitored_image), ("reference", reference_image)):
+            if not self._has_low_dynamic_range(image.array):
+                continue
+            logger.warning("Low dynamic range detected for %s, you could get poor results", label)
 
-        min_max = np.nanpercentile(reference_image.array, [2, 98])
-        if min_max[1] - min_max[0] <= 10:
-            logger.warning("Low dynamic range detected for reference, you could get poor results")
+    @staticmethod
+    def _has_low_dynamic_range(array) -> bool:
+        """Whether the 2-98 percentile span is too narrow to match on.
+
+        The threshold only makes sense against integer digital numbers. A float
+        raster carrying reflectance in [0, 1] spans well under 10 by definition,
+        so the same test would flag every such product regardless of its quality.
+        Floats are judged against their own scale instead.
+        """
+        low, high = np.nanpercentile(array, [2, 98])
+        span = high - low
+        if np.issubdtype(array.dtype, np.floating):
+            return span <= 0.01 * abs(high) if high else True
+
+        return span <= 10
 
     def _load_images(
         self, ref_file_path: Path, mon_file_path: Path
@@ -652,7 +673,7 @@ class KariosAPI:
         points: pd.DataFrame,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
-        no_values: Optional[list[int]],
+        no_values: Optional[list[float]],
     ) -> pd.DataFrame:
         """Filter out key points where reference or monitored image has specified DN values.
 

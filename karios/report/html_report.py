@@ -602,9 +602,13 @@ class HtmlReportGenerator:
         large_shift_label = (
             "Enabled" if self.runtime_config.enable_large_shift_detection else "Disabled"
         )
+        coarse_to_fine_label = (
+            "Enabled" if self.runtime_config.enable_coarse_to_fine else "Disabled"
+        )
         summary_rows = [
             ("Pixel Size", pixel_size_label),
             ("Large Shift Detection", large_shift_label),
+            ("Coarse-to-Fine Matching", coarse_to_fine_label),
             ("Laplacian Kernel Size", self.laplacian_ksize_label),
             ("Laplacian Polarity", self.laplacian_polarity_label),
             ("Title Prefix", self.runtime_config.title_prefix or "None"),
