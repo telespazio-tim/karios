@@ -28,7 +28,8 @@ Pipeline:
        magnitudes (sensor-invariant), trying several initial estimates and
        keeping the one with the highest ECC score.
     6. Apply the resulting 3x3 homography to mon (and mask) via
-       cv2.warpPerspective, rendered onto ref's canvas.
+       cv2.warpPerspective, rendered onto ref's footprint but resampled at
+       mon's resolution.
 """
 
 import logging
@@ -396,6 +397,30 @@ def _write_geotiff(
     dataset = None
 
 
+def _output_geometry(
+    reference: GdalRasterImage,
+    monitored: GdalRasterImage,
+    rw: int,
+    rh: int,
+) -> tuple[int, int, np.ndarray]:
+    """Compute the output canvas size and the ref-pixel → output-pixel scale
+    matrix so the output keeps the reference's footprint but is sampled at
+    the monitored image's resolution.
+
+    Returns (ow, oh, to_output) where `to_output` is a 3x3 matrix (pure axis
+    scale, valid since geotransforms here are north-up with zero skew).
+    """
+    scale_x = reference.x_res / monitored.x_res
+    scale_y = reference.y_res / monitored.y_res
+    ow = round(rw * scale_x)
+    oh = round(rh * scale_y)
+    to_output = np.array(
+        [[scale_x, 0.0, 0.0], [0.0, scale_y, 0.0], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    return ow, oh, to_output
+
+
 def apply_global_alignment(
     monitored: GdalRasterImage,
     reference: GdalRasterImage,
@@ -407,7 +432,8 @@ def apply_global_alignment(
     Optional[GdalRasterImage],
     GlobalAlignment,
 ]:
-    """Detect the homography, apply to monitored (and mask), render onto ref's canvas.
+    """Detect the homography, apply to monitored (and mask), render onto ref's
+    footprint at the monitored image's resolution.
 
     Returns (aligned_mon, ref_passthrough, aligned_mask, alignment_info). The
     new rasters are written to `out_dir` so the rest of the pipeline can
@@ -427,20 +453,29 @@ def apply_global_alignment(
 
     alignment = detect_global_alignment(mon_arr, ref_arr, prior=prior)
 
-    # The homography maps mon pixel coords → ref pixel coords. The warped mon
-    # is rendered onto ref's canvas and saved with ref's geotransform — both
-    # outputs then share a pixel grid for direct overlay/comparison.
+    # The homography maps mon pixel coords → ref pixel coords. Both outputs
+    # are rendered onto ref's footprint, resampled at mon's resolution, so
+    # they share a pixel grid for direct overlay/comparison without losing
+    # the monitored image's native detail.
     rh, rw = ref_arr.shape
+    ow, oh, to_output = _output_geometry(reference, monitored, rw, rh)
     warp_m = alignment.matrix
+    warp_out = to_output @ warp_m
 
     border_mon = float(monitored.no_data_value) if monitored.no_data_value is not None else 0.0
     aligned_mon = cv2.warpPerspective(
         mon_arr.astype(np.float32),
-        warp_m,
-        (rw, rh),
+        warp_out,
+        (ow, oh),
         flags=cv2.INTER_LINEAR,
         borderValue=border_mon,
     ).astype(mon_arr.dtype)
+    ref_resampled = cv2.warpPerspective(
+        ref_arr.astype(np.float32),
+        to_output,
+        (ow, oh),
+        flags=cv2.INTER_LINEAR,
+    ).astype(ref_arr.dtype)
 
     mon_stem = Path(monitored.file_name).stem
     mon_suffix = Path(monitored.file_name).suffix or ".tif"
@@ -454,18 +489,18 @@ def apply_global_alignment(
         aligned_mon,
         reference.x_min,
         reference.y_max,
-        reference.x_res,
-        reference.y_res,
+        monitored.x_res,
+        monitored.y_res,
         reference.projection,
         monitored.no_data_value,
     )
     _write_geotiff(
         ref_out,
-        ref_arr,
+        ref_resampled,
         reference.x_min,
         reference.y_max,
-        reference.x_res,
-        reference.y_res,
+        monitored.x_res,
+        monitored.y_res,
         reference.projection,
         reference.no_data_value,
     )
@@ -478,8 +513,8 @@ def apply_global_alignment(
             continue
         cand_warped = cv2.warpPerspective(
             mon_arr.astype(np.float32),
-            cand_matrix.astype(np.float32),
-            (rw, rh),
+            (to_output @ cand_matrix).astype(np.float32),
+            (ow, oh),
             flags=cv2.INTER_LINEAR,
             borderValue=border_mon,
         ).astype(mon_arr.dtype)
@@ -490,8 +525,8 @@ def apply_global_alignment(
             cand_warped,
             reference.x_min,
             reference.y_max,
-            reference.x_res,
-            reference.y_res,
+            monitored.x_res,
+            monitored.y_res,
             reference.projection,
             monitored.no_data_value,
         )
@@ -501,8 +536,8 @@ def apply_global_alignment(
     if mask is not None:
         warped_mask = cv2.warpPerspective(
             mask.array.astype(np.uint8),
-            warp_m,
-            (rw, rh),
+            warp_out,
+            (ow, oh),
             flags=cv2.INTER_NEAREST,
             borderValue=0,
         )
@@ -514,8 +549,8 @@ def apply_global_alignment(
             warped_mask,
             reference.x_min,
             reference.y_max,
-            reference.x_res,
-            reference.y_res,
+            monitored.x_res,
+            monitored.y_res,
             reference.projection,
             None,
             gdal_dtype=gdal.GDT_Byte,
