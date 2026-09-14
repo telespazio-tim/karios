@@ -423,14 +423,13 @@ def align(
     """\b
     Align MONITORED_IMAGE to REFERENCE_IMAGE by estimating a 2D homography
     with SIFT feature matching + RANSAC, then refining with ECC on Sobel
-    gradient magnitudes. The warped mon is rendered onto ref's footprint but
-    resampled at mon's resolution, so both outputs share a pixel grid without
-    losing mon's native detail.
+    gradient magnitudes. The warped mon is rendered onto ref's canvas so
+    both outputs share the same pixel grid.
 
     \b
     Outputs written to OUT:
       <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
-      <ref_stem>_global_aligned<ext>       — ref, resampled to mon's resolution
+      <ref_stem>_global_aligned<ext>       — ref (unchanged)
       <mon_stem>_global_aligned__<…>.tiff  — alternative candidates (one per
                                              ECC-converged starting point) for
                                              visual A/B in QGIS
