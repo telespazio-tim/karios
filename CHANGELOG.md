@@ -19,6 +19,12 @@
 
 ### Fix
 
+- **`align` now writes outputs at the monitored image's resolution**: when the
+  monitored and reference images had different pixel sizes (e.g. mon=5m, ref=10m),
+  every output (aligned mon, passthrough ref, ECC candidates, aligned mask) was written
+  at the reference's resolution, discarding the monitored image's native detail. The
+  output canvas now keeps the reference's footprint but is resampled at the monitored
+  image's resolution instead.
 - **`--no-value` now reaches the matching mask**: it previously only removed surviving key
   points and tinted the overview plot, so a product declaring no-data `0` while actually filled
   with another DN had features detected throughout the fill and reported an inflated valid-pixel
