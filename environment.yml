@@ -8,6 +8,11 @@ dependencies:
   - opencv=4.8.*
   - pandas=2.1.*
   - python=3.12
+  # Test-only (tests/end_to_end/test_karios_with_rasterio.py): conda-installed like
+  # gdal itself, so it links the same native GDAL rather than a pip wheel's own
+  # bundled copy, which can otherwise crash or misresolve PROJ data in-process
+  # alongside karios's own osgeo.gdal usage.
+  - rasterio=1.3.*
   - scikit-image=0.24.*
   - rich-click=1.8.*
   # Pinned below 8.2: newer click releases require Python >=3.10, which
