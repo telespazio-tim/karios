@@ -68,7 +68,7 @@ class RuntimeConfiguration:
     generate_kp_chips: bool
     enable_large_shift_detection: bool
     enable_coarse_to_fine: bool = False
-    no_values: Optional[list[int]] = None
+    no_values: Optional[list[float]] = None
     pixel_size: Optional[float] = None
     title_prefix: Optional[str] = None
     dem_description: Optional[str] = None
