@@ -16,6 +16,9 @@
 - **Configurable pyramid depth** (`klt_matching.maxLevel`, default `3`): previously a source
   constant. In the default matching mode this is the parameter that most affects results, since
   the lost edge band scales as `(matching_winsize / 2) * 2**maxLevel`.
+- **DEM elevation in the CSV output**: when a DEM is given, the `KLT_matcher_*.csv` file gets an
+  `alt` column with the DEM elevation at each key point. Resuming (`--resume`) from a CSV written
+  without a DEM adds the column.
 
 ### Fix
 
