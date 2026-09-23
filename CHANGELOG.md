@@ -19,6 +19,9 @@
 
 ### Fix
 
+- **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
+  `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
+  generating reports.
 - **`--no-value` now reaches the matching mask**: it previously only removed surviving key
   points and tinted the overview plot, so a product declaring no-data `0` while actually filled
   with another DN had features detected throughout the fill and reported an inflated valid-pixel
