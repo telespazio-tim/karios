@@ -34,6 +34,7 @@ from skimage import io
 from karios.core.configuration import KLTConfiguration
 from karios.core.errors import ConfigurationError
 from karios.core.image import GdalRasterImage
+from karios.core.radiometry import to_uint8
 from karios.matcher.coarse_to_fine import coarse_to_fine_tracker
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,24 @@ def _to_uint8_legacy_minmax(arr: np.ndarray) -> np.ndarray:
     return np.zeros_like(arr, dtype=np.uint8)
 
 
+def _stretch(arr: np.ndarray) -> np.ndarray:
+    """Prepare pixel data for the 8-bit OpenCV calls.
+
+    Float rasters take the percentile stretch, which tolerates the outliers,
+    infinities and sentinel fill values they tend to carry. Integer rasters keep
+    the historical minimum/maximum stretch so existing results do not move.
+
+    Note the stretch runs on the raw tile, before the no-data mask is applied, so
+    an extreme value sitting inside a no-data region still influences the
+    percentiles - far less than it influenced the minimum and maximum, but not
+    zero.
+    """
+    if np.issubdtype(arr.dtype, np.floating):
+        return to_uint8(arr)
+
+    return _to_uint8_legacy_minmax(arr)
+
+
 def _tracking_margin(matching_winsize: int, max_level: int) -> int:
     """Context needed around a tile so LK windows stay fully supported.
 
@@ -83,7 +102,7 @@ def _valid_mask(
     ref_box: NDArray,
     mon_no_data: float | None,
     ref_no_data: float | None,
-    no_values: list[int] | None,
+    no_values: list[float] | None,
 ) -> NDArray:
     """Build the matching mask for a pair of boxes.
 
@@ -284,7 +303,7 @@ class KLT:
         conf: KLTConfiguration,
         gen_laplacian: bool = False,
         out_dir: str | None = None,
-        no_values: list[int] | None = None,
+        no_values: list[float] | None = None,
         coarse_to_fine: bool = False,
     ):
         """Constructor
@@ -293,7 +312,7 @@ class KLT:
             conf (KLTConfiguration): KLT configuration
             gen_laplacian: shall dump laplacian results
             out_dir (str | None, optional): laplacian result dir. Defaults to None.
-            no_values (list[int] | None, optional): DN values to exclude from
+            no_values (list[float] | None, optional): DN values to exclude from
                 matching, for products filled with a value other than their
                 declared no-data. Defaults to None.
             coarse_to_fine (bool, optional): descend the pyramid explicitly rather
@@ -573,8 +592,8 @@ class KLT:
 
         mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
         ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
-        img_lap = cv2.Laplacian(_to_uint8(img_for_lap), cv2.CV_8U, ksize=mon_ksize)
-        ref_lap = cv2.Laplacian(_to_uint8(ref_box), cv2.CV_8U, ksize=ref_ksize)
+        img_lap = cv2.Laplacian(_stretch(img_for_lap), cv2.CV_8U, ksize=mon_ksize)
+        ref_lap = cv2.Laplacian(_stretch(ref_box), cv2.CV_8U, ksize=ref_ksize)
         if self._coarse_to_fine:
             # takes the raw boxes: each level is downsampled before filtering
             result = coarse_to_fine_tracker(

@@ -40,6 +40,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 
 from karios.core.configuration import KLTConfiguration
+from karios.core.radiometry import to_uint8
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,10 @@ _RANSAC_REPROJ_PX = 2.0
 _MIN_POINTS_FOR_FIT = 50
 
 # Final forward-backward consistency limit, matching `klt.klt_tracker`.
+# Tighter than the shared default: the matcher was validated across four scenes
+# with these bounds.
+_LEVEL_PERCENTILES = (0.5, 99.5)
+
 _BACK_THRESHOLD = 0.1
 
 
@@ -75,11 +80,8 @@ def _pyramid_level(image: NDArray, scale: int, ksize: int) -> NDArray:
             interpolation=cv2.INTER_AREA,
         )
 
-    if small.dtype != np.uint8:
-        low, high = np.nanpercentile(small, [0.5, 99.5])
-        small = np.clip((small - low) / max(high - low, 1e-6) * 255, 0, 255).astype(np.uint8)
-
-    return cv2.Laplacian(small, cv2.CV_8U, ksize=ksize)
+    # nanpercentile drops NaN but keeps infinities, which then decide the bounds
+    return cv2.Laplacian(to_uint8(small, _LEVEL_PERCENTILES), cv2.CV_8U, ksize=ksize)
 
 
 def _track_level(
