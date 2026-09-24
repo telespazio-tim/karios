@@ -74,7 +74,7 @@ def test_build_header_banner_html_is_empty_when_banner_missing(monkeypatch):
 
 @pytest.fixture(name="generator")
 def generator_fixture(tmp_path):
-    """An HtmlReportGenerator wired to mocks, producing all three pages."""
+    """An HtmlReportGenerator wired to mocks, producing all four pages."""
     match_result = MagicMock()
     match_result.monitored_image.file_name = "monitored.tif"
     match_result.reference_image.file_name = "reference.tif"
@@ -98,6 +98,7 @@ def generator_fixture(tmp_path):
     report_paths.ce_plot = "ce.png"
     report_paths.dem_plots = []
     report_paths.products = ["product.json"]
+    report_paths.mosaic = "05_mosaic.avif"
 
     runtime_config = MagicMock()
     runtime_config.pixel_size = 1.0
@@ -121,7 +122,7 @@ def test_generate_inlines_branding_in_every_page(generator, tmp_path):
     """All generated pages embed the banner and the footer logo."""
     generator.generate()
 
-    pages = ["report.html", "products.html", "chips.html"]
+    pages = ["report.html", "mosaic.html", "products.html", "chips.html"]
     for page in pages:
         content = (tmp_path / page).read_text(encoding="utf-8")
         assert BANNER_URI_PREFIX in content, f"{page} misses the inlined banner"
@@ -135,7 +136,7 @@ def test_generate_leaves_no_asset_files_behind(generator, tmp_path):
     assert not (tmp_path / _BANNER_ASSET).exists()
     assert not (tmp_path / _FOOTER_LOGO_ASSET).exists()
 
-    for page in ["report.html", "products.html", "chips.html"]:
+    for page in ["report.html", "mosaic.html", "products.html", "chips.html"]:
         content = (tmp_path / page).read_text(encoding="utf-8")
         assert _BANNER_ASSET not in content
         assert _FOOTER_LOGO_ASSET not in content
@@ -150,3 +151,24 @@ def test_generate_succeeds_without_branding_assets(generator, tmp_path, monkeypa
     content = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "<header>" in content
     assert "KARIOS Processing Report" in content
+
+
+def test_generate_mosaic_tab(generator, tmp_path):
+    """The mosaic page shows the mosaic, linked to open it at native resolution, and every page links to it."""
+    generator.generate()
+
+    content = (tmp_path / "mosaic.html").read_text(encoding="utf-8")
+    assert '<a href="05_mosaic.avif" target="_blank"><img src="05_mosaic.avif"' in content
+    assert '<a href="mosaic.html" class="active">Mosaic</a>' in content
+    for page in ["report.html", "products.html", "chips.html"]:
+        assert '<a href="mosaic.html">Mosaic</a>' in (tmp_path / page).read_text(encoding="utf-8")
+
+
+def test_generate_without_mosaic(generator, tmp_path):
+    """Without mosaic, neither the page nor the tab are generated."""
+    generator.report_paths.mosaic = None
+
+    generator.generate()
+
+    assert not (tmp_path / "mosaic.html").exists()
+    assert "mosaic.html" not in (tmp_path / "report.html").read_text(encoding="utf-8")

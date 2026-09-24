@@ -17,6 +17,13 @@
   constant. In the default matching mode this is the parameter that most affects results, since
   the lost edge band scales as `(matching_winsize / 2) * 2**maxLevel`.
 
+- **Checkerboard mosaic** (`--mosaic-tile-size`, `0` by default, which disables it): grayscale
+  mosaic at native resolution alternating tiles of the given size in pixel from the reference and
+  monitored images, stretched with the same contrast as the overview plot, so misregistration
+  shows as features broken at the tile edges. Pixels hidden in the overview plot are black.
+  Written as `05_mosaic.avif`, or lossless `.png` when Pillow lacks AVIF support, and displayed
+  in a new *Mosaic* tab of the HTML report.
+
 ### Fix
 
 - **`--no-value` now reaches the matching mask**: it previously only removed surviving key

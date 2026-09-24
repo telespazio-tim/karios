@@ -328,6 +328,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <nav class="nav">
         <a href="report.html" class="active">Summary</a>
+        {mosaic_link}
         {products_link}
         {chips_link}
     </nav>
@@ -420,6 +421,7 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
 
     <nav class="nav">
         <a href="report.html">Summary</a>
+        {mosaic_link}
         <a href="products.html" class="active">Products</a>
         {chips_link}
     </nav>
@@ -452,6 +454,52 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+MOSAIC_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARIOS Mosaic - {title_prefix}</title>
+    <style>
+        {css_styles}
+    </style>
+</head>
+<body>
+    <header>
+        {header_banner_html}
+    </header>
+
+    <nav class="nav">
+        <a href="report.html">Summary</a>
+        <a href="mosaic.html" class="active">Mosaic</a>
+        {products_link}
+        {chips_link}
+    </nav>
+
+    <div class="section">
+        <h1>Mosaic</h1>
+        <p>Checkerboard of the reference (top left tile) and monitored images, with the contrast of the overview plot.
+        Misregistration shows as features broken at the tile edges. Click the image to open it at native resolution.</p>
+        <table>
+            <tr><th>Monitored</th><td>{monitored_image}</td></tr>
+            <tr><th>Reference</th><td>{reference_image}</td></tr>
+        </table>
+        <div class="image-container">
+            <a href="{mosaic_image}" target="_blank"><img src="{mosaic_image}" alt="Mosaic"></a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>KARIOS - KLT-based Algorithm for Registration of Images from Observing Systems</p>
+        <div class="links">
+            <a href="https://telespazio-tim.github.io/karios" target="_blank">Website</a> |
+            <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
 CHIPS_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -469,6 +517,7 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
 
     <nav class="nav">
         <a href="report.html">Summary</a>
+        {mosaic_link}
         {products_link}
         <a href="chips.html" class="active">Chips</a>
     </nav>
@@ -802,7 +851,9 @@ class HtmlReportGenerator:
         # Check for products and chips to build navigation
         has_products = len(self.report_paths.products) > 0
         has_chips = self.runtime_config.generate_kp_chips
+        has_mosaic = bool(self.report_paths.mosaic)
 
+        mosaic_link = '<a href="mosaic.html">Mosaic</a>' if has_mosaic else ""
         products_link = '<a href="products.html">Products</a>' if has_products else ""
         chips_link = '<a href="chips.html">Chips</a>' if has_chips else ""
 
@@ -826,6 +877,7 @@ class HtmlReportGenerator:
         summary_content = HTML_TEMPLATE.format(
             css_styles=css_styles,
             header_banner_html=header_banner_html,
+            mosaic_link=mosaic_link,
             products_link=products_link,
             chips_link=chips_link,
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -876,13 +928,29 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                mosaic_link=mosaic_link,
                 chips_link=chips_link,
                 products_rows=products_rows,
             )
             with open(self.output_dir / "products.html", "w", encoding="utf-8") as f:
                 f.write(products_content)
 
-        # 3. Generate Chips Page if needed
+        # 3. Generate Mosaic Page if needed
+        if has_mosaic:
+            mosaic_content = MOSAIC_TEMPLATE.format(
+                css_styles=css_styles,
+                header_banner_html=header_banner_html,
+                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                products_link=products_link,
+                chips_link=chips_link,
+                monitored_image=self.match_result.monitored_image.file_name,
+                reference_image=self.match_result.reference_image.file_name,
+                mosaic_image=Path(self.report_paths.mosaic).name,
+            )
+            with open(self.output_dir / "mosaic.html", "w", encoding="utf-8") as f:
+                f.write(mosaic_content)
+
+        # 4. Generate Chips Page if needed
         if has_chips:
             mon_name = self.match_result.monitored_image.file_name
             ref_name = self.match_result.reference_image.file_name
@@ -899,6 +967,7 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                mosaic_link=mosaic_link,
                 products_link=products_link,
                 chips_vrt_links=chips_vrt_links,
                 chips_section_html=chips_section_html,
