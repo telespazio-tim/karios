@@ -785,13 +785,15 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 ```bash
 karios align monitored.tif reference.tif --out ./aligned
+# Optionally, limit the SIFT keypoints to the 20000 strongest per image
+karios align monitored.tif reference.tif --out ./aligned --sift-nfeatures 20000
 karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_global_aligned.tiff
 ```
 
 The pipeline:
 
 1. **Preprocess** both inputs to uint8 with a percentile stretch and CLAHE, which equalises radiometry between sensors.
-2. **Detect** SIFT keypoints and 128-dim descriptors on both images.
+2. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default every keypoint is kept; `--sift-nfeatures N` keeps only the N strongest per image, which bounds the brute-force matching time and memory on large images.
 3. **Match** descriptors with a brute-force L2 matcher, then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
 4. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC.
 5. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), starting from both the RANSAC fit and — when available — a geotransform-derived prior. The highest ECC wins.

@@ -8,7 +8,9 @@ import re
 import cv2
 import numpy as np
 import pytest
+from click.testing import CliRunner
 
+from karios.cli import commands
 from karios.matcher import global_align
 from karios.matcher.global_align import detect_global_alignment
 
@@ -56,3 +58,44 @@ def test_negative_sift_nfeatures_is_rejected(shifted_pair):
 
     with pytest.raises(ValueError, match="sift_nfeatures"):
         detect_global_alignment(mon, ref, sift_nfeatures=-1)
+
+
+def _run_align(tmp_path, monkeypatch, *options):
+    """Invoke `karios align` on dummy files, capturing apply_global_alignment kwargs."""
+    calls = []
+
+    def fake_apply(*args, **kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("stop after the call")
+
+    monkeypatch.setattr(commands, "GdalRasterImage", lambda path: path)
+    monkeypatch.setattr(commands, "apply_global_alignment", fake_apply)
+    mon, ref = tmp_path / "mon.tif", tmp_path / "ref.tif"
+    mon.touch()
+    ref.touch()
+    result = CliRunner().invoke(
+        commands.cli,
+        ["align", str(mon), str(ref), "--out", str(tmp_path / "out"), "--no-log-file", *options],
+    )
+    return result, calls
+
+
+def test_cli_passes_sift_nfeatures(tmp_path, monkeypatch):
+    result, calls = _run_align(tmp_path, monkeypatch, "--sift-nfeatures", "5000")
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"sift_nfeatures": 5000}]
+
+
+def test_cli_sift_nfeatures_defaults_to_unlimited(tmp_path, monkeypatch):
+    _, calls = _run_align(tmp_path, monkeypatch)
+
+    assert calls == [{"sift_nfeatures": 0}]
+
+
+def test_cli_rejects_negative_sift_nfeatures(tmp_path, monkeypatch):
+    result, calls = _run_align(tmp_path, monkeypatch, "--sift-nfeatures", "-1")
+
+    assert result.exit_code != 0
+    assert "sift-nfeatures" in result.output
+    assert not calls

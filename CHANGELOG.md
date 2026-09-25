@@ -31,6 +31,7 @@
   overlapping it scores worse than a truncated one.
 
 - **`karios align` subcommand**: standalone command that warps the monitored image onto the reference grid. Writes the primary aligned output plus one sibling per ECC-converged candidate for visual A/B comparison in QGIS.
+- **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `0` = unlimited by default): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
 
 ### Improvements
 

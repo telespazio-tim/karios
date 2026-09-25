@@ -36,7 +36,7 @@ from karios.api import KariosAPI, RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
-from karios.matcher.global_align import apply_global_alignment
+from karios.matcher.global_align import SIFT_NFEATURES, apply_global_alignment
 from karios.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -403,6 +403,15 @@ def process(
     help="Output directory for aligned images",
     show_default=True,
 )
+@click.option(
+    "--sift-nfeatures",
+    type=click.IntRange(min=0),
+    default=SIFT_NFEATURES,
+    help="Number of SIFT keypoints kept per image, the strongest ones (a few more "
+    "may be kept on ties). Limit it to reduce matching time and memory on large images. "
+    "0 = unlimited",
+    show_default=True,
+)
 @click.option("--debug", "-d", is_flag=True, help="Enable Debug mode")
 @click.option("--no-log-file", is_flag=True, help="Do not log in file")
 @click.option(
@@ -416,6 +425,7 @@ def align(
     monitored_image: Path,
     reference_image: Path,
     out: Path,
+    sift_nfeatures: int,
     debug: bool,
     no_log_file: bool,
     log_file_path: str,
@@ -444,7 +454,7 @@ def align(
         reference = GdalRasterImage(str(reference_image))
 
         aligned_mon, ref_out_img, _, alignment = apply_global_alignment(
-            monitored, reference, None, out
+            monitored, reference, None, out, sift_nfeatures=sift_nfeatures
         )
 
         m = alignment.matrix
