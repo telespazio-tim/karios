@@ -46,7 +46,7 @@ from karios.core.radiometry import to_uint8
 
 logger = logging.getLogger(__name__)
 
-SIFT_NFEATURES = 0  # 0 = unlimited
+SIFT_NFEATURES = 0  # default max number of keypoints kept per image, 0 = unlimited
 SIFT_CONTRAST_THRESHOLD = 0.02  # default 0.04; lower → more keypoints in low-contrast regions
 SIFT_EDGE_THRESHOLD = 10
 LOWE_RATIO = 0.75
@@ -124,31 +124,42 @@ def detect_global_alignment(
     mon_arr: np.ndarray,
     ref_arr: np.ndarray,
     prior: Optional[np.ndarray] = None,
+    sift_nfeatures: int = SIFT_NFEATURES,
 ) -> GlobalAlignment:
     """Estimate a 2D homography (8 DOF) that maps mon pixels into ref pixels,
     via SIFT + RANSAC, then refined with ECC on Sobel gradient magnitudes.
 
     `prior` (optional 3x3 homography from geotransforms) provides an extra
     ECC starting point but is not used to filter matches.
+
+    `sift_nfeatures` is the number of SIFT keypoints kept in each image, the
+    ones with the strongest response (OpenCV may keep a few more tied with the
+    weakest one), 0 keeps them all. Limiting it bounds the time and memory of
+    the brute-force matching on large images.
     """
+    if sift_nfeatures < 0:
+        raise ValueError(f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}")
+
     mon = _preprocess(mon_arr)
     ref = _preprocess(ref_arr)
 
     mh, mw = mon.shape
     rh, rw = ref.shape
     logger.info(
-        "SIFT feature matching: mon=%dx%d  ref=%dx%d  contrast=%.3f  Lowe=%.2f  RANSAC=%.1fpx",
+        "SIFT feature matching: mon=%dx%d  ref=%dx%d  nfeatures=%s  contrast=%.3f  Lowe=%.2f  "
+        "RANSAC=%.1fpx",
         mw,
         mh,
         rw,
         rh,
+        sift_nfeatures or "unlimited",
         SIFT_CONTRAST_THRESHOLD,
         LOWE_RATIO,
         RANSAC_THRESHOLD_PX,
     )
 
     sift = cv2.SIFT_create(
-        nfeatures=SIFT_NFEATURES,
+        nfeatures=sift_nfeatures,
         contrastThreshold=SIFT_CONTRAST_THRESHOLD,
         edgeThreshold=SIFT_EDGE_THRESHOLD,
     )
@@ -401,6 +412,7 @@ def apply_global_alignment(
     reference: GdalRasterImage,
     mask: Optional[GdalRasterImage],
     out_dir: Path,
+    sift_nfeatures: int = SIFT_NFEATURES,
 ) -> tuple[
     GdalRasterImage,
     GdalRasterImage,
@@ -411,7 +423,8 @@ def apply_global_alignment(
 
     Returns (aligned_mon, ref_passthrough, aligned_mask, alignment_info). The
     new rasters are written to `out_dir` so the rest of the pipeline can
-    operate on them as if they were the originals.
+    operate on them as if they were the originals. `sift_nfeatures` limits the
+    SIFT keypoints kept per image, see detect_global_alignment().
     """
     mon_arr = monitored.array
     ref_arr = reference.array
@@ -425,7 +438,9 @@ def apply_global_alignment(
     else:
         logger.info("No geotransform prior (CRS mismatch or unreferenced)")
 
-    alignment = detect_global_alignment(mon_arr, ref_arr, prior=prior)
+    alignment = detect_global_alignment(
+        mon_arr, ref_arr, prior=prior, sift_nfeatures=sift_nfeatures
+    )
 
     # The homography maps mon pixel coords → ref pixel coords. The warped mon
     # is rendered onto ref's canvas and saved with ref's geotransform — both
