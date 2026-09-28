@@ -469,8 +469,7 @@ MOSAIC_TEMPLATE = """<!DOCTYPE html>
 
     <div class="section">
         <h1>Mosaic</h1>
-        <p>Checkerboard of the reference (top left tile) and monitored images, with the contrast of the overview plot.
-        Misregistration shows as features broken at the tile edges. Click the image to open it at native resolution.</p>
+        <p>{mosaic_description} Click the image to open it at native resolution.</p>
         <table>
             <tr><th>Monitored</th><td>{monitored_image}</td></tr>
             <tr><th>Reference</th><td>{reference_image}</td></tr>
@@ -829,6 +828,20 @@ class HtmlReportGenerator:
         grid = f'<div class="chips-grid">{"".join(items)}</div>'
         return _SORT_BAR_HTML + grid + _SORT_SCRIPT
 
+    def _mosaic_description(self) -> str:
+        """Mosaic page caption, for the mosaic mode of the runtime configuration."""
+        if self.runtime_config.mosaic_mode == "overlay":
+            return (
+                "Overlay of the monitored image, in red, and the reference image, in cyan, "
+                "each histogram equalized: aligned features are gray. "
+                "Misregistration shows as red and cyan fringes along the features."
+            )
+        return (
+            "Checkerboard of the reference (blue, top left tile) and monitored (red) images, "
+            "each histogram equalized. "
+            "Misregistration shows as features broken at the tile edges."
+        )
+
     def generate(self) -> Path:
         """Generate the HTML report file(s)."""
         logger.info("Generating HTML report")
@@ -943,6 +956,7 @@ class HtmlReportGenerator:
                 monitored_image=self.match_result.monitored_image.file_name,
                 reference_image=self.match_result.reference_image.file_name,
                 mosaic_image=Path(self.report_paths.mosaic).name,
+                mosaic_description=self._mosaic_description(),
             )
             with open(self.output_dir / "mosaic.html", "w", encoding="utf-8") as f:
                 f.write(mosaic_content)

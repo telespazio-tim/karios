@@ -33,6 +33,7 @@ import rich_click as click
 from osgeo import gdal
 
 from karios.api import KariosAPI, RuntimeConfiguration
+from karios.api.config import MOSAIC_MODES
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
@@ -64,6 +65,7 @@ click.rich_click.OPTION_GROUPS = {
                 "--generate-intermediate-product",
                 "--generate-kp-chips",
                 "--mosaic-tile-size",
+                "--mosaic-mode",
                 "--no-value",
                 "--dem-description",
             ],
@@ -215,6 +217,14 @@ def cli() -> None:
     show_default=True,
 )
 @click.option(
+    "--mosaic-mode",
+    "-mtm",
+    type=click.Choice(MOSAIC_MODES),
+    default="checkerboard",
+    help="Mosaic mode: 'checkerboard' alternates tiles of the two images, 'overlay' shows the monitored image in red and the reference in green and blue, so shifts fringe features in red and cyan. 'overlay' needs no --mosaic-tile-size and enables the mosaic",
+    show_default=True,
+)
+@click.option(
     "--no-value",
     type=float,
     multiple=True,
@@ -261,6 +271,7 @@ def process(
     generate_intermediate_product: bool,
     generate_kp_chips: bool,
     mosaic_tile_size: int,
+    mosaic_mode: str,
     vector_mask: Optional[Path],
     no_value: tuple[float, ...],
     title_prefix: Optional[str],
@@ -329,6 +340,7 @@ def process(
             gen_delta_raster=generate_intermediate_product,
             generate_kp_chips=generate_kp_chips,
             mosaic_tile_size=mosaic_tile_size,
+            mosaic_mode=mosaic_mode,
             dem_description=dem_description,
             enable_large_shift_detection=enable_large_shift_detection,
             enable_coarse_to_fine=enable_coarse_to_fine,

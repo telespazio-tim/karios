@@ -372,7 +372,7 @@ class KariosAPI:
         ce_plot_path = self._generate_ce_plot(match_result, accuracy_analysis, output_dir)
         mosaic_path = (
             self._generate_mosaic(match_result, output_dir)
-            if self._runtime_configuration.mosaic_tile_size
+            if self._runtime_configuration.mosaic_enabled
             else None
         )
 
@@ -973,7 +973,7 @@ class KariosAPI:
         return overview_path
 
     def _generate_mosaic(self, match_result: MatchResult, output_dir: Path) -> Path:
-        """Generate the checkerboard mosaic of the monitored and reference images.
+        """Generate the mosaic of the monitored and reference images.
 
         Args:
             match_result: Match result
@@ -989,6 +989,7 @@ class KariosAPI:
             self._runtime_configuration.mosaic_tile_size,
             mask=match_result.mask,
             no_values=self._runtime_configuration.no_values,
+            mode=self._runtime_configuration.mosaic_mode,
         )
 
     def _generate_dx_plot(self, match_result: MatchResult, output_dir: Path) -> Path:

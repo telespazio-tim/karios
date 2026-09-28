@@ -105,6 +105,7 @@ def generator_fixture(tmp_path):
     runtime_config.enable_large_shift_detection = False
     runtime_config.title_prefix = "test"
     runtime_config.generate_kp_chips = True
+    runtime_config.mosaic_mode = "checkerboard"
     runtime_config.dem_description = "dem"
     runtime_config.output_directory = tmp_path
 
@@ -177,6 +178,19 @@ def test_generate_mosaic_tab(generator, tmp_path):
     assert '<a href="mosaic.html" class="active">Mosaic</a>' in content
     for page in ["report.html", "products.html", "chips.html"]:
         assert '<a href="mosaic.html">Mosaic</a>' in (tmp_path / page).read_text(encoding="utf-8")
+
+
+def test_generate_mosaic_tab_describes_the_mode(generator, tmp_path):
+    generator.generate()
+    assert "features broken at the tile edges" in (tmp_path / "mosaic.html").read_text(
+        encoding="utf-8"
+    )
+
+    generator.runtime_config.mosaic_mode = "overlay"
+    generator.generate()
+    assert "red and cyan fringes along the features" in (tmp_path / "mosaic.html").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_generate_without_mosaic(generator, tmp_path):
