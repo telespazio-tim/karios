@@ -11,7 +11,7 @@ from PIL import Image, features
 from karios.api.config import RuntimeConfiguration
 from karios.core.errors import ConfigurationError
 from karios.report import mosaic
-from karios.report.mosaic import checkerboard, generate_mosaic
+from karios.report.mosaic import checkerboard, generate_mosaic, generate_overlay
 
 
 AVIF_SUPPORTED = features.check("avif")
@@ -231,7 +231,7 @@ def test_overlay_puts_monitored_in_red_and_reference_in_green_and_blue(tmp_path)
     mon_array = rng.uniform(1, 100, size=(32, 32)).astype(np.float32)
     ref, mon = _image(ref_array), _image(mon_array)
 
-    out = _read_rgb(generate_mosaic(mon, ref, tmp_path / "overlay", 0, mode="overlay"))
+    out = _read_rgb(generate_overlay(mon, ref, tmp_path / "overlay"))
 
     mon_gray = _read(generate_mosaic(mon, mon, tmp_path / "mon", 8))
     ref_gray = _read(generate_mosaic(ref, ref, tmp_path / "ref", 8))
@@ -243,16 +243,21 @@ def test_overlay_puts_monitored_in_red_and_reference_in_green_and_blue(tmp_path)
 def test_overlay_of_identical_images_is_gray(tmp_path):
     img = _image(np.random.default_rng(0).uniform(1, 100, size=(32, 32)).astype(np.float32))
 
-    out = _read_rgb(generate_mosaic(img, img, tmp_path / "overlay", 0, mode="overlay"))
+    out = _read_rgb(generate_overlay(img, img, tmp_path / "overlay"))
 
     assert (out[..., 0] == out[..., 1]).all() and (out[..., 1] == out[..., 2]).all()
 
 
-def test_unknown_mosaic_mode_is_rejected(tmp_path):
-    img = _image(np.ones((4, 4), dtype=np.float32))
+def test_overlay_hides_masked_pixels_of_the_monitored_image_only(tmp_path):
+    img = _image(np.random.default_rng(0).uniform(1, 100, size=(8, 8)).astype(np.float32))
+    mask_array = np.ones((8, 8), dtype=np.uint8)
+    mask_array[:4] = 0
 
-    with pytest.raises(ValueError, match="mosaic mode"):
-        generate_mosaic(img, img, tmp_path / "mosaic", 2, mode="stripes")
+    out = _read_rgb(generate_overlay(img, img, tmp_path / "overlay", mask=_image(mask_array)))
+
+    assert not out[:4, :, 0].any()
+    assert out[:4, :, 1:].any()
+    assert out[4:, :, 0].any()
 
 
 def _runtime_configuration(tmp_path, **kwargs):
@@ -270,20 +275,8 @@ def test_mosaic_is_disabled_by_default(tmp_path):
     assert _runtime_configuration(tmp_path).mosaic_tile_size == 0
 
 
-def test_overlay_mode_enables_the_mosaic_without_tile_size(tmp_path):
-    assert not _runtime_configuration(tmp_path).mosaic_enabled
-    assert _runtime_configuration(tmp_path, mosaic_tile_size=64).mosaic_enabled
-    assert _runtime_configuration(tmp_path, mosaic_mode="overlay").mosaic_enabled
-
-
-def test_overlay_mode_rejects_a_tile_size(tmp_path):
-    with pytest.raises(ConfigurationError, match="overlay"):
-        _runtime_configuration(tmp_path, mosaic_mode="overlay", mosaic_tile_size=64)
-
-
-def test_unknown_mosaic_mode_is_rejected_by_the_configuration(tmp_path):
-    with pytest.raises(ConfigurationError, match="mosaic_mode"):
-        _runtime_configuration(tmp_path, mosaic_mode="stripes")
+def test_overlay_is_disabled_by_default(tmp_path):
+    assert not _runtime_configuration(tmp_path).generate_overlay
 
 
 def test_negative_mosaic_tile_size_is_rejected(tmp_path):

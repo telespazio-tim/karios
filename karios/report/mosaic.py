@@ -15,15 +15,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Module to build a mosaic of the monitored and reference images.
+"""Module to build comparison images of the monitored and reference images.
 
-Two modes make any misregistration visible:
+Two images make any misregistration visible:
 
-- checkerboard: alternating tiles of the two images, where a shift breaks the
-  features crossing the tile edges. The monitored image is tinted red and the
-  reference image blue, so each tile tells its source at a glance.
-- overlay: the monitored image in the red channel and the reference image in
-  the green and blue channels. Where both agree the pixel is gray, a shift
+- the mosaic, a checkerboard of alternating tiles of the two images, where a
+  shift breaks the features crossing the tile edges. The monitored image is
+  tinted red and the reference image blue, so each tile tells its source at a
+  glance.
+- the overlay, the monitored image in the red channel and the reference image
+  in the green and blue channels. Where both agree the pixel is gray, a shift
   fringes the features in red on one side and cyan on the other.
 """
 
@@ -209,6 +210,18 @@ def _write(mosaic: np.ndarray, output_stem: Path) -> Path:
     return output_file
 
 
+def _equalized_pair(
+    mon_image: GdalRasterImage,
+    ref_image: GdalRasterImage,
+    mask: GdalRasterImage | None,
+    no_values: list[float] | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Monitored and reference gray levels, the mask applied to the monitored image only."""
+    mon_gray = _to_gray(mon_image, build_invalid_mask(mon_image, mask, no_values))
+    ref_gray = _to_gray(ref_image, build_invalid_mask(ref_image, None, no_values))
+    return mon_gray, ref_gray
+
+
 def generate_mosaic(
     mon_image: GdalRasterImage,
     ref_image: GdalRasterImage,
@@ -216,21 +229,14 @@ def generate_mosaic(
     tile_size: int,
     mask: GdalRasterImage | None = None,
     no_values: list[float] | None = None,
-    mode: str = "checkerboard",
 ) -> Path:
-    """Write a color mosaic of both images.
+    """Write a checkerboard mosaic of both images.
 
-    Each image is histogram equalized to 8 bit on its own, so both show the
-    same contrast whatever their radiometry. The mask applies to the monitored
-    image only. Hidden pixels are black in the image they belong to.
-
-    In checkerboard mode, the top left tile shows the reference image, then
-    tiles alternate with the monitored image, each tinted in its own color:
-    monitored in red, reference in blue.
-
-    In overlay mode, the monitored image fills the red channel and the reference
-    image the green and blue ones, so aligned features are gray and shifted ones
-    fringed in red and cyan.
+    The top left tile shows the reference image, then tiles alternate with the
+    monitored image. Each image is histogram equalized to 8 bit on its own, so
+    both show the same contrast whatever their radiometry, then tinted in its
+    own color: monitored in red, reference in blue. The mask applies to the
+    monitored image only. Hidden pixels are black.
 
     The mosaic is written at native resolution in `output_stem` with the
     `.avif` extension, `.png` if Pillow cannot encode AVIF.
@@ -239,28 +245,53 @@ def generate_mosaic(
         mon_image (GdalRasterImage): monitored image
         ref_image (GdalRasterImage): reference image, same grid as the monitored one
         output_stem (Path): destination file path, without extension
-        tile_size (int): tile side in pixel, checkerboard mode only
+        tile_size (int): tile side in pixel
         mask (GdalRasterImage|None): optional mask applied to the monitored image.
             Pixels where mask == 0 are hidden.
         no_values (list[float]|None): optional list of DN values to hide in both images
-        mode (str): "checkerboard" or "overlay"
 
     Returns:
         Path: mosaic file path
     """
-    if mode not in ("checkerboard", "overlay"):
-        raise ValueError(f"Unknown mosaic mode {mode!r}")
     shape = ref_image.array.shape
-    if mode == "overlay":
-        logger.info("Generating %sx%s overlay mosaic", shape[1], shape[0])
-    else:
-        logger.info("Generating %sx%s mosaic with %s px tiles", shape[1], shape[0], tile_size)
+    logger.info("Generating %sx%s mosaic with %s px tiles", shape[1], shape[0], tile_size)
 
-    mon_gray = _to_gray(mon_image, build_invalid_mask(mon_image, mask, no_values))
-    ref_gray = _to_gray(ref_image, build_invalid_mask(ref_image, None, no_values))
-    if mode == "overlay":
-        mosaic = _overlay(mon_gray, ref_gray)
-    else:
-        mosaic = _tinted_checkerboard(mon_gray, ref_gray, checkerboard(shape, tile_size))
-
+    mon_gray, ref_gray = _equalized_pair(mon_image, ref_image, mask, no_values)
+    mosaic = _tinted_checkerboard(mon_gray, ref_gray, checkerboard(shape, tile_size))
     return _write(mosaic, output_stem)
+
+
+def generate_overlay(
+    mon_image: GdalRasterImage,
+    ref_image: GdalRasterImage,
+    output_stem: Path,
+    mask: GdalRasterImage | None = None,
+    no_values: list[float] | None = None,
+) -> Path:
+    """Write a color overlay of both images.
+
+    Each image is histogram equalized to 8 bit on its own, then the monitored
+    image fills the red channel and the reference image the green and blue
+    ones, so aligned features are gray and shifted ones fringed in red and
+    cyan. The mask applies to the monitored image only. Hidden pixels are black
+    in the image they belong to.
+
+    The overlay is written at native resolution in `output_stem` with the
+    `.avif` extension, `.png` if Pillow cannot encode AVIF.
+
+    Args:
+        mon_image (GdalRasterImage): monitored image
+        ref_image (GdalRasterImage): reference image, same grid as the monitored one
+        output_stem (Path): destination file path, without extension
+        mask (GdalRasterImage|None): optional mask applied to the monitored image.
+            Pixels where mask == 0 are hidden.
+        no_values (list[float]|None): optional list of DN values to hide in both images
+
+    Returns:
+        Path: overlay file path
+    """
+    shape = ref_image.array.shape
+    logger.info("Generating %sx%s overlay", shape[1], shape[0])
+
+    mon_gray, ref_gray = _equalized_pair(mon_image, ref_image, mask, no_values)
+    return _write(_overlay(mon_gray, ref_gray), output_stem)

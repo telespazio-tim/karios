@@ -268,7 +268,7 @@ karios process monitored.tif reference.tif mask.tif \
 | `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
 | `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products |
 | `--mosaic-tile-size`, `-mts` | INTEGER | Generate a checkerboard mosaic of the monitored and reference images with tiles of this size in pixel (e.g. 128), shown in the HTML report. 0 disables it [default: 0] |
-| `--mosaic-mode`, `-mtm` | [checkerboard\|overlay] | Mosaic mode: `checkerboard` alternates tiles of the two images, `overlay` shows the monitored image in red and the reference in green and blue, so shifts fringe features in red and cyan. `overlay` needs no `--mosaic-tile-size` and enables the mosaic [default: checkerboard] |
+| `--generate-overlay`, `-gov` | FLAG | Generate an overlay of the monitored image, in red, and the reference image, in green and blue, shown in the HTML report. Aligned features are gray, shifted ones fringed in red and cyan |
 | `--no-value` | INTEGER | Filter out key points where reference or monitored image has this DN value. Can be used multiple times (e.g., `--no-value 0 --no-value 255`) |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resampled to 10m") |
 
@@ -414,7 +414,7 @@ runtime_config = RuntimeConfiguration(
     gen_delta_raster=True,        # Generate displacement raster
     generate_kp_chips=True,      # Enable chip generation
     mosaic_tile_size=256,         # Optional: checkerboard mosaic tile size in pixel, 0 (default) disables it
-    mosaic_mode="checkerboard",   # Optional: "checkerboard" (default) or "overlay" (monitored in red, reference in cyan)
+    generate_overlay=True,        # Optional: overlay of the monitored image in red and the reference in cyan
     dem_description="SRTM 30m",   # Optional DEM description for plots
     enable_large_shift_detection=False,
     no_values=[0, 255]            # Optional: filter out key points with these DN values
@@ -499,7 +499,8 @@ KARIOS generates several types of outputs:
 - **03_dy.png**: Y-direction displacement analysis by row/column  
 - **04_ce.png**: Circular error analysis with statistical summaries
 - **dem_*.png**: DEM-based altitude analysis (if DEM provided)
-- **05_mosaic.avif** (lossless `.png` if Pillow has no AVIF support): Color checkerboard mosaic at native resolution, alternating reference (blue) and monitored (red) image tiles, each image histogram equalized to 8 bit, to eyeball misregistration at tile edges. With `--mosaic-mode overlay`, the monitored image fills the red channel and the reference the green and blue ones instead: aligned features are gray, shifted ones fringed in red and cyan. Shown in the *Mosaic* tab of the HTML report (if `--mosaic-tile-size` is not 0, or in overlay mode)
+- **05_mosaic.avif** (lossless `.png` if Pillow has no AVIF support): Color checkerboard mosaic at native resolution, alternating reference (blue) and monitored (red) image tiles, each image histogram equalized to 8 bit, to eyeball misregistration at tile edges. Shown in the *Mosaic* tab of the HTML report (if `--mosaic-tile-size` is not 0)
+- **06_overlay.avif** (lossless `.png` if Pillow has no AVIF support): Color overlay at native resolution, the monitored image in the red channel and the reference in the green and blue ones, each histogram equalized to 8 bit: aligned features are gray, shifted ones fringed in red and cyan. Shown in the *Overlay* tab of the HTML report (if `--generate-overlay`)
 
 #### Products (Optional)
 

@@ -21,11 +21,13 @@
   at native resolution alternating tiles of the given size in pixel from the reference image, in
   blue, and the monitored image, in red, so misregistration shows as features broken at the tile
   edges. Each image is histogram equalized to 8 bit on its own, which gives both the same
-  contrast whatever their sensor; zero fill and pixels hidden in the overview plot are black and left out of the
-  histogram. Written as `05_mosaic.avif`, or lossless `.png` when Pillow lacks AVIF support, and
-  displayed in a new *Mosaic* tab of the HTML report. `--mosaic-mode overlay` replaces the tiles
-  with a color composite, monitored image in red and reference in green and blue, where aligned
-  features are gray and shifted ones fringed in red and cyan; it needs no tile size.
+  contrast whatever their sensor; zero fill and pixels hidden in the overview plot are black and
+  left out of the histogram. Written as `05_mosaic.avif`, or lossless `.png` when Pillow lacks
+  AVIF support, and displayed in a new *Mosaic* tab of the HTML report.
+- **Color overlay** (`--generate-overlay`): the monitored image in the red channel and the
+  reference in the green and blue ones, equalized like the mosaic, where aligned features are
+  gray and shifted ones fringed in red and cyan. Written as `06_overlay.avif` and displayed in a
+  new *Overlay* tab of the HTML report.
 
 ### Fix
 

@@ -448,12 +448,13 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
-MOSAIC_TEMPLATE = """<!DOCTYPE html>
+# Page showing one comparison image of both inputs: the mosaic or the overlay
+IMAGE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KARIOS Mosaic - {title_prefix}</title>
+    <title>KARIOS {page_title} - {title_prefix}</title>
     <style>
         {css_styles}
     </style>
@@ -468,14 +469,14 @@ MOSAIC_TEMPLATE = """<!DOCTYPE html>
     </nav>
 
     <div class="section">
-        <h1>Mosaic</h1>
-        <p>{mosaic_description} Click the image to open it at native resolution.</p>
+        <h1>{page_title}</h1>
+        <p>{description} Click the image to open it at native resolution.</p>
         <table>
             <tr><th>Monitored</th><td>{monitored_image}</td></tr>
             <tr><th>Reference</th><td>{reference_image}</td></tr>
         </table>
         <div class="image-container">
-            <a href="{mosaic_image}" target="_blank"><img src="{mosaic_image}" alt="Mosaic"></a>
+            <a href="{image}" target="_blank"><img src="{image}" alt="{page_title}"></a>
         </div>
     </div>
 
@@ -828,20 +829,6 @@ class HtmlReportGenerator:
         grid = f'<div class="chips-grid">{"".join(items)}</div>'
         return _SORT_BAR_HTML + grid + _SORT_SCRIPT
 
-    def _mosaic_description(self) -> str:
-        """Mosaic page caption, for the mosaic mode of the runtime configuration."""
-        if self.runtime_config.mosaic_mode == "overlay":
-            return (
-                "Overlay of the monitored image, in red, and the reference image, in cyan, "
-                "each histogram equalized: aligned features are gray. "
-                "Misregistration shows as red and cyan fringes along the features."
-            )
-        return (
-            "Checkerboard of the reference (blue, top left tile) and monitored (red) images, "
-            "each histogram equalized. "
-            "Misregistration shows as features broken at the tile edges."
-        )
-
     def generate(self) -> Path:
         """Generate the HTML report file(s)."""
         logger.info("Generating HTML report")
@@ -853,6 +840,7 @@ class HtmlReportGenerator:
         has_products = len(self.report_paths.products) > 0
         has_chips = self.runtime_config.generate_kp_chips
         has_mosaic = bool(self.report_paths.mosaic)
+        has_overlay = bool(self.report_paths.overlay)
 
         # Tabs in display order, the pages without content left out
         tabs = [("report.html", "Summary")]
@@ -860,6 +848,8 @@ class HtmlReportGenerator:
             tabs.append(("products.html", "Products"))
         if has_mosaic:
             tabs.append(("mosaic.html", "Mosaic"))
+        if has_overlay:
+            tabs.append(("overlay.html", "Overlay"))
         if has_chips:
             tabs.append(("chips.html", "Chips"))
 
@@ -946,20 +936,43 @@ class HtmlReportGenerator:
             with open(self.output_dir / "products.html", "w", encoding="utf-8") as f:
                 f.write(products_content)
 
-        # 3. Generate Mosaic Page if needed
-        if has_mosaic:
-            mosaic_content = MOSAIC_TEMPLATE.format(
+        # 3. Generate Mosaic and Overlay Pages if needed
+        image_pages = [
+            (
+                has_mosaic,
+                "mosaic.html",
+                "Mosaic",
+                self.report_paths.mosaic,
+                "Checkerboard of the reference (blue, top left tile) and monitored (red) "
+                "images, each histogram equalized. "
+                "Misregistration shows as features broken at the tile edges.",
+            ),
+            (
+                has_overlay,
+                "overlay.html",
+                "Overlay",
+                self.report_paths.overlay,
+                "Overlay of the monitored image, in red, and the reference image, in cyan, "
+                "each histogram equalized: aligned features are gray. "
+                "Misregistration shows as red and cyan fringes along the features.",
+            ),
+        ]
+        for enabled, page, page_title, image, description in image_pages:
+            if not enabled:
+                continue
+            page_content = IMAGE_PAGE_TEMPLATE.format(
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                nav_links=nav_links("mosaic.html"),
+                nav_links=nav_links(page),
+                page_title=page_title,
                 monitored_image=self.match_result.monitored_image.file_name,
                 reference_image=self.match_result.reference_image.file_name,
-                mosaic_image=Path(self.report_paths.mosaic).name,
-                mosaic_description=self._mosaic_description(),
+                image=Path(image).name,
+                description=description,
             )
-            with open(self.output_dir / "mosaic.html", "w", encoding="utf-8") as f:
-                f.write(mosaic_content)
+            with open(self.output_dir / page, "w", encoding="utf-8") as f:
+                f.write(page_content)
 
         # 4. Generate Chips Page if needed
         if has_chips:

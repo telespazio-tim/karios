@@ -35,9 +35,6 @@ from typing import Optional, Union
 
 from karios.core.errors import ConfigurationError
 
-# Mosaic modes, see karios.report.mosaic
-MOSAIC_MODES = ("checkerboard", "overlay")
-
 
 @dataclass
 class RuntimeConfiguration:
@@ -58,9 +55,8 @@ class RuntimeConfiguration:
                    data edges. Incompatible with laplacian_kernel_size "auto".
         mosaic_tile_size: Tile side in pixel of the checkerboard mosaic of the monitored
                    and reference images, shown in the HTML report. 0 disables the mosaic.
-        mosaic_mode: "checkerboard" (default), alternating tiles of the two images, or
-                   "overlay", the monitored image in red and the reference in green and
-                   blue. The overlay needs no mosaic_tile_size and enables the mosaic.
+        generate_overlay: Whether to generate the overlay of the monitored image, in red,
+                   and the reference image, in green and blue, shown in the HTML report.
         no_values: Optional list of DN (Digital Number) values to filter out from key points.
                    Accepts floats, since a float raster's fill value need not be a whole number.
                    Key points where reference or monitored image has these values will be excluded.
@@ -77,7 +73,7 @@ class RuntimeConfiguration:
     enable_large_shift_detection: bool
     enable_coarse_to_fine: bool = False
     mosaic_tile_size: int = 0
-    mosaic_mode: str = "checkerboard"
+    generate_overlay: bool = False
     no_values: Optional[list[float]] = None
     pixel_size: Optional[float] = None
     title_prefix: Optional[str] = None
@@ -88,14 +84,6 @@ class RuntimeConfiguration:
             raise ConfigurationError(
                 f"mosaic_tile_size must be positive, or 0 to disable, got {self.mosaic_tile_size}"
             )
-
-        if self.mosaic_mode not in MOSAIC_MODES:
-            raise ConfigurationError(
-                f"mosaic_mode must be one of {', '.join(MOSAIC_MODES)}, got {self.mosaic_mode!r}"
-            )
-
-        if self.mosaic_mode == "overlay" and self.mosaic_tile_size:
-            raise ConfigurationError("mosaic_tile_size has no effect in overlay mosaic_mode")
 
         if self.enable_large_shift_detection and self.enable_coarse_to_fine:
             raise ConfigurationError(
@@ -108,8 +96,3 @@ class RuntimeConfiguration:
         # Some call sites (e.g. plot path builders) join paths with the `/`
         # operator, which requires a Path instance, not a str.
         self.output_directory = Path(self.output_directory)
-
-    @property
-    def mosaic_enabled(self) -> bool:
-        """Whether to generate the mosaic: a checkerboard tile size, or the overlay mode."""
-        return bool(self.mosaic_tile_size) or self.mosaic_mode == "overlay"

@@ -33,7 +33,6 @@ import rich_click as click
 from osgeo import gdal
 
 from karios.api import KariosAPI, RuntimeConfiguration
-from karios.api.config import MOSAIC_MODES
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
@@ -65,7 +64,7 @@ click.rich_click.OPTION_GROUPS = {
                 "--generate-intermediate-product",
                 "--generate-kp-chips",
                 "--mosaic-tile-size",
-                "--mosaic-mode",
+                "--generate-overlay",
                 "--no-value",
                 "--dem-description",
             ],
@@ -217,12 +216,10 @@ def cli() -> None:
     show_default=True,
 )
 @click.option(
-    "--mosaic-mode",
-    "-mtm",
-    type=click.Choice(MOSAIC_MODES),
-    default="checkerboard",
-    help="Mosaic mode: 'checkerboard' alternates tiles of the two images, 'overlay' shows the monitored image in red and the reference in green and blue, so shifts fringe features in red and cyan. 'overlay' needs no --mosaic-tile-size and enables the mosaic",
-    show_default=True,
+    "--generate-overlay",
+    "-gov",
+    is_flag=True,
+    help="Generate an overlay of the monitored image, in red, and the reference image, in green and blue, shown in the HTML report. Aligned features are gray, shifted ones fringed in red and cyan",
 )
 @click.option(
     "--no-value",
@@ -271,7 +268,7 @@ def process(
     generate_intermediate_product: bool,
     generate_kp_chips: bool,
     mosaic_tile_size: int,
-    mosaic_mode: str,
+    generate_overlay: bool,
     vector_mask: Optional[Path],
     no_value: tuple[float, ...],
     title_prefix: Optional[str],
@@ -340,7 +337,7 @@ def process(
             gen_delta_raster=generate_intermediate_product,
             generate_kp_chips=generate_kp_chips,
             mosaic_tile_size=mosaic_tile_size,
-            mosaic_mode=mosaic_mode,
+            generate_overlay=generate_overlay,
             dem_description=dem_description,
             enable_large_shift_detection=enable_large_shift_detection,
             enable_coarse_to_fine=enable_coarse_to_fine,
@@ -557,6 +554,8 @@ def _print_summary(match_result, accuracy, reports) -> None:
     click.echo(f"  CE plot: {reports.ce_plot}")
     if reports.mosaic:
         click.echo(f"  Mosaic: {reports.mosaic}")
+    if reports.overlay:
+        click.echo(f"  Overlay: {reports.overlay}")
 
     if reports.html_report:
         click.echo(f"  HTML report: {reports.html_report}")
