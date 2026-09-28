@@ -327,10 +327,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html" class="active">Summary</a>
-        {mosaic_link}
-        {products_link}
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -420,10 +417,7 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        {mosaic_link}
-        <a href="products.html" class="active">Products</a>
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -470,10 +464,7 @@ MOSAIC_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        <a href="mosaic.html" class="active">Mosaic</a>
-        {products_link}
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -516,10 +507,7 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        {mosaic_link}
-        {products_link}
-        <a href="chips.html" class="active">Chips</a>
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -853,9 +841,22 @@ class HtmlReportGenerator:
         has_chips = self.runtime_config.generate_kp_chips
         has_mosaic = bool(self.report_paths.mosaic)
 
-        mosaic_link = '<a href="mosaic.html">Mosaic</a>' if has_mosaic else ""
-        products_link = '<a href="products.html">Products</a>' if has_products else ""
-        chips_link = '<a href="chips.html">Chips</a>' if has_chips else ""
+        # Tabs in display order, the pages without content left out
+        tabs = [("report.html", "Summary")]
+        if has_products:
+            tabs.append(("products.html", "Products"))
+        if has_mosaic:
+            tabs.append(("mosaic.html", "Mosaic"))
+        if has_chips:
+            tabs.append(("chips.html", "Chips"))
+
+        def nav_links(active: str) -> str:
+            return "\n        ".join(
+                f'<a href="{page}" class="active">{label}</a>'
+                if page == active
+                else f'<a href="{page}">{label}</a>'
+                for page, label in tabs
+            )
 
         dem_plots_html = ""
         if self.report_paths.dem_plots:
@@ -877,9 +878,7 @@ class HtmlReportGenerator:
         summary_content = HTML_TEMPLATE.format(
             css_styles=css_styles,
             header_banner_html=header_banner_html,
-            mosaic_link=mosaic_link,
-            products_link=products_link,
-            chips_link=chips_link,
+            nav_links=nav_links("report.html"),
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             monitored_image=self.match_result.monitored_image.file_name,
             reference_image=self.match_result.reference_image.file_name,
@@ -928,8 +927,7 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                mosaic_link=mosaic_link,
-                chips_link=chips_link,
+                nav_links=nav_links("products.html"),
                 products_rows=products_rows,
             )
             with open(self.output_dir / "products.html", "w", encoding="utf-8") as f:
@@ -941,8 +939,7 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                products_link=products_link,
-                chips_link=chips_link,
+                nav_links=nav_links("mosaic.html"),
                 monitored_image=self.match_result.monitored_image.file_name,
                 reference_image=self.match_result.reference_image.file_name,
                 mosaic_image=Path(self.report_paths.mosaic).name,
@@ -967,8 +964,7 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                mosaic_link=mosaic_link,
-                products_link=products_link,
+                nav_links=nav_links("chips.html"),
                 chips_vrt_links=chips_vrt_links,
                 chips_section_html=chips_section_html,
             )

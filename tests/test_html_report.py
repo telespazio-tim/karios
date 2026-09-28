@@ -153,6 +153,21 @@ def test_generate_succeeds_without_branding_assets(generator, tmp_path, monkeypa
     assert "KARIOS Processing Report" in content
 
 
+def test_generate_orders_the_tabs(generator, tmp_path):
+    """Every page shows Summary / Products / Mosaic / Chips, its own tab active."""
+    generator.generate()
+
+    pages = ["report.html", "products.html", "mosaic.html", "chips.html"]
+    for page in pages:
+        content = (tmp_path / page).read_text(encoding="utf-8")
+        nav = content[content.index('<nav class="nav">') : content.index("</nav>")]
+        assert [nav.index(f'href="{other}"') for other in pages] == sorted(
+            nav.index(f'href="{other}"') for other in pages
+        )
+        assert nav.count('class="active"') == 1
+        assert f'<a href="{page}" class="active">' in nav
+
+
 def test_generate_mosaic_tab(generator, tmp_path):
     """The mosaic page shows the mosaic, linked to open it at native resolution, and every page links to it."""
     generator.generate()
