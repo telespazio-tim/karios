@@ -210,6 +210,7 @@ class KariosAPI:
         mask_file_path: Optional[Path] = None,
         resume: bool = False,
         vector_mask_path: Optional[Path] = None,
+        dem_file_path: Optional[Path] = None,
     ) -> MatchResult:
         """Match the monitored image against the reference image.
 
@@ -221,6 +222,8 @@ class KariosAPI:
             resume: Whether to resume from previous analysis
             vector_mask_path: Optional path to vector mask file (GeoJSON, Shapefile, etc.)
                 for excluding pixels from matching. Will be rasterized to match the monitored image.
+            dem_file_path: Optional path to DEM file. When provided, the DEM elevation at each
+                key point is added as an "alt" column in the output CSV.
 
         Returns:
             MatchResult: Object containing match points and statistics
@@ -234,6 +237,9 @@ class KariosAPI:
         # Load mask if provided (raster or vector)
         mask = self._load_mask(monitored_image, mask_file_path, vector_mask_path)
 
+        # Load DEM if provided, to add elevation to the output CSV
+        dem = self._load_dem(reference_image, dem_file_path)
+
         # Handle large offset detection if enabled
         if self._runtime_configuration.enable_large_shift_detection:
             logger.warning("Large shift detection enable, this is an experimental feature.")
@@ -246,7 +252,7 @@ class KariosAPI:
                 self._large_shift_applied = True
 
                 logger.info("Switch monitored image to %s", monitored_image.filepath)
-                points = self._get_match_points(resume, monitored_image, reference_image, mask)
+                points = self._get_match_points(resume, monitored_image, reference_image, mask, dem)
 
                 # Apply offset to match results
                 logger.info("Apply offset to KLT matcher result")
@@ -254,9 +260,9 @@ class KariosAPI:
                 points["dy"] = points["dy"] + shifted_image.y_offset
             else:
                 logger.info("Large shift too tight to be applyed, do not apply")
-                points = self._get_match_points(resume, monitored_image, reference_image, mask)
+                points = self._get_match_points(resume, monitored_image, reference_image, mask, dem)
         else:
-            points = self._get_match_points(resume, monitored_image, reference_image, mask)
+            points = self._get_match_points(resume, monitored_image, reference_image, mask, dem)
 
         # Filter out key points with specified DN values
         points = self._filter_by_dn_values(
@@ -488,7 +494,12 @@ class KariosAPI:
         logger.info("Process %s", monitored_image_path)
 
         match_result = self.match_images(
-            monitored_image_path, reference_image_path, mask_file_path, resume, vector_mask_path
+            monitored_image_path,
+            reference_image_path,
+            mask_file_path,
+            resume,
+            vector_mask_path,
+            dem_file_path,
         )
 
         accuracy = self.analyze_accuracy(match_result)
@@ -827,6 +838,7 @@ class KariosAPI:
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
         mask: Optional[GdalRasterImage],
+        dem: Optional[GdalRasterImage] = None,
     ) -> pd.DataFrame:
         """Get match points either by running KLT or reading from CSV.
 
@@ -835,6 +847,7 @@ class KariosAPI:
             monitored_image: Monitored image
             reference_image: Reference image
             mask: Optional mask image
+            dem: Optional DEM, used to add an "alt" column to the CSV
 
         Returns:
             DataFrame containing match points
@@ -848,15 +861,19 @@ class KariosAPI:
             if csv_file.exists():
                 logger.warning("CSV file exists, will overwrite it: %s", str(csv_file))
                 csv_file.unlink()
-            points = self._compute_matches(monitored_image, reference_image, mask, csv_file)
+            points = self._compute_matches(monitored_image, reference_image, mask, csv_file, dem)
         elif not csv_file.exists():
             # Run matcher if resuming but CSV doesn't exist
             logger.warning("Cannot resume, CSV file missing, create it : %s", str(csv_file))
-            points = self._compute_matches(monitored_image, reference_image, mask, csv_file)
+            points = self._compute_matches(monitored_image, reference_image, mask, csv_file, dem)
         else:
             # Load from CSV if resuming and CSV exists
             logger.info("Load CSV : %s", str(csv_file))
             points = pd.read_csv(csv_file, sep=";", index_col=False)
+            if dem is not None and "alt" not in points.columns:
+                logger.info("Add DEM elevation to CSV : %s", str(csv_file))
+                self._add_dem_altitude(points, dem)
+                points.to_csv(csv_file, sep=";", index=False)
 
         return points
 
@@ -866,6 +883,7 @@ class KariosAPI:
         reference_image: GdalRasterImage,
         mask: Optional[GdalRasterImage],
         csv_file: Path,
+        dem: Optional[GdalRasterImage] = None,
     ) -> pd.DataFrame:
         """Compute matches using KLT tracker.
 
@@ -874,12 +892,15 @@ class KariosAPI:
             reference_image: Reference image
             mask: Optional mask image
             csv_file: Path to save CSV results
+            dem: Optional DEM, used to add an "alt" column to the CSV
 
         Returns:
             DataFrame containing match points
         """
         dataframe_gen = self._klt.match(monitored_image, reference_image, mask)
-        return self._handle_klt_results(dataframe_gen, csv_file, monitored_image, reference_image)
+        return self._handle_klt_results(
+            dataframe_gen, csv_file, monitored_image, reference_image, dem
+        )
 
     def _handle_klt_results(
         self,
@@ -887,11 +908,13 @@ class KariosAPI:
         csv_file: Path,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
+        dem: Optional[GdalRasterImage] = None,
     ) -> pd.DataFrame:
         """Process KLT results by:
         - computing radial error
         - computing angle error
         - computing zncc for relevant KP
+        - adding DEM elevation if a DEM is provided
         - save to CSV.
 
         Args:
@@ -899,6 +922,7 @@ class KariosAPI:
             csv_file: Path to save CSV results
             monitored_image: Monitored image
             reference_image: Reference image
+            dem: Optional DEM, used to add an "alt" column
 
         Returns:
             Combined DataFrame with all results
@@ -945,6 +969,9 @@ class KariosAPI:
             else:
                 logger.warning("Large shift applied, skip ZNCC")
 
+            if dem is not None:
+                self._add_dem_altitude(dataframe, dem)
+
             if not csv_file.exists():
                 logger.info("Write to csv %s", str(csv_file))
                 dataframe.to_csv(csv_file, sep=";", index=False)
@@ -955,6 +982,13 @@ class KariosAPI:
             all_frame = pd.concat([all_frame, dataframe])
 
         return all_frame
+
+    @staticmethod
+    def _add_dem_altitude(points: pd.DataFrame, dem: GdalRasterImage) -> None:
+        """Add an "alt" column with the DEM elevation at each key point (reference x0, y0)."""
+        x_index = points["x0"].to_numpy().astype(int)
+        y_index = points["y0"].to_numpy().astype(int)
+        points["alt"] = dem.array[y_index, x_index]
 
     def _generate_overview_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
         """Generate overview plot.
@@ -1119,14 +1153,10 @@ class KariosAPI:
                 logger.info("No DEM file provided, will not plot deviation regarding DEM")
             return dem_paths
 
-        # Extract DEM values for each point
+        # Extract DEM values for each point, unless already done during matching
         points = match_result.points.copy()
-        x_index = points["x0"].to_numpy().astype(int)
-        y_index = points["y0"].to_numpy().astype(int)
-        points["alt"] = dem.array[y_index, x_index]
-
-        x_index = None
-        y_index = None
+        if "alt" not in points.columns:
+            self._add_dem_altitude(points, dem)
 
         # Configure plot parameters
         conf = self._processing_configuration.dem_plot_configuration

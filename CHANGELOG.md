@@ -16,6 +16,9 @@
 - **Configurable pyramid depth** (`klt_matching.maxLevel`, default `3`): previously a source
   constant. In the default matching mode this is the parameter that most affects results, since
   the lost edge band scales as `(matching_winsize / 2) * 2**maxLevel`.
+- **DEM elevation in the CSV output**: when a DEM is given, the `KLT_matcher_*.csv` file gets an
+  `alt` column with the DEM elevation at each key point. Resuming (`--resume`) from a CSV written
+  without a DEM adds the column.
 
 - **Checkerboard mosaic** (`--mosaic-tile-size`, `0` by default, which disables it): mosaic
   at native resolution alternating tiles of the given size in pixel from the reference image, in
@@ -31,6 +34,9 @@
 
 ### Fix
 
+- **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
+  `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
+  generating reports.
 - **`--no-value` now reaches the matching mask**: it previously only removed surviving key
   points and tinted the overview plot, so a product declaring no-data `0` while actually filled
   with another DN had features detected throughout the fill and reported an inflated valid-pixel
