@@ -111,8 +111,16 @@ def fine_pair_fixture():
     ref = cv2.GaussianBlur(rng.uniform(0, 255, (600, 600)).astype(np.float32), (0, 0), 3)
     ref = cv2.normalize(ref, None, 10, 250, cv2.NORM_MINMAX)
     mon = cv2.resize(ref[150:350, 180:380], (800, 800), interpolation=cv2.INTER_CUBIC)
-    truth = np.array([[0.25, 0.0, 180.0], [0.0, 0.25, 150.0], [0.0, 0.0, 1.0]])
-    return mon, ref, truth
+    return mon, ref, _truth(180, 150, 4)
+
+
+def _truth(x0, y0, factor):
+    """mon → ref homography of a mon `factor` times finer than ref, from ref pixel (x0, y0).
+
+    Maps OpenCV pixel centers, as cv2.resize samples them.
+    """
+    offset = np.array([[1.0, 0.0, x0], [0.0, 1.0, y0], [0.0, 0.0, 1.0]])
+    return offset @ global_align._pixel_scale(1 / factor, 1 / factor)
 
 
 def _offset(truth, dx, dy, scale=1.0):
@@ -243,7 +251,7 @@ def test_small_fine_footprint_in_a_large_reference():
     mon = cv2.resize(ref[y0 : y0 + 100, x0 : x0 + 100], (700, 700), interpolation=cv2.INTER_CUBIC)
     fine = cv2.GaussianBlur(rng.normal(0, 1, mon.shape).astype(np.float32), (0, 0), 1.5)
     mon = np.clip(mon + fine * 40 / fine.std(), 1, 255)
-    truth = np.array([[1 / 7, 0.0, x0], [0.0, 1 / 7, y0], [0.0, 0.0, 1.0]])
+    truth = _truth(x0, y0, 7)
 
     alignment = detect_global_alignment(mon, ref, prior=_offset(truth, -30, 25))
 
@@ -256,3 +264,60 @@ def test_small_fine_footprint_in_a_large_reference():
         < 1
     )
     assert _center_error(alignment.matrix, truth, size=700) < 5
+
+
+def test_downsampled_working_image_keeps_pixel_centers():
+    """mon 7x finer than ref aligns without the 0.43 ref px half-pixel shift."""
+    rng = np.random.default_rng(5)
+    ref = cv2.GaussianBlur(rng.uniform(0, 255, (400, 400)).astype(np.float32), (0, 0), 3)
+    ref = cv2.normalize(ref, None, 10, 250, cv2.NORM_MINMAX)
+    # mon covers ref[100:200, 120:220] at 7x the resolution, sampled at mon pixel centers
+    my, mx = np.mgrid[0:700, 0:700].astype(np.float32)
+    ref_x, ref_y = 120 + (mx + 0.5) / 7 - 0.5, 100 + (my + 0.5) / 7 - 0.5
+    mon = cv2.remap(ref, ref_x, ref_y, cv2.INTER_CUBIC)
+    truth = _truth(120, 100, 7)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 3, -2))
+
+    # Scaling the working grid without the half-pixel term put the center 0.43 px off
+    center = np.array([[350.0, 350.0]])
+    error = global_align._footprint_points(alignment.matrix, center) - global_align._footprint_points(
+        truth, center
+    )
+    assert np.abs(error).max() < 0.05
+    # The corners carry ECC's own scale uncertainty on a 100 ref px footprint
+    assert _center_error(alignment.matrix, truth, size=700) < 1.5
+
+
+def test_translation_search_is_kept_when_ecc_does_not_converge(fine_pair, monkeypatch, caplog):
+    """Without any ECC run converging, the translation search result beats the raw prior."""
+    mon, ref, truth = fine_pair
+    caplog.set_level(logging.INFO, logger=global_align.__name__)
+    monkeypatch.setattr(global_align, "_refine_with_ecc", lambda *args: (None, float("nan")))
+    monkeypatch.setattr(
+        global_align, "_sift_homography", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError)
+    )
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 40, -30))
+
+    assert "keeping the shift estimate unrefined" in caplog.text
+    assert _center_error(alignment.matrix, truth) < 1
+
+
+def test_prior_maps_pixel_centers():
+    """Geotransforms give pixel corners; the prior maps OpenCV pixel centers."""
+
+    class Image:
+        projection = "x"
+        spatial_ref = type("SR", (), {"IsSame": lambda self, other: True})()
+
+        def __init__(self, x_min, y_max, res):
+            self.x_min, self.y_max, self.x_res, self.y_res = x_min, y_max, res, -res
+
+    prior = global_align._prior_from_georefs(Image(300.0, 900.0, 5.0), Image(0.0, 1000.0, 10.0))
+
+    # mon pixel (0, 0) covers ref's [30, 30.5] x [10, 10.5] corner square, centered on 30.25
+    # in corner coordinates, so 29.75 in OpenCV's center ones
+    assert global_align._footprint_points(prior, np.array([[0.0, 0.0]]))[0] == pytest.approx(
+        [29.75, 9.75]
+    )

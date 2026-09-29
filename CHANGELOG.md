@@ -44,8 +44,9 @@
   reference cropped around the monitored footprint, a correlation search corrects the prior's
   translation as an extra ECC start, implausible estimates are rejected, and the others compare
   on common pixels. On that pair: 26/42 RANSAC inliers instead of 5/15, and `karios process` on
-  the output measures 799 key points with a 0.7 px spread, against 65 with 2.4-3.3 px for ECC
-  from the georeferencing alone.
+  the output measures 794 key points with a 0.6-0.7 px spread and a 0.1 px mean shift, against
+  65 with 2.4-3.3 px for ECC from the georeferencing alone. The prior now also maps pixel
+  centers, as OpenCV does, instead of the geotransform's pixel corners.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.

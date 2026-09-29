@@ -137,8 +137,9 @@ def _prior_from_georefs(
     sy = monitored.y_res / reference.y_res
     tx = (monitored.x_min - reference.x_min) / reference.x_res
     ty = (monitored.y_max - reference.y_max) / reference.y_res
+    # Geotransforms place pixel corners, OpenCV pixel centers: see _pixel_scale()
     return np.array(
-        [[sx, 0.0, tx], [0.0, sy, ty], [0.0, 0.0, 1.0]],
+        [[sx, 0.0, tx + (sx - 1) / 2], [0.0, sy, ty + (sy - 1) / 2], [0.0, 0.0, 1.0]],
         dtype=np.float64,
     )
 
@@ -161,6 +162,16 @@ class _WorkFrame:
     def to_full(self, matrix: np.ndarray) -> np.ndarray:
         """Homography between the working images, expressed at full resolution."""
         return np.linalg.inv(self.ref_to_work) @ matrix @ self.mon_to_work
+
+
+def _pixel_scale(sx: float, sy: float) -> np.ndarray:
+    """3x3 map between pixel grids of one footprint, the second `sx` x `sy` times the first.
+
+    OpenCV puts pixel centers on integer coordinates, so scaling a grid also
+    moves them by half a pixel of the difference: without it an image
+    downsampled 7x lands 0.43 of its pixel off.
+    """
+    return np.array([[sx, 0.0, (sx - 1) / 2], [0.0, sy, (sy - 1) / 2], [0.0, 0.0, 1.0]])
 
 
 def _valid_pixels(arr: np.ndarray) -> np.ndarray:
@@ -194,13 +205,13 @@ def _work_frame(
         # A working pixel is valid only when every mon pixel under it is
         coverage = cv2.resize(mon_valid.astype(np.float32), size, interpolation=cv2.INTER_AREA)
         valid_work = coverage > 0.999
-    mon_to_work = np.diag([mon_work.shape[1] / mw, mon_work.shape[0] / mh, 1.0])
+    mon_to_work = _pixel_scale(mon_work.shape[1] / mw, mon_work.shape[0] / mh)
 
     ref_work = ref_u8
     if scale > 1:
         size = (max(1, round(rw / scale)), max(1, round(rh / scale)))
         ref_work = cv2.resize(ref_u8, size, interpolation=cv2.INTER_AREA)
-    ref_scale = np.diag([ref_work.shape[1] / rw, ref_work.shape[0] / rh, 1.0])
+    ref_scale = _pixel_scale(ref_work.shape[1] / rw, ref_work.shape[0] / rh)
 
     corners = _footprint(ref_scale @ prior, mw, mh)
     (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
@@ -532,8 +543,20 @@ def detect_global_alignment(
             converged.append((name, full, ecc_score))
 
     if not converged:
-        logger.warning("No plausible refined alignment; keeping the geotransform prior")
-        return GlobalAlignment(matrix=prior, n_inliers=n_inliers, n_matches=n_matches)
+        # Keep the best unrefined start: the translation search alone often
+        # lands within a pixel where ECC does not converge
+        plausible = [
+            (name, frame.to_full(init))
+            for name, init in starts
+            if _plausibility(frame.to_full(init), prior, frame) is None
+        ]
+        scores, _ = _gradient_correlation(frame, [frame.to_work(m) for _, m in plausible])
+        if not plausible or np.isnan(scores).all():
+            logger.warning("No plausible alignment; keeping the geotransform prior")
+            return GlobalAlignment(matrix=prior, n_inliers=n_inliers, n_matches=n_matches)
+        name, matrix = plausible[int(np.nanargmax(scores))]
+        logger.warning("No ECC refinement converged; keeping the %s estimate unrefined", name)
+        return GlobalAlignment(matrix=matrix, n_inliers=n_inliers, n_matches=n_matches)
 
     scores, count = _gradient_correlation(frame, [frame.to_work(m) for _, m, _ in converged])
     if not np.isnan(scores).all():
