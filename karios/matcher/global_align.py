@@ -30,8 +30,9 @@ Pipeline:
        ECC only corrects a few pixels, so a georeferencing kilometers off needs
        this coarse start.
     4. Detect SIFT keypoints + 128-dim float descriptors on both.
-    5. Match with BFMatcher(NORM_L2), apply Lowe's ratio test + mutual
-       (cross-check) filtering for robustness.
+    5. Match with BFMatcher(NORM_L2), or a FLANN KD-tree for large keypoint
+       sets, apply Lowe's ratio test + mutual (cross-check) filtering for
+       robustness.
     6. Fit a 2D homography (8 DOF) using cv2.findHomography + RANSAC.
     7. Refine with cv2.findTransformECC(MOTION_HOMOGRAPHY) on Sobel gradient
        magnitudes (sensor-invariant), from every initial estimate: RANSAC, the
@@ -66,8 +67,17 @@ SIFT_EDGE_THRESHOLD = 10
 LOWE_RATIO = 0.75
 RANSAC_THRESHOLD_PX = 3.0
 MIN_MATCHES = 4  # cv2.findHomography needs ≥4 point pairs; more = robuster
+# Descriptor pairs above which matching uses a FLANN KD-tree instead of brute
+# force. Brute force compares every pair, 36 min for the 62k x 484k keypoints of
+# a PhiSat scene on a 10 m Sentinel-2 crop, and OpenCV's cannot even take more
+# than 262143 descriptors to match against. The KD-tree search is approximate,
+# which the Lowe ratio and cross-check filters absorb, and takes seconds.
+BRUTE_FORCE_MAX_PAIRS = 100_000_000
+FLANN_TREES = 5
+FLANN_CHECKS = 64
 ECC_MAX_ITERS = 200
 ECC_EPS = 1e-6
+ECC_MARGIN_PX = 64  # ref kept around mon's pre-warped footprint for ECC to move into
 MIN_VALID_PIXELS = 1000  # fewest valid pixels an ECC run or a correlation score needs
 
 # Georeferencing correction limits, with a prior. The search window extends
@@ -351,6 +361,20 @@ def _gradient_correlation(
     return scores, count
 
 
+def _knn_match(query: np.ndarray, train: np.ndarray, k: int) -> list:
+    """k nearest `train` descriptors of each `query` one, brute force or FLANN by size.
+
+    See BRUTE_FORCE_MAX_PAIRS.
+    """
+    if len(query) * len(train) <= BRUTE_FORCE_MAX_PAIRS:
+        return cv2.BFMatcher(cv2.NORM_L2, crossCheck=False).knnMatch(query, train, k=k)
+    kdtree = 1  # FLANN_INDEX_KDTREE
+    matcher = cv2.FlannBasedMatcher(
+        {"algorithm": kdtree, "trees": FLANN_TREES}, {"checks": FLANN_CHECKS}
+    )
+    return matcher.knnMatch(query, train, k=k)
+
+
 def _sift_homography(
     mon: np.ndarray, ref: np.ndarray, sift_nfeatures: int, prior: Optional[np.ndarray]
 ) -> tuple[np.ndarray, int, int]:
@@ -388,10 +412,14 @@ def _sift_homography(
             f"Too few SIFT keypoints: mon={len(kp_mon)} ref={len(kp_ref)} " f"(need ≥{MIN_MATCHES})"
         )
 
-    logger.info("Keypoints detected: mon=%d  ref=%d", len(kp_mon), len(kp_ref))
+    logger.info(
+        "Keypoints detected: mon=%d  ref=%d, matched by %s",
+        len(kp_mon),
+        len(kp_ref),
+        "brute force" if len(kp_mon) * len(kp_ref) <= BRUTE_FORCE_MAX_PAIRS else "FLANN KD-tree",
+    )
 
-    matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
-    knn_fwd = matcher.knnMatch(desc_mon, desc_ref, k=2)
+    knn_fwd = _knn_match(desc_mon, desc_ref, k=2)
 
     # Lowe ratio test (mon → ref direction).
     lowe = []
@@ -405,7 +433,7 @@ def _sift_homography(
     # Mutual cross-check: for each kept mon→ref match, the ref keypoint's
     # nearest mon descriptor must point back to the same mon keypoint.
     if lowe:
-        knn_bwd = matcher.knnMatch(desc_ref, desc_mon, k=1)
+        knn_bwd = _knn_match(desc_ref, desc_mon, k=1)
         bwd_best = {p[0].queryIdx: p[0].trainIdx for p in knn_bwd if p}
         good = [m for m in lowe if bwd_best.get(m.trainIdx) == m.queryIdx]
     else:
@@ -644,21 +672,46 @@ def _refine_with_ecc(
 
     Strategy: pre-warp mon onto ref's canvas using `init`, then ask ECC to
     estimate the small residual 3x3 homography starting from identity,
-    computing the correlation on Sobel gradient magnitudes.
+    computing the correlation on Sobel gradient magnitudes. ECC's residual
+    maps ref onto the pre-warped mon, so its inverse corrects `init`: composed
+    the other way, as it once was, it doubled the starting error instead of
+    removing it.
+
+    Only ref around mon's pre-warped footprint, ECC_MARGIN_PX wider, is used:
+    the correlation only counts mon's pixels, but ECC processes its whole
+    template at every iteration, and a large ref crop around a small mon made
+    it several times slower for the same result.
 
     `init` must be a 3x3 matrix.
 
     Returns (refined_3x3, ecc_score) on success, or (None, nan) on failure.
     """
+    mh, mw = mon_u8.shape
     rh, rw = ref_u8.shape
+    outer = np.array([[-0.5, -0.5], [mw - 0.5, -0.5], [mw - 0.5, mh - 0.5], [-0.5, mh - 0.5]])
+    corners = _footprint_points(init, outer)
+    if not np.isfinite(corners).all():
+        return None, float("nan")
+    x0 = int(np.clip(np.floor(corners[:, 0].min()) - ECC_MARGIN_PX, 0, rw))
+    y0 = int(np.clip(np.floor(corners[:, 1].min()) - ECC_MARGIN_PX, 0, rh))
+    x1 = int(np.clip(np.ceil(corners[:, 0].max()) + ECC_MARGIN_PX, 0, rw))
+    y1 = int(np.clip(np.ceil(corners[:, 1].max()) + ECC_MARGIN_PX, 0, rh))
+    if x1 <= x0 or y1 <= y0:
+        return None, float("nan")
+    crop = np.array([[1.0, 0.0, -x0], [0.0, 1.0, -y0], [0.0, 0.0, 1.0]])
+    init_crop = crop @ init
+    ref_u8 = ref_u8[y0:y1, x0:x1]
+
     warped_mon = cv2.warpPerspective(
         mon_u8,
-        init.astype(np.float32),
-        (rw, rh),
+        init_crop.astype(np.float32),
+        (x1 - x0, y1 - y0),
         flags=cv2.INTER_LINEAR,
         borderValue=0,
     )
-    valid = (warped_mon > 0).astype(np.uint8)
+    # Sobel and ECC's Gaussian read a pixel's neighbours: at the edge of the
+    # data they see the jump to the zero fill, a gradient ref does not have
+    valid = cv2.erode((warped_mon > 0).astype(np.uint8), np.ones((7, 7), np.uint8))
     if valid.sum() < MIN_VALID_PIXELS:
         logger.warning(
             "ECC skipped: pre-warped mon has only %d valid pixels (need >%d)",
@@ -691,7 +744,9 @@ def _refine_with_ecc(
         logger.warning("findTransformECC raised: %s", e)
         return None, float("nan")
 
-    final = residual.astype(np.float64) @ init.astype(np.float64)
+    # ECC's warp maps template (ref) coordinates to input (pre-warped mon) ones,
+    # so the mon → ref correction is its inverse
+    final = np.linalg.inv(crop) @ np.linalg.inv(residual.astype(np.float64)) @ init_crop
     return final, float(cc)
 
 

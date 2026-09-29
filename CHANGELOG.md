@@ -57,6 +57,17 @@
   that image only: the reference and the alternative ECC candidates are no longer written, and
   the command prints the `gdalwarp` call that resamples the reference onto the output grid for
   `karios process`.
+- **`karios align` handles 10 m references**: OpenCV's brute-force matcher refuses more than
+  262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
+  compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
+  FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **ECC refinement in `karios align` corrected the wrong way**: ECC's warp maps the reference
+  onto the pre-warped monitored image, and was composed without inverting it, so every
+  refinement doubled its starting error instead of removing it (a start 2.5 px off ended 5 px
+  off on the other side). Its mask also reached the edge of the data, where the gradients see
+  the jump to the zero fill; eroding it raises the correlation of identical images from 0.77 to
+  0.999. ECC now also works on the reference around the monitored footprint only, 8x faster on
+  a footprint a quarter of the crop.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.

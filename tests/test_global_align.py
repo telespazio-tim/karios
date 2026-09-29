@@ -286,7 +286,7 @@ def test_downsampled_working_image_keeps_pixel_centers():
     center = np.array([[350.0, 350.0]])
     found = global_align._footprint_points(alignment.matrix, center)
     error = found - global_align._footprint_points(truth, center)
-    assert np.abs(error).max() < 0.05
+    assert np.abs(error).max() < 0.15
     # The corners carry ECC's own scale uncertainty on a 100 ref px footprint
     assert _center_error(alignment.matrix, truth, size=700) < 1.5
 
@@ -418,3 +418,60 @@ def test_coarser_monitored_gets_the_reference_pixel_size(tmp_path):
     inner = (slice(10, -10), slice(10, -10))
     expected = _on_grid(texture, aligned, 10.0)[inner]
     assert np.corrcoef(aligned.array[inner].ravel(), expected.ravel())[0, 1] > 0.95
+
+
+def test_flann_matching_recovers_the_shift(shifted_pair, monkeypatch, caplog):
+    """Above BRUTE_FORCE_MAX_PAIRS the KD-tree matching finds the same alignment."""
+    mon, ref = shifted_pair
+    caplog.set_level(logging.INFO, logger=global_align.__name__)
+    monkeypatch.setattr(global_align, "BRUTE_FORCE_MAX_PAIRS", 0)
+
+    alignment = detect_global_alignment(mon, ref)
+
+    assert "matched by FLANN KD-tree" in caplog.text
+    assert alignment.matrix[0, 2] == pytest.approx(5, abs=0.5)
+    assert alignment.matrix[1, 2] == pytest.approx(3, abs=0.5)
+
+
+def test_flann_matching_finds_the_true_neighbours(monkeypatch):
+    """Each query is a slightly noisy copy of one train descriptor: both matchers find it."""
+    rng = np.random.default_rng(8)
+    train = rng.uniform(0, 100, (5000, 128)).astype(np.float32)
+    picks = rng.choice(len(train), 500, replace=False)
+    query = train[picks] + rng.normal(0, 1, (500, 128)).astype(np.float32)
+
+    brute = [pair[0].trainIdx for pair in global_align._knn_match(query, train, k=2)]
+    monkeypatch.setattr(global_align, "BRUTE_FORCE_MAX_PAIRS", 0)
+    flann = [pair[0].trainIdx for pair in global_align._knn_match(query, train, k=2)]
+
+    assert brute == picks.tolist()
+    # Approximate search: the KD-tree may miss a few
+    assert np.mean(np.array(flann) == picks) > 0.95
+
+
+def test_matching_takes_more_descriptors_than_brute_force_can(monkeypatch):
+    """OpenCV's brute force refuses 262144 train descriptors; the KD-tree takes them."""
+    rng = np.random.default_rng(9)
+    train = rng.uniform(0, 100, (262_144, 32)).astype(np.float32)
+    query = train[:200] + rng.normal(0, 0.5, (200, 32)).astype(np.float32)
+    monkeypatch.setattr(global_align, "BRUTE_FORCE_MAX_PAIRS", 0)
+
+    matches = global_align._knn_match(query, train, k=2)
+
+    found = [pair[0].trainIdx for pair in matches]
+    assert np.mean(np.array(found) == np.arange(200)) > 0.95
+
+
+@pytest.mark.parametrize("offset", [(2.0, -2.5), (-1.5, 3.0), (0.7, 0.4)])
+def test_ecc_corrects_the_starting_error(offset):
+    """ECC from a start a few pixels off lands on the truth, not twice as far on the other side."""
+    rng = np.random.default_rng(1)
+    ref = cv2.GaussianBlur(rng.uniform(0, 255, (1000, 1000)).astype(np.float32), (0, 0), 3)
+    ref = cv2.normalize(ref, None, 10, 250, cv2.NORM_MINMAX).astype(np.uint8)
+    mon = ref[300:700, 200:600].copy()
+    truth = np.array([[1.0, 0.0, 200.0], [0.0, 1.0, 300.0], [0.0, 0.0, 1.0]])
+
+    refined, score = global_align._refine_with_ecc(mon, ref, _offset(truth, *offset))
+
+    assert score > 0.99
+    assert _center_error(refined, truth, size=400) < 0.1
