@@ -34,6 +34,18 @@
 
 ### Fix
 
+- **`karios align` recovers large georeferencing errors between images of different
+  resolutions**: SIFT ran on both whole images at native resolution, so a monitored image 7x
+  finer than the reference had keypoints of details the reference cannot show, and its small
+  footprint left most reference keypoints without a counterpart (166 of 5000 on a
+  PhiSat/Sentinel-2 pair); ECC, which only corrects a few pixels, could not recover a
+  georeferencing 5 km off either, and the highest ECC score then picked a -144° rotation from 5
+  RANSAC inliers. With a geotransform prior, matching now runs at the coarser resolution on the
+  reference cropped around the monitored footprint, a correlation search corrects the prior's
+  translation as an extra ECC start, implausible estimates are rejected, and the others compare
+  on common pixels. On that pair: 26/42 RANSAC inliers instead of 5/15, and `karios process` on
+  the output measures 799 key points with a 0.7 px spread, against 65 with 2.4-3.3 px for ECC
+  from the georeferencing alone.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.

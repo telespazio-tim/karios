@@ -799,11 +799,14 @@ karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_globa
 The pipeline:
 
 1. **Preprocess** both inputs to uint8 with a percentile stretch and CLAHE, which equalises radiometry between sensors.
-2. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default every keypoint is kept; `--sift-nfeatures N` keeps only the N strongest per image, which bounds the brute-force matching time and memory on large images.
-3. **Match** descriptors with a brute-force L2 matcher, then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
-4. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC.
-5. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), starting from both the RANSAC fit and — when available — a geotransform-derived prior. The highest ECC wins.
-6. **Warp** the monitored image with `cv2.warpPerspective` onto the reference's pixel grid. Reference is passed through unchanged. Both outputs share the reference's geotransform so they overlay directly in QGIS.
+2. **Work at a common resolution** when both images are georeferenced in the same CRS: their geotransforms give a prior homography, the finer image is area-averaged down to the coarser one's pixel size, and the reference is cropped to the monitored footprint plus a search margin of half its size. Otherwise a much finer monitored image has keypoints of details the reference cannot show, and a small footprint leaves most reference keypoints without a counterpart.
+3. **Search the translation** left by the georeferencing, by zero-mean correlation of a fully valid central block of the monitored image over the search window. ECC only corrects a few pixels, so a georeferencing kilometres off needs this coarse start.
+4. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default every keypoint is kept; `--sift-nfeatures N` keeps only the N strongest per image, which bounds the brute-force matching time and memory on large images.
+5. **Match** descriptors with a brute-force L2 matcher, then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
+6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
+7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), from every starting point: the RANSAC fit, the prior and the translation search.
+8. **Select**: with a prior, estimates too far from it to be a georeferencing correction are rejected (a reflection, a scale change beyond ×1.5, an anisotropy beyond 1.3, a rotation beyond 30°, or a move beyond the search window), and the gradient correlation of the others, computed on the pixels they all cover, picks the result. Without a prior, the RANSAC fit refined by ECC is kept.
+9. **Warp** the monitored image with `cv2.warpPerspective` onto the reference's pixel grid. Reference is passed through unchanged. Both outputs share the reference's geotransform so they overlay directly in QGIS.
 
 The command writes:
 

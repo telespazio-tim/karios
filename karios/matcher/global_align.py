@@ -20,14 +20,28 @@
 Pipeline:
     1. Preprocess both mon and ref to uint8 with CLAHE (equalizes radiometry
        between sensors).
-    2. Detect SIFT keypoints + 128-dim float descriptors on both.
-    3. Match with BFMatcher(NORM_L2), apply Lowe's ratio test + mutual
+    2. With a geotransform prior, work at a common resolution: the finer image
+       is area-averaged down to the coarser one's pixel size and ref is cropped
+       to mon's footprint plus a search margin. A mon several times finer than
+       ref otherwise has keypoints of details ref cannot show, and a small mon
+       footprint leaves most ref keypoints without any counterpart.
+    3. With a prior, search the translation left by the georeferencing: zero-mean
+       correlation of a fully valid central block of mon over the search window.
+       ECC only corrects a few pixels, so a georeferencing kilometers off needs
+       this coarse start.
+    4. Detect SIFT keypoints + 128-dim float descriptors on both.
+    5. Match with BFMatcher(NORM_L2), apply Lowe's ratio test + mutual
        (cross-check) filtering for robustness.
-    4. Fit a 2D homography (8 DOF) using cv2.findHomography + RANSAC.
-    5. Refine with cv2.findTransformECC(MOTION_HOMOGRAPHY) on Sobel gradient
-       magnitudes (sensor-invariant), trying several initial estimates and
-       keeping the one with the highest ECC score.
-    6. Apply the resulting 3x3 homography to mon (and mask) via
+    6. Fit a 2D homography (8 DOF) using cv2.findHomography + RANSAC.
+    7. Refine with cv2.findTransformECC(MOTION_HOMOGRAPHY) on Sobel gradient
+       magnitudes (sensor-invariant), from every initial estimate: RANSAC, the
+       prior and the translation search.
+    8. With a prior, reject the refined estimates too far from it to be a
+       georeferencing correction (reflection, scale, anisotropy, rotation or
+       translation beyond the limits below), then keep the best gradient
+       correlation, computed on the pixels all of them cover so the scores
+       compare.
+    9. Apply the resulting 3x3 homography to mon (and mask) via
        cv2.warpPerspective, rendered onto ref's canvas.
 """
 
@@ -54,6 +68,15 @@ RANSAC_THRESHOLD_PX = 3.0
 MIN_MATCHES = 4  # cv2.findHomography needs ≥4 point pairs; more = robuster
 ECC_MAX_ITERS = 200
 ECC_EPS = 1e-6
+MIN_VALID_PIXELS = 1000  # fewest valid pixels an ECC run or a correlation score needs
+
+# Georeferencing correction limits, with a prior. The search window extends
+# past mon's prior footprint by this share of its size on each side.
+GEOREF_SEARCH_FRACTION = 0.5
+MAX_SCALE_CHANGE = 1.5  # largest scale factor from the prior, either way
+MAX_ANISOTROPY = 1.3  # largest ratio between the scale factors of both axes
+MAX_ROTATION_DEG = 30.0
+MIN_SHIFT_BLOCK_PX = 32  # smallest central block the translation search correlates
 
 
 _NUMPY_TO_GDAL_DTYPE = {
@@ -120,29 +143,207 @@ def _prior_from_georefs(
     )
 
 
-def detect_global_alignment(
-    mon_arr: np.ndarray,
-    ref_arr: np.ndarray,
-    prior: Optional[np.ndarray] = None,
-    sift_nfeatures: int = SIFT_NFEATURES,
-) -> GlobalAlignment:
-    """Estimate a 2D homography (8 DOF) that maps mon pixels into ref pixels,
-    via SIFT + RANSAC, then refined with ECC on Sobel gradient magnitudes.
+@dataclass
+class _WorkFrame:
+    """mon and a crop of ref at a common resolution, with the maps back to full resolution."""
 
-    `prior` (optional 3x3 homography from geotransforms) provides an extra
-    ECC starting point but is not used to filter matches.
+    mon: np.ndarray  # uint8 mon at the working resolution
+    mon_valid: np.ndarray  # bool, pixels of `mon` fully covered by valid data
+    ref: np.ndarray  # uint8 crop of ref at the working resolution
+    mon_to_work: np.ndarray  # 3x3, mon full resolution px -> `mon` px
+    ref_to_work: np.ndarray  # 3x3, ref full resolution px -> `ref` crop px
+    margin: float  # search margin around mon's prior footprint, in `ref` px
 
-    `sift_nfeatures` is the number of SIFT keypoints kept in each image, the
-    ones with the strongest response (OpenCV may keep a few more tied with the
-    weakest one), 0 keeps them all. Limiting it bounds the time and memory of
-    the brute-force matching on large images.
+    def to_work(self, matrix: np.ndarray) -> np.ndarray:
+        """mon → ref homography at full resolution, expressed between the working images."""
+        return self.ref_to_work @ matrix @ np.linalg.inv(self.mon_to_work)
+
+    def to_full(self, matrix: np.ndarray) -> np.ndarray:
+        """Homography between the working images, expressed at full resolution."""
+        return np.linalg.inv(self.ref_to_work) @ matrix @ self.mon_to_work
+
+
+def _valid_pixels(arr: np.ndarray) -> np.ndarray:
+    """Finite, non-zero pixels: zero is the fill value the alignment treats as no data."""
+    return np.isfinite(arr) & (arr != 0)
+
+
+def _footprint(matrix: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Corners of a width x height image mapped by `matrix`, as a 4x2 array."""
+    corners = np.array([[0, 0, 1], [width, 0, 1], [width, height, 1], [0, height, 1]], float).T
+    mapped = matrix @ corners
+    return (mapped[:2] / mapped[2]).T
+
+
+def _work_frame(
+    mon_u8: np.ndarray, mon_valid: np.ndarray, ref_u8: np.ndarray, prior: np.ndarray
+) -> Optional[_WorkFrame]:
+    """Bring mon and ref to the coarser resolution and crop ref around mon's prior footprint.
+
+    Returns None when the prior footprint does not overlap ref.
     """
-    if sift_nfeatures < 0:
-        raise ValueError(f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}")
+    # Pixel size of mon relative to ref, from the prior's area scale
+    scale = float(np.sqrt(abs(np.linalg.det(prior[:2, :2]))))
+    mh, mw = mon_u8.shape
+    rh, rw = ref_u8.shape
 
-    mon = _preprocess(mon_arr)
-    ref = _preprocess(ref_arr)
+    mon_work, valid_work = mon_u8, mon_valid
+    if scale < 1:
+        size = (max(1, round(mw * scale)), max(1, round(mh * scale)))
+        mon_work = cv2.resize(mon_u8, size, interpolation=cv2.INTER_AREA)
+        # A working pixel is valid only when every mon pixel under it is
+        coverage = cv2.resize(mon_valid.astype(np.float32), size, interpolation=cv2.INTER_AREA)
+        valid_work = coverage > 0.999
+    mon_to_work = np.diag([mon_work.shape[1] / mw, mon_work.shape[0] / mh, 1.0])
 
+    ref_work = ref_u8
+    if scale > 1:
+        size = (max(1, round(rw / scale)), max(1, round(rh / scale)))
+        ref_work = cv2.resize(ref_u8, size, interpolation=cv2.INTER_AREA)
+    ref_scale = np.diag([ref_work.shape[1] / rw, ref_work.shape[0] / rh, 1.0])
+
+    corners = _footprint(ref_scale @ prior, mw, mh)
+    (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
+    margin = GEOREF_SEARCH_FRACTION * max(x1 - x0, y1 - y0)
+    cx0, cy0 = max(0, int(np.floor(x0 - margin))), max(0, int(np.floor(y0 - margin)))
+    cx1 = min(ref_work.shape[1], int(np.ceil(x1 + margin)))
+    cy1 = min(ref_work.shape[0], int(np.ceil(y1 + margin)))
+    if cx1 <= cx0 or cy1 <= cy0:
+        return None
+
+    crop = np.array([[1.0, 0.0, -cx0], [0.0, 1.0, -cy0], [0.0, 0.0, 1.0]])
+    return _WorkFrame(
+        mon=mon_work,
+        mon_valid=valid_work,
+        ref=ref_work[cy0:cy1, cx0:cx1],
+        mon_to_work=mon_to_work,
+        ref_to_work=crop @ ref_scale,
+        margin=margin,
+    )
+
+
+def _search_translation(frame: _WorkFrame, start: np.ndarray) -> Optional[np.ndarray]:
+    """Correct the translation of `start` (working images homography) by template matching.
+
+    Correlates the largest fully valid square block centered in mon with the
+    whole ref crop, zero-mean normalized so the radiometry of each sensor does
+    not matter. Assumes `start` keeps mon north-up at the working scale, as a
+    geotransform prior between north-up images does. Returns None when mon has
+    no valid central block large enough.
+    """
+    mh, mw = frame.mon.shape
+    cx, cy = mw // 2, mh // 2
+    if not frame.mon_valid[cy, cx]:
+        return None
+    half = 1
+    while (
+        half < min(cx, cy, mw - cx, mh - cy)
+        and frame.mon_valid[cy - half - 1 : cy + half + 1, cx - half - 1 : cx + half + 1].all()
+    ):
+        half += 1
+    if 2 * half < MIN_SHIFT_BLOCK_PX:
+        logger.info("Translation search skipped: valid central block of %d px only", 2 * half)
+        return None
+    block = frame.mon[cy - half : cy + half, cx - half : cx + half]
+    if block.shape[0] > frame.ref.shape[0] or block.shape[1] > frame.ref.shape[1]:
+        return None
+
+    scores = cv2.matchTemplate(frame.ref, block, cv2.TM_CCOEFF_NORMED)
+    _, peak, _, (bx, by) = cv2.minMaxLoc(scores)
+    predicted = start @ np.array([cx - half, cy - half, 1.0])
+    predicted = predicted[:2] / predicted[2]
+    dx, dy = bx - predicted[0], by - predicted[1]
+    logger.info(
+        "Translation search: %dx%d px block, shift from prior=(%+.1f, %+.1f) working px  "
+        "correlation=%.3f",
+        2 * half,
+        2 * half,
+        dx,
+        dy,
+        peak,
+    )
+    shift = np.array([[1.0, 0.0, dx], [0.0, 1.0, dy], [0.0, 0.0, 1.0]])
+    return shift @ start
+
+
+def _plausibility(matrix: np.ndarray, prior: np.ndarray, frame: _WorkFrame) -> Optional[str]:
+    """Why `matrix` is too far from `prior` to be a georeferencing correction, None if it is not.
+
+    Compares the linear parts at mon's center, where the homography is
+    linearized, and the positions of mon's center.
+    """
+    mh, mw = frame.mon.shape
+    center = np.linalg.inv(frame.mon_to_work) @ np.array([mw / 2, mh / 2, 1.0])
+
+    def local(h: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Position and 2x2 Jacobian of h at mon's center."""
+        p = h @ center
+        w = p[2]
+        jacobian = (h[:2, :2] * w - np.outer(p[:2], h[2, :2])) / w**2
+        return p[:2] / w, jacobian
+
+    pos, jacobian = local(matrix)
+    prior_pos, prior_jacobian = local(prior)
+    relative = jacobian @ np.linalg.inv(prior_jacobian)
+    if np.linalg.det(relative) <= 0:
+        return "mirrors the image"
+    u, singular, vt = np.linalg.svd(relative)
+    if singular[0] > MAX_SCALE_CHANGE or singular[1] < 1 / MAX_SCALE_CHANGE:
+        return f"scales it by {singular[1]:.2f}-{singular[0]:.2f} (limit x{MAX_SCALE_CHANGE})"
+    if singular[0] / singular[1] > MAX_ANISOTROPY:
+        return f"anisotropy {singular[0] / singular[1]:.2f} (limit {MAX_ANISOTROPY})"
+    rotation = u @ vt
+    angle = float(np.degrees(np.arctan2(rotation[1, 0], rotation[0, 0])))
+    if abs(angle) > MAX_ROTATION_DEG:
+        return f"rotates it by {angle:+.1f}° (limit {MAX_ROTATION_DEG}°)"
+    # Margin in ref full resolution px, from the working one
+    margin = frame.margin / frame.ref_to_work[0, 0]
+    distance = float(np.hypot(*(pos - prior_pos)))
+    if distance > margin * np.sqrt(2):
+        return f"moves its center by {distance:.0f} px (search window {margin:.0f} px)"
+    return None
+
+
+def _gradient_correlation(
+    frame: _WorkFrame, matrices: list[np.ndarray]
+) -> tuple[list[float], int]:
+    """Zero-mean correlation of Sobel magnitudes between ref and mon warped by each matrix.
+
+    Computed on the pixels every warped mon covers, so the scores compare.
+    `matrices` map the working images. Returns the scores and the pixel count.
+    """
+    rh, rw = frame.ref.shape
+    template = _sobel_magnitude(frame.ref)
+    valid_u8 = frame.mon_valid.astype(np.uint8)
+    warped, common = [], np.ones((rh, rw), dtype=bool)
+    for matrix in matrices:
+        m32 = matrix.astype(np.float32)
+        warped.append(
+            _sobel_magnitude(cv2.warpPerspective(frame.mon, m32, (rw, rh), flags=cv2.INTER_LINEAR))
+        )
+        covered = cv2.warpPerspective(valid_u8, m32, (rw, rh), flags=cv2.INTER_NEAREST)
+        # Sobel reads a pixel's neighbours: keep away from the edge of the data
+        common &= cv2.erode(covered, np.ones((5, 5), np.uint8)) > 0
+    count = int(common.sum())
+    if count < MIN_VALID_PIXELS:
+        return [float("nan")] * len(matrices), count
+
+    t = template[common] - template[common].mean()
+    scores = []
+    for image in warped:
+        i = image[common] - image[common].mean()
+        denominator = float(np.sqrt((t * t).sum() * (i * i).sum()))
+        scores.append(float((t * i).sum() / denominator) if denominator > 0 else float("nan"))
+    return scores, count
+
+
+def _sift_homography(
+    mon: np.ndarray, ref: np.ndarray, sift_nfeatures: int, prior: Optional[np.ndarray]
+) -> tuple[np.ndarray, int, int]:
+    """SIFT + Lowe + cross-check + RANSAC homography mon → ref, between these two images.
+
+    Returns (matrix, inliers, matches). Raises RuntimeError when SIFT or RANSAC fail.
+    """
     mh, mw = mon.shape
     rh, rw = ref.shape
     logger.info(
@@ -214,9 +415,7 @@ def detect_global_alignment(
 
     if prior is not None:
         # Informational only: report how the matches sit relative to the prior
-        # (the prior's upper-left 2x3 captures translation + scale; perspective
-        # rows are zero in geotransform priors).
-        predicted = (prior[:2, :2] @ src_pts.T).T + prior[:2, 2]
+        predicted = _footprint_points(prior, src_pts)
         errors = np.linalg.norm(dst_pts - predicted, axis=1)
         logger.info(
             "Match error vs geotransform prior: median=%.1fpx  min=%.1fpx  max=%.1fpx",
@@ -244,44 +443,137 @@ def detect_global_alignment(
         len(good),
         100.0 * n_inliers / len(good),
     )
+    return matrix, n_inliers, len(good)
 
-    # ECC refinement on Sobel gradients (sensor-invariant), tried from every
-    # available starting point. The highest ECC wins.
-    candidates: list[tuple[str, np.ndarray]] = [("RANSAC", matrix)]
+
+def _footprint_points(matrix: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """Nx2 `points` mapped by the homography `matrix`."""
+    mapped = np.column_stack([points, np.ones(len(points))]) @ matrix.T
+    return mapped[:, :2] / mapped[:, 2:]
+
+
+def detect_global_alignment(
+    mon_arr: np.ndarray,
+    ref_arr: np.ndarray,
+    prior: Optional[np.ndarray] = None,
+    sift_nfeatures: int = SIFT_NFEATURES,
+) -> GlobalAlignment:
+    """Estimate a 2D homography (8 DOF) that maps mon pixels into ref pixels,
+    via SIFT + RANSAC, then refined with ECC on Sobel gradient magnitudes.
+
+    `prior` (optional 3x3 homography from geotransforms) sets the working
+    resolution and the search window, gives two more ECC starting points, the
+    prior itself and its translation corrected by correlation, and bounds how
+    far the result may depart from it. See the module docstring.
+
+    `sift_nfeatures` is the number of SIFT keypoints kept in each image, the
+    ones with the strongest response (OpenCV may keep a few more tied with the
+    weakest one), 0 keeps them all. Limiting it bounds the time and memory of
+    the brute-force matching on large images.
+    """
+    if sift_nfeatures < 0:
+        raise ValueError(f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}")
+
+    mon = _preprocess(mon_arr)
+    ref = _preprocess(ref_arr)
+
+    frame = None
     if prior is not None:
-        candidates.append(("prior", prior))
+        frame = _work_frame(mon, _valid_pixels(mon_arr), ref, prior)
+        if frame is None:
+            logger.warning("Prior footprint does not overlap ref: prior ignored")
+            prior = None
+        else:
+            logger.info(
+                "Working images: mon=%dx%d  ref crop=%dx%d  search margin=%.0f px",
+                frame.mon.shape[1],
+                frame.mon.shape[0],
+                frame.ref.shape[1],
+                frame.ref.shape[0],
+                frame.margin,
+            )
 
+    if frame is None:
+        return _align_without_prior(mon, ref, sift_nfeatures)
+
+    # Starting points, as homographies between the working images
+    starts: list[tuple[str, np.ndarray]] = []
+    n_inliers = n_matches = 0
+    try:
+        ransac, n_inliers, n_matches = _sift_homography(
+            frame.mon, frame.ref, sift_nfeatures, frame.to_work(prior)
+        )
+        starts.append(("RANSAC", ransac))
+    except RuntimeError as e:
+        logger.warning("SIFT estimate unavailable: %s", e)
+    starts.append(("prior", frame.to_work(prior)))
+    shifted = _search_translation(frame, frame.to_work(prior))
+    if shifted is not None:
+        starts.append(("shift", shifted))
+
+    # ECC refinement on Sobel gradients (sensor-invariant) from every start,
+    # keeping the refined estimates plausible as a georeferencing correction
     converged: list[tuple[str, np.ndarray, float]] = []
-    best_matrix: Optional[np.ndarray] = None
-    best_ecc = -np.inf
-    best_source = ""
-    for name, init in candidates:
-        refined, ecc_score = _refine_with_ecc(mon, ref, init)
+    for name, init in starts:
+        refined, ecc_score = _refine_with_ecc(frame.mon, frame.ref, init)
         if refined is None:
             logger.warning("ECC from %s: failed", name)
             continue
+        full = frame.to_full(refined)
+        reason = _plausibility(full, prior, frame)
         logger.info(
-            "ECC from %s: %s  ECC=%.4f",
+            "ECC from %s: %s  ECC=%.4f%s",
             name,
-            _decompose(refined),
+            _decompose(full),
             ecc_score,
+            f"  rejected: {reason}" if reason else "",
         )
-        converged.append((name, refined, ecc_score))
-        if ecc_score > best_ecc:
-            best_ecc = ecc_score
-            best_matrix = refined
-            best_source = name
+        if reason is None:
+            converged.append((name, full, ecc_score))
 
-    if best_matrix is not None:
-        logger.info("Selected alignment: ECC-refined from %s (ECC=%.4f)", best_source, best_ecc)
-        matrix = best_matrix
+    if not converged:
+        logger.warning("No plausible refined alignment; keeping the geotransform prior")
+        return GlobalAlignment(matrix=prior, n_inliers=n_inliers, n_matches=n_matches)
+
+    scores, count = _gradient_correlation(frame, [frame.to_work(m) for _, m, _ in converged])
+    if not np.isnan(scores).all():
+        best = int(np.nanargmax(scores))
+        logger.info(
+            "Gradient correlation on %d common px: %s",
+            count,
+            "  ".join(f"{name}={score:.4f}" for (name, _, _), score in zip(converged, scores)),
+        )
     else:
-        logger.warning("All ECC refinements failed; keeping RANSAC estimate")
+        # Too few pixels in common: fall back to each run's own ECC score
+        best = int(np.argmax([ecc for _, _, ecc in converged]))
+    name, matrix, ecc_score = converged[best]
+    logger.info("Selected alignment: ECC-refined from %s (ECC=%.4f)", name, ecc_score)
 
     return GlobalAlignment(
         matrix=matrix,
         n_inliers=n_inliers,
-        n_matches=len(good),
+        n_matches=n_matches,
+        candidates=converged,
+    )
+
+
+def _align_without_prior(mon: np.ndarray, ref: np.ndarray, sift_nfeatures: int) -> GlobalAlignment:
+    """SIFT + RANSAC on the whole images, refined with ECC, when no prior is available."""
+    matrix, n_inliers, n_matches = _sift_homography(mon, ref, sift_nfeatures, None)
+
+    converged: list[tuple[str, np.ndarray, float]] = []
+    refined, ecc_score = _refine_with_ecc(mon, ref, matrix)
+    if refined is None:
+        logger.warning("ECC refinement failed; keeping RANSAC estimate")
+    else:
+        logger.info("ECC from RANSAC: %s  ECC=%.4f", _decompose(refined), ecc_score)
+        converged.append(("RANSAC", refined, ecc_score))
+        matrix = refined
+
+    return GlobalAlignment(
+        matrix=matrix,
+        n_inliers=n_inliers,
+        n_matches=n_matches,
         candidates=converged,
     )
 
@@ -341,10 +633,11 @@ def _refine_with_ecc(
         borderValue=0,
     )
     valid = (warped_mon > 0).astype(np.uint8)
-    if valid.sum() < 1000:
+    if valid.sum() < MIN_VALID_PIXELS:
         logger.warning(
-            "ECC skipped: pre-warped mon has only %d valid pixels (need >1000)",
+            "ECC skipped: pre-warped mon has only %d valid pixels (need >%d)",
             int(valid.sum()),
+            MIN_VALID_PIXELS,
         )
         return None, float("nan")
 
