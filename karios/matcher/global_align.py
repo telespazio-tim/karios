@@ -42,7 +42,9 @@ Pipeline:
        correlation, computed on the pixels all of them cover so the scores
        compare.
     9. Apply the resulting 3x3 homography to mon (and mask) via
-       cv2.warpPerspective, rendered onto ref's canvas.
+       cv2.warpPerspective, rendered over mon's footprint in ref at a whole
+       fraction of ref's pixel size, fine enough to keep mon's resolution;
+       ref is resampled onto the same grid.
 """
 
 import logging
@@ -77,6 +79,9 @@ MAX_SCALE_CHANGE = 1.5  # largest scale factor from the prior, either way
 MAX_ANISOTROPY = 1.3  # largest ratio between the scale factors of both axes
 MAX_ROTATION_DEG = 30.0
 MIN_SHIFT_BLOCK_PX = 32  # smallest central block the translation search correlates
+# Output pixel sizes within this share of mon's estimated one count as keeping
+# its resolution: the scale estimate itself carries about a percent of noise
+OUTPUT_RESOLUTION_TOLERANCE = 0.02
 
 
 _NUMPY_TO_GDAL_DTYPE = {
@@ -723,6 +728,100 @@ def _write_geotiff(
     dataset = None
 
 
+@dataclass
+class OutputGrid:
+    """Pixel grid the aligned outputs are written on, nested in ref's grid.
+
+    `factor` output pixels span one ref pixel on each axis; the grid covers
+    ref pixels [x0, x0 + width / factor) x [y0, y0 + height / factor).
+    """
+
+    factor: int
+    x0: int
+    y0: int
+    width: int
+    height: int
+
+    @property
+    def from_ref(self) -> np.ndarray:
+        """3x3 map from ref pixels to output pixels."""
+        offset = np.array([[1.0, 0.0, -self.x0], [0.0, 1.0, -self.y0], [0.0, 0.0, 1.0]])
+        return _pixel_scale(self.factor, self.factor) @ offset
+
+
+def _valid_outline(valid: np.ndarray, step: int = 16) -> np.ndarray:
+    """Convex outline of the valid pixels, as the pixel edges enclosing them (Nx2, x y).
+
+    Rows are sampled every `step` pixels and each sample is widened by a step,
+    so the outline may exceed the data by up to `step` pixels but never cuts
+    into it. Falls back to the image edges when no pixel is valid.
+    """
+    h, w = valid.shape
+    points = []
+    for y in range(0, h, step):
+        band = valid[y : y + step].any(axis=0)
+        cols = np.flatnonzero(band)
+        if cols.size:
+            bottom = min(y + step, h)
+            points += [(cols[0], y), (cols[-1] + 1, y), (cols[0], bottom), (cols[-1] + 1, bottom)]
+    if not points:
+        return np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=float)
+    hull = cv2.convexHull(np.array(points, dtype=np.float32))
+    return hull.reshape(-1, 2).astype(float)
+
+
+def _output_grid(
+    matrix: np.ndarray, mon_valid: np.ndarray, ref_shape: tuple
+) -> OutputGrid:
+    """Grid over mon's valid footprint in ref, `factor` times finer than ref.
+
+    `factor` is the smallest integer that does not coarsen mon beyond
+    OUTPUT_RESOLUTION_TOLERANCE, from mon's pixel size in ref pixels under
+    `matrix` at its center: a monitored image 7.2 times finer than ref gets a
+    grid 8 times finer, one 4 times finer a grid 4 times finer even when the
+    estimate says 4.01. A coarser mon gets ref's own grid. Nesting in ref's
+    grid keeps both outputs on ref's pixel edges.
+    """
+    mh, mw = mon_valid.shape
+    rh, rw = ref_shape
+    center = np.array([mw / 2, mh / 2, 1.0])
+    p = matrix @ center
+    jacobian = (matrix[:2, :2] * p[2] - np.outer(p[:2], matrix[2, :2])) / p[2] ** 2
+    mon_px = float(np.sqrt(abs(np.linalg.det(jacobian))))  # mon pixel side in ref pixels
+    factor = max(1, int(np.ceil((1 - OUTPUT_RESOLUTION_TOLERANCE) / mon_px)))
+
+    # The valid data's outline in ref, from pixel edges to OpenCV's centers on
+    # integers and back: edges sit half a pixel out of centers
+    edges = _footprint_points(matrix, _valid_outline(mon_valid) - 0.5) + 0.5
+    x0 = int(np.clip(np.floor(edges[:, 0].min()), 0, rw))
+    y0 = int(np.clip(np.floor(edges[:, 1].min()), 0, rh))
+    x1 = int(np.clip(np.ceil(edges[:, 0].max()), 0, rw))
+    y1 = int(np.clip(np.ceil(edges[:, 1].max()), 0, rh))
+    if x1 <= x0 or y1 <= y0:
+        raise RuntimeError("The aligned monitored image does not overlap the reference")
+    return OutputGrid(factor, x0, y0, (x1 - x0) * factor, (y1 - y0) * factor)
+
+
+def _resample_ref(ref_arr: np.ndarray, grid: OutputGrid) -> np.ndarray:
+    """ref on `grid`: cropped when it has ref's pixel size, cubic interpolation otherwise."""
+    rows = slice(grid.y0, grid.y0 + grid.height // grid.factor)
+    cols = slice(grid.x0, grid.x0 + grid.width // grid.factor)
+    if grid.factor == 1:
+        return ref_arr[rows, cols].copy()
+    upsampled = cv2.warpPerspective(
+        ref_arr.astype(np.float32),
+        grid.from_ref.astype(np.float32),
+        (grid.width, grid.height),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+    if np.issubdtype(ref_arr.dtype, np.integer):
+        # Cubic interpolation overshoots at edges: keep inside the integer type
+        info = np.iinfo(ref_arr.dtype)
+        upsampled = np.clip(np.round(upsampled), info.min, info.max)
+    return upsampled.astype(ref_arr.dtype)
+
+
 def apply_global_alignment(
     monitored: GdalRasterImage,
     reference: GdalRasterImage,
@@ -735,9 +834,13 @@ def apply_global_alignment(
     Optional[GdalRasterImage],
     GlobalAlignment,
 ]:
-    """Detect the homography, apply to monitored (and mask), render onto ref's canvas.
+    """Detect the homography, apply to monitored (and mask), render over mon's footprint in ref.
 
-    Returns (aligned_mon, ref_passthrough, aligned_mask, alignment_info). The
+    The outputs share a grid nested in ref's, covering mon's footprint at a
+    whole fraction of ref's pixel size that keeps mon's resolution, see
+    _output_grid(). ref is resampled onto it.
+
+    Returns (aligned_mon, ref_on_grid, aligned_mask, alignment_info). The
     new rasters are written to `out_dir` so the rest of the pipeline can
     operate on them as if they were the originals. `sift_nfeatures` limits the
     SIFT keypoints kept per image, see detect_global_alignment().
@@ -758,17 +861,37 @@ def apply_global_alignment(
         mon_arr, ref_arr, prior=prior, sift_nfeatures=sift_nfeatures
     )
 
-    # The homography maps mon pixel coords → ref pixel coords. The warped mon
-    # is rendered onto ref's canvas and saved with ref's geotransform — both
-    # outputs then share a pixel grid for direct overlay/comparison.
-    rh, rw = ref_arr.shape
-    warp_m = alignment.matrix
+    # The homography maps mon pixel coords → ref pixel coords. Both outputs
+    # are rendered on a grid over mon's footprint nested in ref's, fine enough
+    # to keep mon's resolution, so they overlay directly without losing detail.
+    mon_valid = _valid_pixels(mon_arr)
+    if monitored.no_data_value is not None:
+        mon_valid &= mon_arr != monitored.no_data_value
+    grid = _output_grid(alignment.matrix, mon_valid, ref_arr.shape)
+    out_size = (grid.width, grid.height)
+    warp_m = grid.from_ref @ alignment.matrix
+    x_min = reference.x_min + grid.x0 * reference.x_res
+    y_max = reference.y_max + grid.y0 * reference.y_res
+    x_res = reference.x_res / grid.factor
+    y_res = reference.y_res / grid.factor
+    logger.info(
+        "Output grid: %dx%d px of %.3f x %.3f, %d per ref pixel, over ref pixels x=%d-%d y=%d-%d",
+        grid.width,
+        grid.height,
+        x_res,
+        abs(y_res),
+        grid.factor,
+        grid.x0,
+        grid.x0 + grid.width // grid.factor,
+        grid.y0,
+        grid.y0 + grid.height // grid.factor,
+    )
 
     border_mon = float(monitored.no_data_value) if monitored.no_data_value is not None else 0.0
     aligned_mon = cv2.warpPerspective(
         mon_arr.astype(np.float32),
         warp_m,
-        (rw, rh),
+        out_size,
         flags=cv2.INTER_LINEAR,
         borderValue=border_mon,
     ).astype(mon_arr.dtype)
@@ -783,20 +906,20 @@ def apply_global_alignment(
     _write_geotiff(
         mon_out,
         aligned_mon,
-        reference.x_min,
-        reference.y_max,
-        reference.x_res,
-        reference.y_res,
+        x_min,
+        y_max,
+        x_res,
+        y_res,
         reference.projection,
         monitored.no_data_value,
     )
     _write_geotiff(
         ref_out,
-        ref_arr,
-        reference.x_min,
-        reference.y_max,
-        reference.x_res,
-        reference.y_res,
+        _resample_ref(ref_arr, grid),
+        x_min,
+        y_max,
+        x_res,
+        y_res,
         reference.projection,
         reference.no_data_value,
     )
@@ -809,8 +932,8 @@ def apply_global_alignment(
             continue
         cand_warped = cv2.warpPerspective(
             mon_arr.astype(np.float32),
-            cand_matrix.astype(np.float32),
-            (rw, rh),
+            (grid.from_ref @ cand_matrix).astype(np.float32),
+            out_size,
             flags=cv2.INTER_LINEAR,
             borderValue=border_mon,
         ).astype(mon_arr.dtype)
@@ -819,10 +942,10 @@ def apply_global_alignment(
         _write_geotiff(
             cand_path,
             cand_warped,
-            reference.x_min,
-            reference.y_max,
-            reference.x_res,
-            reference.y_res,
+            x_min,
+            y_max,
+            x_res,
+            y_res,
             reference.projection,
             monitored.no_data_value,
         )
@@ -833,7 +956,7 @@ def apply_global_alignment(
         warped_mask = cv2.warpPerspective(
             mask.array.astype(np.uint8),
             warp_m,
-            (rw, rh),
+            out_size,
             flags=cv2.INTER_NEAREST,
             borderValue=0,
         )
@@ -843,10 +966,10 @@ def apply_global_alignment(
         _write_geotiff(
             mask_out,
             warped_mask,
-            reference.x_min,
-            reference.y_max,
-            reference.x_res,
-            reference.y_res,
+            x_min,
+            y_max,
+            x_res,
+            y_res,
             reference.projection,
             None,
             gdal_dtype=gdal.GDT_Byte,

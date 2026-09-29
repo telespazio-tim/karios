@@ -10,7 +10,10 @@ import numpy as np
 import pytest
 from click.testing import CliRunner
 
+from osgeo import gdal
+
 from karios.cli import commands
+from karios.core.image import GdalRasterImage
 from karios.matcher import global_align
 from karios.matcher.global_align import detect_global_alignment
 
@@ -281,9 +284,8 @@ def test_downsampled_working_image_keeps_pixel_centers():
 
     # Scaling the working grid without the half-pixel term put the center 0.43 px off
     center = np.array([[350.0, 350.0]])
-    error = global_align._footprint_points(alignment.matrix, center) - global_align._footprint_points(
-        truth, center
-    )
+    found = global_align._footprint_points(alignment.matrix, center)
+    error = found - global_align._footprint_points(truth, center)
     assert np.abs(error).max() < 0.05
     # The corners carry ECC's own scale uncertainty on a 100 ref px footprint
     assert _center_error(alignment.matrix, truth, size=700) < 1.5
@@ -294,9 +296,10 @@ def test_translation_search_is_kept_when_ecc_does_not_converge(fine_pair, monkey
     mon, ref, truth = fine_pair
     caplog.set_level(logging.INFO, logger=global_align.__name__)
     monkeypatch.setattr(global_align, "_refine_with_ecc", lambda *args: (None, float("nan")))
-    monkeypatch.setattr(
-        global_align, "_sift_homography", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError)
-    )
+    def no_sift(*args, **kwargs):
+        raise RuntimeError("Too few good matches")
+
+    monkeypatch.setattr(global_align, "_sift_homography", no_sift)
 
     alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 40, -30))
 
@@ -320,4 +323,94 @@ def test_prior_maps_pixel_centers():
     # in corner coordinates, so 29.75 in OpenCV's center ones
     assert global_align._footprint_points(prior, np.array([[0.0, 0.0]]))[0] == pytest.approx(
         [29.75, 9.75]
+    )
+
+
+def test_output_grid_keeps_the_finer_resolution():
+    """A mon 7.2x finer than ref gets a grid 8x finer; a coarser one gets ref's grid."""
+    valid = np.ones((720, 720), dtype=bool)
+    fine = global_align._output_grid(_truth(100, 50, 7.2), valid, (400, 400))
+    coarse = global_align._output_grid(_truth(100, 50, 0.5), np.ones((100, 100), bool), (400, 400))
+
+    assert fine.factor == 8
+    # 720 mon px of 1/7.2 ref px from ref pixel (100, 50): 100 ref px, 800 output px
+    assert (fine.x0, fine.y0, fine.width, fine.height) == (100, 50, 800, 800)
+    assert coarse.factor == 1
+    # 100 mon px of 2 ref px from (100, 50), clipped to ref's 400 px
+    assert (coarse.x0, coarse.y0, coarse.width, coarse.height) == (100, 50, 200, 200)
+
+
+def test_output_grid_covers_the_valid_data_only():
+    """No-data around a rotated scene is left out of the grid."""
+    valid = np.zeros((700, 700), dtype=bool)
+    valid[200:400, 300:500] = True
+
+    grid = global_align._output_grid(_truth(100, 50, 7), valid, (400, 400))
+
+    # Data spans mon px [300, 500) x [200, 400): ref px [142.9, 171.4) x [78.6, 107.1).
+    # Columns are exact, rows widened by at most the outline's 16 mon px sampling
+    # step (2.3 ref px)
+    assert grid.x0 == 142 and 76 <= grid.y0 <= 78
+    assert 172 <= grid.x0 + grid.width // grid.factor <= 175
+    assert 108 <= grid.y0 + grid.height // grid.factor <= 110
+
+
+def _geotiff(path, array, x_min, y_max, res, nodata=None):
+    srs = gdal.osr.SpatialReference()
+    srs.ImportFromEPSG(32631)
+    global_align._write_geotiff(path, array, x_min, y_max, res, -res, srs.ExportToWkt(), nodata)
+    return GdalRasterImage(str(path))
+
+
+def test_aligned_outputs_share_a_grid_at_the_monitored_resolution(tmp_path):
+    """Aligned mon and ref come out on one grid, 4x finer than ref, over mon's footprint only."""
+    rng = np.random.default_rng(6)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (600, 600)).astype(np.float32), (0, 0), 3)
+    texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
+    # ref at 20 m, mon at 5 m covering ref pixels [150, 350) x [180, 380), georeferenced 60 m off
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 20.0)
+    mon_array = cv2.resize(texture[150:350, 180:380], (800, 800), interpolation=cv2.INTER_CUBIC)
+    mon_x, mon_y = 500000.0 + 180 * 20 + 60, 5000000.0 - 150 * 20 - 40
+    mon = _geotiff(tmp_path / "mon.tif", mon_array, mon_x, mon_y, 5.0)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    aligned, ref_out, _, alignment = global_align.apply_global_alignment(mon, ref, None, out)
+
+    for image in (aligned, ref_out):
+        assert (image.x_res, image.y_res) == (5.0, -5.0)
+        # On ref's pixel edges, within mon's footprint and a pixel of margin
+        assert (image.x_min - 500000.0) % 20 == 0 and (5000000.0 - image.y_max) % 20 == 0
+        assert 500000.0 + 179 * 20 <= image.x_min <= 500000.0 + 180 * 20
+        assert image.x_size <= 808 and image.y_size <= 808
+    assert (aligned.x_min, aligned.y_max, aligned.x_size, aligned.y_size) == (
+        ref_out.x_min,
+        ref_out.y_max,
+        ref_out.x_size,
+        ref_out.y_size,
+    )
+    # Aligned mon lands on ref resampled to its grid: same content, 5 m detail kept
+    a, r = aligned.array.astype(float), ref_out.array.astype(float)
+    inner = (slice(40, -40), slice(40, -40))
+    assert np.corrcoef(a[inner].ravel(), r[inner].ravel())[0, 1] > 0.98
+
+
+def test_coarser_monitored_keeps_ref_pixels_unchanged(tmp_path):
+    """With a mon coarser than ref the grid is ref's own, and ref is cropped, not resampled."""
+    rng = np.random.default_rng(7)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (400, 400)).astype(np.float32), (0, 0), 4)
+    texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 10.0)
+    mon_array = cv2.resize(texture[100:300, 80:280], (100, 100), interpolation=cv2.INTER_AREA)
+    mon = _geotiff(tmp_path / "mon.tif", mon_array, 500000.0 + 80 * 10, 5000000.0 - 100 * 10, 20.0)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    _, ref_out, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
+
+    assert (ref_out.x_res, ref_out.y_res) == (10.0, -10.0)
+    col = round((ref_out.x_min - 500000.0) / 10)
+    row = round((5000000.0 - ref_out.y_max) / 10)
+    assert np.array_equal(
+        ref_out.array, texture[row : row + ref_out.y_size, col : col + ref_out.x_size]
     )

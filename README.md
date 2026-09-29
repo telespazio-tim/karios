@@ -787,7 +787,7 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 ### Global Alignment (`karios align`)
 
-`karios align` estimates and applies a global 2D homography to bring the monitored image onto the reference's pixel grid. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
+`karios align` estimates and applies a global 2D homography to bring the monitored image into the reference's frame, without losing its resolution. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
 
 ```bash
 karios align monitored.tif reference.tif --out ./aligned
@@ -806,12 +806,12 @@ The pipeline:
 6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
 7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), from every starting point: the RANSAC fit, the prior and the translation search.
 8. **Select**: with a prior, estimates too far from it to be a georeferencing correction are rejected (a reflection, a scale change beyond ×1.5, an anisotropy beyond 1.3, a rotation beyond 30°, or a move beyond the search window), and the gradient correlation of the others, computed on the pixels they all cover, picks the result. Without a prior, the RANSAC fit refined by ECC is kept.
-9. **Warp** the monitored image with `cv2.warpPerspective` onto the reference's pixel grid. Reference is passed through unchanged. Both outputs share the reference's geotransform so they overlay directly in QGIS.
+9. **Warp** the monitored image with `cv2.warpPerspective` onto a grid covering its valid footprint in the reference, nested in the reference's grid: its pixel is the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels). The reference is resampled onto the same grid (cubic), or only cropped when the pixel sizes match. Both outputs share that geotransform, so they overlay directly in QGIS and go straight into `karios process`.
 
 The command writes:
 
 - `<mon_stem>_global_aligned.tiff` — the monitored image warped into the reference frame
-- `<ref_stem>_global_aligned.tiff` — the reference, passed through unchanged
+- `<ref_stem>_global_aligned.tiff` — the reference on the same grid
 - `<mon_stem>_global_aligned__<source>_ecc<score>.tiff` — one sibling per ECC-converged starting point (e.g. `__RANSAC_ecc0.221.tiff`, `__prior_ecc0.046.tiff`). On weakly-correlated cross-sensor imagery, ECC scores can be too low to discriminate reliably — opening every candidate in QGIS and overlaying on the reference lets you pick the visually best one by eye.
 
 The final 3×3 homography and an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio) are printed to stdout.

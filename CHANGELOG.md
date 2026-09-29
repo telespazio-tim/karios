@@ -47,6 +47,14 @@
   the output measures 794 key points with a 0.6-0.7 px spread and a 0.1 px mean shift, against
   65 with 2.4-3.3 px for ECC from the georeferencing alone. The prior now also maps pixel
   centers, as OpenCV does, instead of the geotransform's pixel corners.
+- **`karios align` keeps the monitored resolution**: the aligned monitored image was written on
+  the reference's grid, so a 4 m PhiSat image aligned on a 30 m Sentinel-2 tile came out at
+  30 m, downsampled 7x by bilinear interpolation. Both outputs now share a grid covering the
+  monitored image's valid footprint, nested in the reference's grid at the reference pixel
+  divided by the smallest integer keeping the monitored resolution (3.75 m for PhiSat), with
+  the reference resampled onto it. Unlike the reverted attempt, which covered the whole
+  reference footprint (26267 px square for PhiSat), the grid spans the monitored data only
+  (5904 x 6272 px).
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.

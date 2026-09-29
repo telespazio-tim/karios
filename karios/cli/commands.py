@@ -453,13 +453,14 @@ def align(
     """\b
     Align MONITORED_IMAGE to REFERENCE_IMAGE by estimating a 2D homography
     with SIFT feature matching + RANSAC, then refining with ECC on Sobel
-    gradient magnitudes. The warped mon is rendered onto ref's canvas so
-    both outputs share the same pixel grid.
+    gradient magnitudes. The warped mon is rendered over its footprint in
+    ref, on a grid nested in ref's and fine enough to keep mon's resolution,
+    and ref is resampled onto the same grid.
 
     \b
     Outputs written to OUT:
       <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
-      <ref_stem>_global_aligned<ext>       — ref (unchanged)
+      <ref_stem>_global_aligned<ext>       — ref on the same grid
       <mon_stem>_global_aligned__<…>.tiff  — alternative candidates (one per
                                              ECC-converged starting point) for
                                              visual A/B in QGIS
@@ -491,6 +492,11 @@ def align(
         click.echo("\nHomography (mon → ref):")
         for row in m:
             click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
+        click.echo(
+            f"\nOutput grid: {aligned_mon.x_size}x{aligned_mon.y_size} px of "
+            f"{aligned_mon.x_res:.3f} x {abs(aligned_mon.y_res):.3f} "
+            f"(reference pixel {reference.x_res:.3f} x {abs(reference.y_res):.3f})"
+        )
         click.echo("\nOutputs:")
         click.echo(f"  monitored (aligned): {aligned_mon.file_name}")
         click.echo(f"  reference:           {ref_out_img.file_name}")
