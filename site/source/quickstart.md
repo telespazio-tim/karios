@@ -187,6 +187,8 @@ karios process monitored.tif reference.tif mask.tif dem.tif \
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL. |
 | `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 (dx) and band 2 (dy).|
 | `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products. |
+| `--mosaic-tile-size`, `-mts` | INTEGER | Generate a checkerboard mosaic of the monitored and reference images with tiles of this size in pixel (e.g. 128), shown in the HTML report. 0 disables it [default: 0] |
+| `--generate-overlay`, `-gov` | FLAG | Generate an overlay of the monitored image, in red, and the reference image, in green and blue, shown in the HTML report. Aligned features are gray, shifted ones fringed in red and cyan |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots.<br>Example: "COPERNICUS DEM resampled to 10m." |
 
 #### Advanced Options
@@ -291,6 +293,8 @@ KARIOS generates several types of outputs:
 - **03_dy.png**: Y-direction displacement analysis by row/column  
 - **04_ce.png**: Circular error analysis with statistical summaries
 - **dem_*.png**: DEM-based altitude analysis (if DEM provided)
+- **05_mosaic.avif** (lossless `.png` if Pillow has no AVIF support): Color checkerboard mosaic at native resolution, alternating reference (blue) and monitored (red) image tiles, each image histogram equalized to 8 bit, to eyeball misregistration at tile edges. Shown in the *Mosaic* tab of the HTML report (if `--mosaic-tile-size` is not 0)
+- **06_overlay.avif** (lossless `.png` if Pillow has no AVIF support): Color overlay at native resolution, the monitored image in the red channel and the reference in the green and blue ones, each histogram equalized to 8 bit: aligned features are gray, shifted ones fringed in red and cyan. Shown in the *Overlay* tab of the HTML report (if `--generate-overlay`)
 
 #### Products (Optional)
 

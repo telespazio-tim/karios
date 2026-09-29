@@ -45,6 +45,7 @@ from karios.matcher.zncc_service import ZNCCService
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
 from karios.report.html_report import HtmlReportGenerator
+from karios.report.mosaic import generate_mosaic, generate_overlay
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
 from karios.report.shift_by_alt_plot import MeanShiftByAltitudeGroupPlot
@@ -101,6 +102,8 @@ class ReportPaths:
     dem_plots: list[str]
     products: list[str]
     html_report: Optional[str] = None
+    mosaic: Optional[str] = None
+    overlay: Optional[str] = None
 
 
 class KariosAPI:
@@ -368,6 +371,16 @@ class KariosAPI:
         dx_plot_path = self._generate_dx_plot(match_result, output_dir)
         dy_plot_path = self._generate_dy_plot(match_result, output_dir)
         ce_plot_path = self._generate_ce_plot(match_result, accuracy_analysis, output_dir)
+        mosaic_path = (
+            self._generate_mosaic(match_result, output_dir)
+            if self._runtime_configuration.mosaic_tile_size
+            else None
+        )
+        overlay_path = (
+            self._generate_overlay(match_result, output_dir)
+            if self._runtime_configuration.generate_overlay
+            else None
+        )
 
         # Generate DEM plots if DEM is provided
         dem_plots = self._generate_dem_plots(match_result, output_dir, dem_file_path)
@@ -379,6 +392,8 @@ class KariosAPI:
             ce_plot=str(ce_plot_path),
             dem_plots=dem_plots,
             products=product_paths,
+            mosaic=str(mosaic_path) if mosaic_path else None,
+            overlay=str(overlay_path) if overlay_path else None,
         )
 
         # Always generate HTML report
@@ -963,6 +978,43 @@ class KariosAPI:
         overview_path = output_dir / "01_overview.png"
         overview_plot.plot(overview_path)
         return overview_path
+
+    def _generate_mosaic(self, match_result: MatchResult, output_dir: Path) -> Path:
+        """Generate the checkerboard mosaic of the monitored and reference images.
+
+        Args:
+            match_result: Match result
+            output_dir: Output directory
+
+        Returns:
+            Path to the generated image
+        """
+        return generate_mosaic(
+            match_result.monitored_image,
+            match_result.reference_image,
+            output_dir / "05_mosaic",
+            self._runtime_configuration.mosaic_tile_size,
+            mask=match_result.mask,
+            no_values=self._runtime_configuration.no_values,
+        )
+
+    def _generate_overlay(self, match_result: MatchResult, output_dir: Path) -> Path:
+        """Generate the color overlay of the monitored and reference images.
+
+        Args:
+            match_result: Match result
+            output_dir: Output directory
+
+        Returns:
+            Path to the generated image
+        """
+        return generate_overlay(
+            match_result.monitored_image,
+            match_result.reference_image,
+            output_dir / "06_overlay",
+            mask=match_result.mask,
+            no_values=self._runtime_configuration.no_values,
+        )
 
     def _generate_dx_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
         """Generate dx shift plot.

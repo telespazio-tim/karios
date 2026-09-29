@@ -53,6 +53,10 @@ class RuntimeConfiguration:
         enable_coarse_to_fine: Whether to match by descending the image pyramid explicitly
                    instead of letting OpenCV recurse its own, which keeps key points near
                    data edges. Incompatible with laplacian_kernel_size "auto".
+        mosaic_tile_size: Tile side in pixel of the checkerboard mosaic of the monitored
+                   and reference images, shown in the HTML report. 0 disables the mosaic.
+        generate_overlay: Whether to generate the overlay of the monitored image, in red,
+                   and the reference image, in green and blue, shown in the HTML report.
         no_values: Optional list of DN (Digital Number) values to filter out from key points.
                    Accepts floats, since a float raster's fill value need not be a whole number.
                    Key points where reference or monitored image has these values will be excluded.
@@ -68,12 +72,19 @@ class RuntimeConfiguration:
     generate_kp_chips: bool
     enable_large_shift_detection: bool
     enable_coarse_to_fine: bool = False
+    mosaic_tile_size: int = 0
+    generate_overlay: bool = False
     no_values: Optional[list[float]] = None
     pixel_size: Optional[float] = None
     title_prefix: Optional[str] = None
     dem_description: Optional[str] = None
 
     def __post_init__(self):
+        if self.mosaic_tile_size < 0:
+            raise ConfigurationError(
+                f"mosaic_tile_size must be positive, or 0 to disable, got {self.mosaic_tile_size}"
+            )
+
         if self.enable_large_shift_detection and self.enable_coarse_to_fine:
             raise ConfigurationError(
                 "enable_large_shift_detection and enable_coarse_to_fine cannot be "

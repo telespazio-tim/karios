@@ -17,6 +17,18 @@
   constant. In the default matching mode this is the parameter that most affects results, since
   the lost edge band scales as `(matching_winsize / 2) * 2**maxLevel`.
 
+- **Checkerboard mosaic** (`--mosaic-tile-size`, `0` by default, which disables it): mosaic
+  at native resolution alternating tiles of the given size in pixel from the reference image, in
+  blue, and the monitored image, in red, so misregistration shows as features broken at the tile
+  edges. Each image is histogram equalized to 8 bit on its own, which gives both the same
+  contrast whatever their sensor; zero fill and pixels hidden in the overview plot are black and
+  left out of the histogram. Written as `05_mosaic.avif`, or lossless `.png` when Pillow lacks
+  AVIF support, and displayed in a new *Mosaic* tab of the HTML report.
+- **Color overlay** (`--generate-overlay`): the monitored image in the red channel and the
+  reference in the green and blue ones, equalized like the mosaic, where aligned features are
+  gray and shifted ones fringed in red and cyan. Written as `06_overlay.avif` and displayed in a
+  new *Overlay* tab of the HTML report.
+
 ### Fix
 
 - **`--no-value` now reaches the matching mask**: it previously only removed surviving key

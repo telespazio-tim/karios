@@ -32,6 +32,74 @@ from karios.report.commons import AbstractPlot
 
 logger = logging.getLogger(__name__)
 
+# Color of the pixels hidden from the image displays (mask, no-data, --no-value)
+INVALID_PIXEL_COLOR = "magenta"
+
+
+def build_invalid_mask(
+    img: GdalRasterImage,
+    mask: GdalRasterImage | None = None,
+    no_values: list[float] | None = None,
+) -> np.ndarray | None:
+    """Combine the user-provided mask, the --no-value DN filter, and the
+    image's GDAL no-data value into a boolean array marking pixels to hide.
+
+    Args:
+        img (GdalRasterImage): displayed image
+        mask (GdalRasterImage|None): optional mask, pixels where mask == 0 are hidden
+        no_values (list[float]|None): optional DN values to hide
+
+    Returns:
+        np.ndarray|None: None when there is nothing to hide so the caller can skip
+            masked-array construction.
+    """
+    invalid = None
+    if mask is not None:
+        invalid = mask.array == 0
+    if no_values:
+        no_value_invalid = np.isin(img.array, no_values)
+        invalid = no_value_invalid if invalid is None else (invalid | no_value_invalid)
+    if img.no_data_value is not None:
+        nd_invalid = img.array == img.no_data_value
+        invalid = nd_invalid if invalid is None else (invalid | nd_invalid)
+    return invalid if invalid is not None and invalid.any() else None
+
+
+def display_range(img: GdalRasterImage, invalid: np.ndarray | None = None) -> tuple[float, float]:
+    """Display contrast bounds of an image, for satellite imagery.
+
+    Uses cumulative count cut (0.5%-99.5%) of the finite, non-zero pixels not
+    marked True in `invalid`, falling back to the array min/max without any.
+
+    Args:
+        img (GdalRasterImage): displayed image
+        invalid (np.ndarray|None): pixels excluded from the contrast computation
+
+    Returns:
+        tuple[float, float]: (v_min, v_max)
+    """
+    if invalid is not None:
+        valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0) & ~invalid]
+    else:
+        valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0)]
+
+    if len(valid_pixels) > 0:
+        v_min = np.percentile(valid_pixels, 0.5)
+        v_max = np.percentile(valid_pixels, 99.5)
+    else:
+        v_min = np.nanmin(img.array)
+        v_max = np.nanmax(img.array)
+
+    logger.debug(
+        "%s : min %s / %s , max %s / %s",
+        img.filepath,
+        np.nanmin(img.array),
+        v_min,
+        np.nanmax(img.array),
+        v_max,
+    )
+    return v_min, v_max
+
 
 class OverviewPlot(AbstractPlot):
     # pylint: disable=too-few-public-methods
@@ -133,21 +201,7 @@ class OverviewPlot(AbstractPlot):
         axes.text(x=0, y=0.5, s=text, size="14", ha="left", va="center")
 
     def _build_invalid_mask(self, img: GdalRasterImage, apply_user_mask: bool) -> np.ndarray | None:
-        """Combine the user-provided mask, the --no-value DN filter, and the
-        image's GDAL no-data value into a boolean array marking pixels to hide.
-        Returns None when there is nothing to hide so the caller can skip
-        masked-array construction.
-        """
-        invalid = None
-        if apply_user_mask and self._mask is not None:
-            invalid = self._mask.array == 0
-        if self._no_values:
-            no_value_invalid = np.isin(img.array, self._no_values)
-            invalid = no_value_invalid if invalid is None else (invalid | no_value_invalid)
-        if img.no_data_value is not None:
-            nd_invalid = img.array == img.no_data_value
-            invalid = nd_invalid if invalid is None else (invalid | nd_invalid)
-        return invalid if invalid is not None and invalid.any() else None
+        return build_invalid_mask(img, self._mask if apply_user_mask else None, self._no_values)
 
     def _plot_image(
         self,
@@ -156,40 +210,20 @@ class OverviewPlot(AbstractPlot):
         title: str,
         invalid: np.ndarray | None = None,
     ) -> None:
-        """Plot image with adaptive contrast for satellite imagery.
+        """Plot image with the adaptive contrast of `display_range`.
 
-        Uses cumulative count cut (0.5%-99.5%) for consistent visualization.
         Pixels marked True in `invalid` are hidden and excluded from the
         contrast computation.
         """
         axes.set_title(title)
 
-        if invalid is not None:
-            valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0) & ~invalid]
-        else:
-            valid_pixels = img.array[np.isfinite(img.array) & (img.array != 0)]
-
-        if len(valid_pixels) > 0:
-            v_min = np.percentile(valid_pixels, 0.5)
-            v_max = np.percentile(valid_pixels, 99.5)
-        else:
-            v_min = np.nanmin(img.array)
-            v_max = np.nanmax(img.array)
-
-        logger.debug(
-            "%s : min %s / %s , max %s / %s",
-            img.filepath,
-            np.nanmin(img.array),
-            v_min,
-            np.nanmax(img.array),
-            v_max,
-        )
+        v_min, v_max = display_range(img, invalid)
 
         display_array = (
             np.ma.masked_array(img.array, mask=invalid) if invalid is not None else img.array
         )
         cmap = plt.get_cmap("gray").copy()
-        cmap.set_bad(color="magenta")
+        cmap.set_bad(color=INVALID_PIXEL_COLOR)
         axes.imshow(display_array, cmap=cmap, vmin=v_min, vmax=v_max)
 
     def _plot_radial_error(self, axes: Axes) -> None:

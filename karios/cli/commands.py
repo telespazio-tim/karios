@@ -63,6 +63,8 @@ click.rich_click.OPTION_GROUPS = {
                 "--generate-key-points-mask",
                 "--generate-intermediate-product",
                 "--generate-kp-chips",
+                "--mosaic-tile-size",
+                "--generate-overlay",
                 "--no-value",
                 "--dem-description",
             ],
@@ -206,6 +208,20 @@ def cli() -> None:
     """,
 )
 @click.option(
+    "--mosaic-tile-size",
+    "-mts",
+    type=click.IntRange(min=0),
+    default=0,
+    help="Generate a checkerboard mosaic of the monitored and reference images with tiles of this size in pixel (e.g. 128), shown in the HTML report. 0 disables it",
+    show_default=True,
+)
+@click.option(
+    "--generate-overlay",
+    "-gov",
+    is_flag=True,
+    help="Generate an overlay of the monitored image, in red, and the reference image, in green and blue, shown in the HTML report. Aligned features are gray, shifted ones fringed in red and cyan",
+)
+@click.option(
     "--no-value",
     type=float,
     multiple=True,
@@ -251,6 +267,8 @@ def process(
     generate_key_points_mask: bool,
     generate_intermediate_product: bool,
     generate_kp_chips: bool,
+    mosaic_tile_size: int,
+    generate_overlay: bool,
     vector_mask: Optional[Path],
     no_value: tuple[float, ...],
     title_prefix: Optional[str],
@@ -318,6 +336,8 @@ def process(
             gen_kp_mask=generate_key_points_mask,
             gen_delta_raster=generate_intermediate_product,
             generate_kp_chips=generate_kp_chips,
+            mosaic_tile_size=mosaic_tile_size,
+            generate_overlay=generate_overlay,
             dem_description=dem_description,
             enable_large_shift_detection=enable_large_shift_detection,
             enable_coarse_to_fine=enable_coarse_to_fine,
@@ -532,6 +552,10 @@ def _print_summary(match_result, accuracy, reports) -> None:
     click.echo(f"  DX plot: {reports.dx_plot}")
     click.echo(f"  DY plot: {reports.dy_plot}")
     click.echo(f"  CE plot: {reports.ce_plot}")
+    if reports.mosaic:
+        click.echo(f"  Mosaic: {reports.mosaic}")
+    if reports.overlay:
+        click.echo(f"  Overlay: {reports.overlay}")
 
     if reports.html_report:
         click.echo(f"  HTML report: {reports.html_report}")

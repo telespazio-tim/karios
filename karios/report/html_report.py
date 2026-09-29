@@ -327,9 +327,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html" class="active">Summary</a>
-        {products_link}
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -419,9 +417,7 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        <a href="products.html" class="active">Products</a>
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -452,6 +448,49 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+# Page showing one comparison image of both inputs: the mosaic or the overlay
+IMAGE_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARIOS {page_title} - {title_prefix}</title>
+    <style>
+        {css_styles}
+    </style>
+</head>
+<body>
+    <header>
+        {header_banner_html}
+    </header>
+
+    <nav class="nav">
+        {nav_links}
+    </nav>
+
+    <div class="section">
+        <h1>{page_title}</h1>
+        <p>{description} Click the image to open it at native resolution.</p>
+        <table>
+            <tr><th>Monitored</th><td>{monitored_image}</td></tr>
+            <tr><th>Reference</th><td>{reference_image}</td></tr>
+        </table>
+        <div class="image-container">
+            <a href="{image}" target="_blank"><img src="{image}" alt="{page_title}"></a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>KARIOS - KLT-based Algorithm for Registration of Images from Observing Systems</p>
+        <div class="links">
+            <a href="https://telespazio-tim.github.io/karios" target="_blank">Website</a> |
+            <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
 CHIPS_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -468,9 +507,7 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        {products_link}
-        <a href="chips.html" class="active">Chips</a>
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -802,9 +839,27 @@ class HtmlReportGenerator:
         # Check for products and chips to build navigation
         has_products = len(self.report_paths.products) > 0
         has_chips = self.runtime_config.generate_kp_chips
+        has_mosaic = bool(self.report_paths.mosaic)
+        has_overlay = bool(self.report_paths.overlay)
 
-        products_link = '<a href="products.html">Products</a>' if has_products else ""
-        chips_link = '<a href="chips.html">Chips</a>' if has_chips else ""
+        # Tabs in display order, the pages without content left out
+        tabs = [("report.html", "Summary")]
+        if has_products:
+            tabs.append(("products.html", "Products"))
+        if has_mosaic:
+            tabs.append(("mosaic.html", "Mosaic"))
+        if has_overlay:
+            tabs.append(("overlay.html", "Overlay"))
+        if has_chips:
+            tabs.append(("chips.html", "Chips"))
+
+        def nav_links(active: str) -> str:
+            return "\n        ".join(
+                f'<a href="{page}" class="active">{label}</a>'
+                if page == active
+                else f'<a href="{page}">{label}</a>'
+                for page, label in tabs
+            )
 
         dem_plots_html = ""
         if self.report_paths.dem_plots:
@@ -826,8 +881,7 @@ class HtmlReportGenerator:
         summary_content = HTML_TEMPLATE.format(
             css_styles=css_styles,
             header_banner_html=header_banner_html,
-            products_link=products_link,
-            chips_link=chips_link,
+            nav_links=nav_links("report.html"),
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             monitored_image=self.match_result.monitored_image.file_name,
             reference_image=self.match_result.reference_image.file_name,
@@ -876,13 +930,51 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                chips_link=chips_link,
+                nav_links=nav_links("products.html"),
                 products_rows=products_rows,
             )
             with open(self.output_dir / "products.html", "w", encoding="utf-8") as f:
                 f.write(products_content)
 
-        # 3. Generate Chips Page if needed
+        # 3. Generate Mosaic and Overlay Pages if needed
+        image_pages = [
+            (
+                has_mosaic,
+                "mosaic.html",
+                "Mosaic",
+                self.report_paths.mosaic,
+                "Checkerboard of the reference (blue, top left tile) and monitored (red) "
+                "images, each histogram equalized. "
+                "Misregistration shows as features broken at the tile edges.",
+            ),
+            (
+                has_overlay,
+                "overlay.html",
+                "Overlay",
+                self.report_paths.overlay,
+                "Overlay of the monitored image, in red, and the reference image, in cyan, "
+                "each histogram equalized: aligned features are gray. "
+                "Misregistration shows as red and cyan fringes along the features.",
+            ),
+        ]
+        for enabled, page, page_title, image, description in image_pages:
+            if not enabled:
+                continue
+            page_content = IMAGE_PAGE_TEMPLATE.format(
+                css_styles=css_styles,
+                header_banner_html=header_banner_html,
+                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                nav_links=nav_links(page),
+                page_title=page_title,
+                monitored_image=self.match_result.monitored_image.file_name,
+                reference_image=self.match_result.reference_image.file_name,
+                image=Path(image).name,
+                description=description,
+            )
+            with open(self.output_dir / page, "w", encoding="utf-8") as f:
+                f.write(page_content)
+
+        # 4. Generate Chips Page if needed
         if has_chips:
             mon_name = self.match_result.monitored_image.file_name
             ref_name = self.match_result.reference_image.file_name
@@ -899,7 +991,7 @@ class HtmlReportGenerator:
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
                 title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                products_link=products_link,
+                nav_links=nav_links("chips.html"),
                 chips_vrt_links=chips_vrt_links,
                 chips_section_html=chips_section_html,
             )
