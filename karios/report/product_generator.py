@@ -132,7 +132,8 @@ class ProductGenerator:
         )
         if ref.projection:
             dataset.SetProjection(ref.projection)
-        dataset.SetGeoTransform((ref.x_min, ref.x_res, 0, ref.y_max, 0, ref.y_res))
+        # The full geotransform: a rotated grid has non-zero terms 2 and 4
+        dataset.SetGeoTransform(ref.geo_transform)
         return dataset
 
     def _create_intermediate_raster(self):

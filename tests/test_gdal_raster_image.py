@@ -291,3 +291,50 @@ if __name__ == "__main__":
     test_open_gdal_dataset_context_manager_failure()
     test_is_compatible_with()
     print("All GdalRasterImage tests passed!")
+
+
+def _geotiff(path, epsg, geo_transform):
+    """1-band 8x8 GeoTIFF in `epsg` (None: no CRS) with `geo_transform`."""
+    from osgeo import gdal, osr
+
+    dataset = gdal.GetDriverByName("GTiff").Create(str(path), 8, 8, 1, gdal.GDT_UInt16)
+    if epsg is not None:
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(epsg)
+        dataset.SetProjection(srs.ExportToWkt())
+    dataset.SetGeoTransform(geo_transform)
+    dataset = None
+    return GdalRasterImage(str(path))
+
+
+# PhiSat scene_0_BC_band_0.tiff: WGS 84 degrees on a rotated, skewed grid
+PHISAT_WGS84 = (5.0185, -5.63e-05, -1.22e-05, 43.5735, 2.16e-05, -4.04e-05)
+
+
+@pytest.mark.parametrize(
+    "epsg, geo_transform, metric, code",
+    [
+        (32631, (600000.0, 30.0, 0.0, 4900020.0, 0.0, -30.0), True, "32631"),
+        (4326, PHISAT_WGS84, False, "4326"),
+        (4326, (5.0, 1e-4, 0.0, 43.5, 0.0, -1e-4), False, "4326"),
+        (32631, (600000.0, 29.0, 7.8, 4900020.0, 7.8, -29.0), False, "32631"),
+        (None, (0.0, 1.0, 0.0, 0.0, 0.0, 1.0), False, None),
+    ],
+    ids=["utm-north-up", "wgs84-rotated", "wgs84-north-up", "utm-rotated", "no-crs"],
+)
+def test_metric_pixel_size_needs_a_projected_north_up_grid(
+    tmp_path, epsg, geo_transform, metric, code
+):
+    """Degrees and rotated grid steps are no pixel size in meters; the EPSG code is still read."""
+    image = _geotiff(tmp_path / "image.tif", epsg, geo_transform)
+
+    assert image.have_pixel_resolution() is metric
+    assert image.get_epsg() == code
+
+
+def test_image_resolution_is_in_pixels_on_a_wgs84_rotated_grid(tmp_path):
+    """The PhiSat case: no metric size, so pixels unless the user provides one."""
+    image = _geotiff(tmp_path / "image.tif", 4326, PHISAT_WGS84)
+
+    assert get_image_resolution(image, image) is None
+    assert get_image_resolution(image, image, 4.8) == 4.8

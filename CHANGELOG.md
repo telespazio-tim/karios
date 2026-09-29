@@ -75,6 +75,13 @@
   the jump to the zero fill; eroding it raises the correlation of identical images from 0.77 to
   0.999. ECC now also works on the reference around the monitored footprint only, 8x faster on
   a footprint a quarter of the crop.
+- **Images in a geographic CRS or on a rotated grid no longer crash `karios process`**: the first
+  geotransform term was taken as the pixel size in meters, so a PhiSat scene in WGS 84 on a
+  rotated grid got -5.6e-05 "m", which inverted the circular error histogram range. A metric
+  pixel size is now only read from a projected CRS on a north-up grid; other images are
+  measured in pixels, unless `--input-pixel-size` is given. Their EPSG code is read too (it only
+  was for projected CRS), so the key point GeoJSON is written, and the raster products copy the
+  reference's full geotransform instead of dropping its rotation terms.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.
