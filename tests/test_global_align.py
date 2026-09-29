@@ -213,9 +213,7 @@ def test_implausible_sift_estimate_is_rejected(fine_pair, monkeypatch, caplog):
 def test_plausibility_limits(fine_pair, linear, translation, reason):
     """Departures from the prior beyond the limits are named; the prior itself passes."""
     mon, ref, truth = fine_pair
-    frame = global_align._work_frame(
-        global_align._preprocess(mon), mon > 0, global_align._preprocess(ref), truth
-    )
+    frame = global_align._work_frame(mon, ref, truth)
     # Apply the change around mon's center, in ref px
     center = global_align._footprint_points(truth, np.array([[400.0, 400.0]]))[0]
     change = np.eye(3)
@@ -475,3 +473,56 @@ def test_ecc_corrects_the_starting_error(offset):
 
     assert score > 0.99
     assert _center_error(refined, truth, size=400) < 0.1
+
+
+@pytest.fixture(name="large_texture", scope="module")
+def large_texture_fixture():
+    rng = np.random.default_rng(10)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (700, 900)).astype(np.float32), (0, 0), 2)
+    return cv2.normalize(texture, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+
+def _sift():
+    return cv2.SIFT_create(
+        nfeatures=0,
+        contrastThreshold=global_align.SIFT_CONTRAST_THRESHOLD,
+        edgeThreshold=global_align.SIFT_EDGE_THRESHOLD,
+    )
+
+
+def test_tiled_sift_finds_the_whole_image_keypoints(large_texture, monkeypatch):
+    """Tiles with a margin find the keypoints SIFT finds on the whole image."""
+    whole, whole_desc = _sift().detectAndCompute(large_texture, None)
+    monkeypatch.setattr(global_align, "SIFT_TILE_PX", 256)
+    monkeypatch.setattr(global_align, "SIFT_TILE_MARGIN_PX", 64)
+
+    tiled, tiled_desc = global_align._detect_sift(_sift(), large_texture, 0)
+
+    # A few keypoints larger than the margin may differ next to tile edges
+    assert len(tiled) == pytest.approx(len(whole), rel=0.02)
+    whole_pts = np.array([kp.pt for kp in whole])
+    distances = [np.hypot(*(whole_pts - kp.pt).T).min() for kp in tiled]
+    assert np.mean(np.array(distances) < 0.01) > 0.97
+    assert tiled_desc.shape == (len(tiled), 128)
+
+
+def test_tiled_sift_keeps_the_strongest_keypoints(large_texture, monkeypatch):
+    monkeypatch.setattr(global_align, "SIFT_TILE_PX", 256)
+    every, _ = global_align._detect_sift(_sift(), large_texture, 0)
+
+    strongest, descriptors = global_align._detect_sift(_sift(), large_texture, 100)
+
+    assert len(strongest) == 100 and len(descriptors) == 100
+    threshold = sorted((kp.response for kp in every), reverse=True)[99]
+    assert min(kp.response for kp in strongest) >= threshold
+
+
+def test_tiled_sift_aligns_like_the_whole_image(shifted_pair, monkeypatch):
+    """Tiling SIFT does not change the alignment."""
+    mon, ref = shifted_pair
+    monkeypatch.setattr(global_align, "SIFT_TILE_PX", 200)
+
+    alignment = detect_global_alignment(mon, ref)
+
+    assert alignment.matrix[0, 2] == pytest.approx(5, abs=0.5)
+    assert alignment.matrix[1, 2] == pytest.approx(3, abs=0.5)

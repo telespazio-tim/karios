@@ -64,6 +64,14 @@ logger = logging.getLogger(__name__)
 SIFT_NFEATURES = 0  # default max number of keypoints kept per image, 0 = unlimited
 SIFT_CONTRAST_THRESHOLD = 0.02  # default 0.04; lower → more keypoints in low-contrast regions
 SIFT_EDGE_THRESHOLD = 10
+# SIFT runs on tiles of images larger than this side, each read with a margin
+# and keeping the keypoints of its core only. OpenCV's SIFT doubles the image
+# before building its pyramid and holds about 200 bytes per input pixel: 6 GB
+# for the 28 Mpx reference crop of a PhiSat scene on 10 m Sentinel-2. Its
+# thresholds are absolute, so tiles find the keypoints the whole image would,
+# except for the few larger than the margin next to a tile edge.
+SIFT_TILE_PX = 2048
+SIFT_TILE_MARGIN_PX = 128
 LOWE_RATIO = 0.75
 RANSAC_THRESHOLD_PX = 3.0
 MIN_MATCHES = 4  # cv2.findHomography needs ≥4 point pairs; more = robuster
@@ -200,17 +208,29 @@ def _footprint(matrix: np.ndarray, width: int, height: int) -> np.ndarray:
 
 
 def _work_frame(
-    mon_u8: np.ndarray, mon_valid: np.ndarray, ref_u8: np.ndarray, prior: np.ndarray
+    mon_arr: np.ndarray, ref_arr: np.ndarray, prior: np.ndarray
 ) -> Optional[_WorkFrame]:
-    """Bring mon and ref to the coarser resolution and crop ref around mon's prior footprint.
+    """Crop ref around mon's prior footprint, preprocess both, bring them to the coarser resolution.
 
-    Returns None when the prior footprint does not overlap ref.
+    Only the crop of ref is preprocessed: a small mon on a 10 m tile would
+    otherwise stretch and equalize 120 Mpx to use a few of them. Returns None
+    when the prior footprint does not overlap ref.
     """
     # Pixel size of mon relative to ref, from the prior's area scale
     scale = float(np.sqrt(abs(np.linalg.det(prior[:2, :2]))))
-    mh, mw = mon_u8.shape
-    rh, rw = ref_u8.shape
+    mh, mw = mon_arr.shape
+    rh, rw = ref_arr.shape
 
+    corners = _footprint(prior, mw, mh)
+    (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
+    margin = GEOREF_SEARCH_FRACTION * max(x1 - x0, y1 - y0)
+    cx0, cy0 = max(0, int(np.floor(x0 - margin))), max(0, int(np.floor(y0 - margin)))
+    cx1, cy1 = min(rw, int(np.ceil(x1 + margin))), min(rh, int(np.ceil(y1 + margin)))
+    if cx1 <= cx0 or cy1 <= cy0:
+        return None
+    crop = np.array([[1.0, 0.0, -cx0], [0.0, 1.0, -cy0], [0.0, 0.0, 1.0]])
+
+    mon_u8, mon_valid = _preprocess(mon_arr), _valid_pixels(mon_arr)
     mon_work, valid_work = mon_u8, mon_valid
     if scale < 1:
         size = (max(1, round(mw * scale)), max(1, round(mh * scale)))
@@ -220,29 +240,20 @@ def _work_frame(
         valid_work = coverage > 0.999
     mon_to_work = _pixel_scale(mon_work.shape[1] / mw, mon_work.shape[0] / mh)
 
-    ref_work = ref_u8
+    ref_work = _preprocess(ref_arr[cy0:cy1, cx0:cx1])
+    ch, cw = ref_work.shape
     if scale > 1:
-        size = (max(1, round(rw / scale)), max(1, round(rh / scale)))
-        ref_work = cv2.resize(ref_u8, size, interpolation=cv2.INTER_AREA)
-    ref_scale = _pixel_scale(ref_work.shape[1] / rw, ref_work.shape[0] / rh)
+        size = (max(1, round(cw / scale)), max(1, round(ch / scale)))
+        ref_work = cv2.resize(ref_work, size, interpolation=cv2.INTER_AREA)
+    ref_scale = _pixel_scale(ref_work.shape[1] / cw, ref_work.shape[0] / ch)
 
-    corners = _footprint(ref_scale @ prior, mw, mh)
-    (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
-    margin = GEOREF_SEARCH_FRACTION * max(x1 - x0, y1 - y0)
-    cx0, cy0 = max(0, int(np.floor(x0 - margin))), max(0, int(np.floor(y0 - margin)))
-    cx1 = min(ref_work.shape[1], int(np.ceil(x1 + margin)))
-    cy1 = min(ref_work.shape[0], int(np.ceil(y1 + margin)))
-    if cx1 <= cx0 or cy1 <= cy0:
-        return None
-
-    crop = np.array([[1.0, 0.0, -cx0], [0.0, 1.0, -cy0], [0.0, 0.0, 1.0]])
     return _WorkFrame(
         mon=mon_work,
         mon_valid=valid_work,
-        ref=ref_work[cy0:cy1, cx0:cx1],
+        ref=ref_work,
         mon_to_work=mon_to_work,
-        ref_to_work=crop @ ref_scale,
-        margin=margin,
+        ref_to_work=ref_scale @ crop,
+        margin=margin * ref_scale[0, 0],
     )
 
 
@@ -375,6 +386,45 @@ def _knn_match(query: np.ndarray, train: np.ndarray, k: int) -> list:
     return matcher.knnMatch(query, train, k=k)
 
 
+def _detect_sift(
+    sift: cv2.SIFT, img: np.ndarray, nfeatures: int
+) -> tuple[list, Optional[np.ndarray]]:
+    """SIFT keypoints and descriptors of `img`, by tiles when it is large, see SIFT_TILE_PX.
+
+    `sift` is built with nfeatures=0 for tiling; the `nfeatures` strongest
+    keypoints of the whole image are then kept, 0 keeps them all.
+    """
+    h, w = img.shape
+    if max(h, w) <= SIFT_TILE_PX:
+        return sift.detectAndCompute(img, None)
+
+    keypoints, descriptors = [], []
+    m = SIFT_TILE_MARGIN_PX
+    for ty in range(0, h, SIFT_TILE_PX):
+        for tx in range(0, w, SIFT_TILE_PX):
+            # Tile core [tx, tx + tile) x [ty, ty + tile), read with the margin
+            x0, y0 = max(0, tx - m), max(0, ty - m)
+            x1, y1 = min(w, tx + SIFT_TILE_PX + m), min(h, ty + SIFT_TILE_PX + m)
+            kps, desc = sift.detectAndCompute(img[y0:y1, x0:x1], None)
+            if desc is None:
+                continue
+            for kp, d in zip(kps, desc):
+                x, y = kp.pt[0] + x0, kp.pt[1] + y0
+                if tx <= x < tx + SIFT_TILE_PX and ty <= y < ty + SIFT_TILE_PX:
+                    keypoints.append(
+                        cv2.KeyPoint(x, y, kp.size, kp.angle, kp.response, kp.octave, kp.class_id)
+                    )
+                    descriptors.append(d)
+    if not keypoints:
+        return [], None
+    descriptors = np.array(descriptors, dtype=np.float32)
+    if nfeatures and len(keypoints) > nfeatures:
+        strongest = np.argsort([-kp.response for kp in keypoints], kind="stable")[:nfeatures]
+        keypoints = [keypoints[i] for i in strongest]
+        descriptors = descriptors[strongest]
+    return keypoints, descriptors
+
+
 def _sift_homography(
     mon: np.ndarray, ref: np.ndarray, sift_nfeatures: int, prior: Optional[np.ndarray]
 ) -> tuple[np.ndarray, int, int]:
@@ -397,13 +447,17 @@ def _sift_homography(
         RANSAC_THRESHOLD_PX,
     )
 
-    sift = cv2.SIFT_create(
-        nfeatures=sift_nfeatures,
-        contrastThreshold=SIFT_CONTRAST_THRESHOLD,
-        edgeThreshold=SIFT_EDGE_THRESHOLD,
-    )
-    kp_mon, desc_mon = sift.detectAndCompute(mon, None)
-    kp_ref, desc_ref = sift.detectAndCompute(ref, None)
+    def detect(img: np.ndarray) -> tuple[list, Optional[np.ndarray]]:
+        tiled = max(img.shape) > SIFT_TILE_PX
+        sift = cv2.SIFT_create(
+            nfeatures=0 if tiled else sift_nfeatures,
+            contrastThreshold=SIFT_CONTRAST_THRESHOLD,
+            edgeThreshold=SIFT_EDGE_THRESHOLD,
+        )
+        return _detect_sift(sift, img, sift_nfeatures)
+
+    kp_mon, desc_mon = detect(mon)
+    kp_ref, desc_ref = detect(ref)
 
     if desc_mon is None or desc_ref is None:
         raise RuntimeError("SIFT found no descriptors in one or both images")
@@ -516,12 +570,9 @@ def detect_global_alignment(
     if sift_nfeatures < 0:
         raise ValueError(f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}")
 
-    mon = _preprocess(mon_arr)
-    ref = _preprocess(ref_arr)
-
     frame = None
     if prior is not None:
-        frame = _work_frame(mon, _valid_pixels(mon_arr), ref, prior)
+        frame = _work_frame(mon_arr, ref_arr, prior)
         if frame is None:
             logger.warning("Prior footprint does not overlap ref: prior ignored")
             prior = None
@@ -536,7 +587,7 @@ def detect_global_alignment(
             )
 
     if frame is None:
-        return _align_without_prior(mon, ref, sift_nfeatures)
+        return _align_without_prior(_preprocess(mon_arr), _preprocess(ref_arr), sift_nfeatures)
 
     # Starting points, as homographies between the working images
     starts: list[tuple[str, np.ndarray]] = []

@@ -61,6 +61,13 @@
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
   FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` peak memory down from 7.2 to 2.1 GB** on a PhiSat scene and a 10 m
+  Sentinel-2 tile, and 3 min 40 s instead of 6 min 20 s. OpenCV's SIFT doubles its input
+  before building the pyramid, about 200 bytes per pixel: 6 GB for the 28 Mpx reference crop.
+  Images wider than 2048 px are now detected by tiles read with a 128 px margin, keeping each
+  tile's core keypoints; the thresholds being absolute, 99.98% of the keypoints lie within
+  0.01 px of the whole image's. The reference is also stretched and equalized on its crop only,
+  instead of the whole 120 Mpx tile.
 - **ECC refinement in `karios align` corrected the wrong way**: ECC's warp maps the reference
   onto the pre-warped monitored image, and was composed without inverting it, so every
   refinement doubled its starting error instead of removing it (a start 2.5 px off ended 5 px
