@@ -43,12 +43,10 @@ Pipeline:
        compare.
     9. Apply the resulting 3x3 homography to mon (and mask) via
        cv2.warpPerspective, rendered over mon's footprint in ref at a whole
-       fraction of ref's pixel size, fine enough to keep mon's resolution;
-       ref is resampled onto the same grid.
+       fraction of ref's pixel size, fine enough to keep mon's resolution.
 """
 
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -103,8 +101,8 @@ class GlobalAlignment:
     n_inliers: int
     n_matches: int
     # (name, 3x3 matrix, ECC score) for every refinement candidate that
-    # converged — including the one chosen as `matrix`. Lets callers write
-    # alternative warped outputs for visual A/B comparison.
+    # converged and passed the plausibility check, including the one chosen
+    # as `matrix`.
     candidates: list = field(default_factory=list)
 
     @property
@@ -802,48 +800,22 @@ def _output_grid(
     return OutputGrid(factor, x0, y0, (x1 - x0) * factor, (y1 - y0) * factor)
 
 
-def _resample_ref(ref_arr: np.ndarray, grid: OutputGrid) -> np.ndarray:
-    """ref on `grid`: cropped when it has ref's pixel size, cubic interpolation otherwise."""
-    rows = slice(grid.y0, grid.y0 + grid.height // grid.factor)
-    cols = slice(grid.x0, grid.x0 + grid.width // grid.factor)
-    if grid.factor == 1:
-        return ref_arr[rows, cols].copy()
-    upsampled = cv2.warpPerspective(
-        ref_arr.astype(np.float32),
-        grid.from_ref.astype(np.float32),
-        (grid.width, grid.height),
-        flags=cv2.INTER_CUBIC,
-        borderMode=cv2.BORDER_REPLICATE,
-    )
-    if np.issubdtype(ref_arr.dtype, np.integer):
-        # Cubic interpolation overshoots at edges: keep inside the integer type
-        info = np.iinfo(ref_arr.dtype)
-        upsampled = np.clip(np.round(upsampled), info.min, info.max)
-    return upsampled.astype(ref_arr.dtype)
-
-
 def apply_global_alignment(
     monitored: GdalRasterImage,
     reference: GdalRasterImage,
     mask: Optional[GdalRasterImage],
     out_dir: Path,
     sift_nfeatures: int = SIFT_NFEATURES,
-) -> tuple[
-    GdalRasterImage,
-    GdalRasterImage,
-    Optional[GdalRasterImage],
-    GlobalAlignment,
-]:
+) -> tuple[GdalRasterImage, Optional[GdalRasterImage], GlobalAlignment]:
     """Detect the homography, apply to monitored (and mask), render over mon's footprint in ref.
 
-    The outputs share a grid nested in ref's, covering mon's footprint at a
-    whole fraction of ref's pixel size that keeps mon's resolution, see
-    _output_grid(). ref is resampled onto it.
+    The outputs are rendered on a grid nested in ref's, covering mon's valid
+    footprint at a whole fraction of ref's pixel size that keeps mon's
+    resolution, see _output_grid(), and georeferenced in ref's CRS.
 
-    Returns (aligned_mon, ref_on_grid, aligned_mask, alignment_info). The
-    new rasters are written to `out_dir` so the rest of the pipeline can
-    operate on them as if they were the originals. `sift_nfeatures` limits the
-    SIFT keypoints kept per image, see detect_global_alignment().
+    Returns (aligned_mon, aligned_mask, alignment_info), the rasters written
+    to `out_dir`. `sift_nfeatures` limits the SIFT keypoints kept per image,
+    see detect_global_alignment().
     """
     mon_arr = monitored.array
     ref_arr = reference.array
@@ -861,9 +833,9 @@ def apply_global_alignment(
         mon_arr, ref_arr, prior=prior, sift_nfeatures=sift_nfeatures
     )
 
-    # The homography maps mon pixel coords → ref pixel coords. Both outputs
-    # are rendered on a grid over mon's footprint nested in ref's, fine enough
-    # to keep mon's resolution, so they overlay directly without losing detail.
+    # The homography maps mon pixel coords → ref pixel coords. The outputs are
+    # rendered on a grid over mon's footprint nested in ref's, fine enough to
+    # keep mon's resolution, so they overlay ref without losing detail.
     mon_valid = _valid_pixels(mon_arr)
     if monitored.no_data_value is not None:
         mon_valid &= mon_arr != monitored.no_data_value
@@ -898,10 +870,7 @@ def apply_global_alignment(
 
     mon_stem = Path(monitored.file_name).stem
     mon_suffix = Path(monitored.file_name).suffix or ".tif"
-    ref_stem = Path(reference.file_name).stem
-    ref_suffix = Path(reference.file_name).suffix or ".tif"
     mon_out = out_dir / f"{mon_stem}_global_aligned{mon_suffix}"
-    ref_out = out_dir / f"{ref_stem}_global_aligned{ref_suffix}"
 
     _write_geotiff(
         mon_out,
@@ -913,44 +882,6 @@ def apply_global_alignment(
         reference.projection,
         monitored.no_data_value,
     )
-    _write_geotiff(
-        ref_out,
-        _resample_ref(ref_arr, grid),
-        x_min,
-        y_max,
-        x_res,
-        y_res,
-        reference.projection,
-        reference.no_data_value,
-    )
-
-    # Write every refinement candidate as a sibling file so the user can A/B
-    # them in QGIS. ECC scores are unreliable on weakly-correlated cross-sensor
-    # imagery, so the algorithm's "best" pick may not be the visually best one.
-    for cand_name, cand_matrix, cand_ecc in alignment.candidates:
-        if cand_matrix is alignment.matrix or np.allclose(cand_matrix, alignment.matrix):
-            continue
-        cand_warped = cv2.warpPerspective(
-            mon_arr.astype(np.float32),
-            (grid.from_ref @ cand_matrix).astype(np.float32),
-            out_size,
-            flags=cv2.INTER_LINEAR,
-            borderValue=border_mon,
-        ).astype(mon_arr.dtype)
-        safe = re.sub(r"[^A-Za-z0-9]+", "_", cand_name).strip("_")
-        cand_path = out_dir / f"{mon_stem}_global_aligned__{safe}_ecc{cand_ecc:.3f}{mon_suffix}"
-        _write_geotiff(
-            cand_path,
-            cand_warped,
-            x_min,
-            y_max,
-            x_res,
-            y_res,
-            reference.projection,
-            monitored.no_data_value,
-        )
-        logger.info("Wrote alternative: %s", cand_path.name)
-
     aligned_mask = None
     if mask is not None:
         warped_mask = cv2.warpPerspective(
@@ -976,9 +907,4 @@ def apply_global_alignment(
         )
         aligned_mask = GdalRasterImage(str(mask_out))
 
-    return (
-        GdalRasterImage(str(mon_out)),
-        GdalRasterImage(str(ref_out)),
-        aligned_mask,
-        alignment,
-    )
+    return GdalRasterImage(str(mon_out)), aligned_mask, alignment

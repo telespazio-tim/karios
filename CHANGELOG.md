@@ -51,10 +51,12 @@
   the reference's grid, so a 4 m PhiSat image aligned on a 30 m Sentinel-2 tile came out at
   30 m, downsampled 7x by bilinear interpolation. Both outputs now share a grid covering the
   monitored image's valid footprint, nested in the reference's grid at the reference pixel
-  divided by the smallest integer keeping the monitored resolution (3.75 m for PhiSat), with
-  the reference resampled onto it. Unlike the reverted attempt, which covered the whole
-  reference footprint (26267 px square for PhiSat), the grid spans the monitored data only
-  (5904 x 6272 px).
+  divided by the smallest integer keeping the monitored resolution (3.75 m for PhiSat). Unlike
+  the reverted attempt, which covered the whole reference footprint (26267 px square for
+  PhiSat), the grid spans the monitored data only (5904 x 6272 px). `karios align` now writes
+  that image only: the reference and the alternative ECC candidates are no longer written, and
+  the command prints the `gdalwarp` call that resamples the reference onto the output grid for
+  `karios process`.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.
@@ -69,7 +71,7 @@
   or replicated content does not move consistently between the two images, so a window
   overlapping it scores worse than a truncated one.
 
-- **`karios align` subcommand**: standalone command that warps the monitored image onto the reference grid. Writes the primary aligned output plus one sibling per ECC-converged candidate for visual A/B comparison in QGIS.
+- **`karios align` subcommand**: standalone command that warps the monitored image into the reference frame, keeping its resolution, and writes it georeferenced in the reference's CRS.
 - **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `0` = unlimited by default): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
 
 ### Improvements

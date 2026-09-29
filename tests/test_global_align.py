@@ -362,8 +362,18 @@ def _geotiff(path, array, x_min, y_max, res, nodata=None):
     return GdalRasterImage(str(path))
 
 
-def test_aligned_outputs_share_a_grid_at_the_monitored_resolution(tmp_path):
-    """Aligned mon and ref come out on one grid, 4x finer than ref, over mon's footprint only."""
+def _on_grid(texture, image, ref_res, x_min=500000.0, y_max=5000000.0):
+    """`texture`, a ref at `ref_res` from (x_min, y_max), resampled onto `image`'s grid."""
+    factor = round(ref_res / image.x_res)
+    col, row = (image.x_min - x_min) / ref_res, (y_max - image.y_max) / ref_res
+    offset = np.array([[1.0, 0.0, -col], [0.0, 1.0, -row], [0.0, 0.0, 1.0]])
+    to_grid = global_align._pixel_scale(factor, factor) @ offset
+    size = (image.x_size, image.y_size)
+    return cv2.warpPerspective(texture.astype(np.float32), to_grid, size, flags=cv2.INTER_CUBIC)
+
+
+def test_aligned_output_keeps_the_monitored_resolution(tmp_path):
+    """mon 4x finer than ref comes out at its own 5 m over its footprint, on ref's pixel edges."""
     rng = np.random.default_rng(6)
     texture = cv2.GaussianBlur(rng.uniform(0, 255, (600, 600)).astype(np.float32), (0, 0), 3)
     texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
@@ -375,28 +385,23 @@ def test_aligned_outputs_share_a_grid_at_the_monitored_resolution(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
 
-    aligned, ref_out, _, alignment = global_align.apply_global_alignment(mon, ref, None, out)
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
 
-    for image in (aligned, ref_out):
-        assert (image.x_res, image.y_res) == (5.0, -5.0)
-        # On ref's pixel edges, within mon's footprint and a pixel of margin
-        assert (image.x_min - 500000.0) % 20 == 0 and (5000000.0 - image.y_max) % 20 == 0
-        assert 500000.0 + 179 * 20 <= image.x_min <= 500000.0 + 180 * 20
-        assert image.x_size <= 808 and image.y_size <= 808
-    assert (aligned.x_min, aligned.y_max, aligned.x_size, aligned.y_size) == (
-        ref_out.x_min,
-        ref_out.y_max,
-        ref_out.x_size,
-        ref_out.y_size,
-    )
-    # Aligned mon lands on ref resampled to its grid: same content, 5 m detail kept
-    a, r = aligned.array.astype(float), ref_out.array.astype(float)
+    assert (aligned.x_res, aligned.y_res) == (5.0, -5.0)
+    # On ref's pixel edges, within mon's footprint and a pixel of margin
+    assert (aligned.x_min - 500000.0) % 20 == 0 and (5000000.0 - aligned.y_max) % 20 == 0
+    assert 500000.0 + 179 * 20 <= aligned.x_min <= 500000.0 + 180 * 20
+    assert aligned.x_size <= 808 and aligned.y_size <= 808
+    # Same content as ref on that grid, 5 m detail kept
     inner = (slice(40, -40), slice(40, -40))
-    assert np.corrcoef(a[inner].ravel(), r[inner].ravel())[0, 1] > 0.98
+    expected = _on_grid(texture, aligned, 20.0)[inner]
+    assert np.corrcoef(aligned.array[inner].ravel(), expected.ravel())[0, 1] > 0.98
+    # Only the aligned monitored image is written
+    assert [p.name for p in out.iterdir()] == ["mon_global_aligned.tif"]
 
 
-def test_coarser_monitored_keeps_ref_pixels_unchanged(tmp_path):
-    """With a mon coarser than ref the grid is ref's own, and ref is cropped, not resampled."""
+def test_coarser_monitored_gets_the_reference_pixel_size(tmp_path):
+    """A mon coarser than ref is rendered at ref's pixel size, on ref's own grid."""
     rng = np.random.default_rng(7)
     texture = cv2.GaussianBlur(rng.uniform(0, 255, (400, 400)).astype(np.float32), (0, 0), 4)
     texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
@@ -406,11 +411,10 @@ def test_coarser_monitored_keeps_ref_pixels_unchanged(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
 
-    _, ref_out, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
 
-    assert (ref_out.x_res, ref_out.y_res) == (10.0, -10.0)
-    col = round((ref_out.x_min - 500000.0) / 10)
-    row = round((5000000.0 - ref_out.y_max) / 10)
-    assert np.array_equal(
-        ref_out.array, texture[row : row + ref_out.y_size, col : col + ref_out.x_size]
-    )
+    assert (aligned.x_res, aligned.y_res) == (10.0, -10.0)
+    assert (aligned.x_min - 500000.0) % 10 == 0 and (5000000.0 - aligned.y_max) % 10 == 0
+    inner = (slice(10, -10), slice(10, -10))
+    expected = _on_grid(texture, aligned, 10.0)[inner]
+    assert np.corrcoef(aligned.array[inner].ravel(), expected.ravel())[0, 1] > 0.95

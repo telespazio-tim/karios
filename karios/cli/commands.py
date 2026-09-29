@@ -455,15 +455,11 @@ def align(
     with SIFT feature matching + RANSAC, then refining with ECC on Sobel
     gradient magnitudes. The warped mon is rendered over its footprint in
     ref, on a grid nested in ref's and fine enough to keep mon's resolution,
-    and ref is resampled onto the same grid.
+    georeferenced in ref's CRS.
 
     \b
-    Outputs written to OUT:
+    Output written to OUT:
       <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
-      <ref_stem>_global_aligned<ext>       — ref on the same grid
-      <mon_stem>_global_aligned__<…>.tiff  — alternative candidates (one per
-                                             ECC-converged starting point) for
-                                             visual A/B in QGIS
     """
     configure_logging(debug, not no_log_file, log_file_path)
     logger.info("Start align")
@@ -474,7 +470,7 @@ def align(
         monitored = GdalRasterImage(str(monitored_image))
         reference = GdalRasterImage(str(reference_image))
 
-        aligned_mon, ref_out_img, _, alignment = apply_global_alignment(
+        aligned_mon, _, alignment = apply_global_alignment(
             monitored, reference, None, out, sift_nfeatures=sift_nfeatures
         )
 
@@ -497,9 +493,17 @@ def align(
             f"{aligned_mon.x_res:.3f} x {abs(aligned_mon.y_res):.3f} "
             f"(reference pixel {reference.x_res:.3f} x {abs(reference.y_res):.3f})"
         )
-        click.echo("\nOutputs:")
-        click.echo(f"  monitored (aligned): {aligned_mon.file_name}")
-        click.echo(f"  reference:           {ref_out_img.file_name}")
+        click.echo(f"\nOutput: {aligned_mon.file_name}")
+        # karios process needs both images on one grid
+        extent = (
+            f"{aligned_mon.x_min!r} {aligned_mon.y_max + aligned_mon.y_size * aligned_mon.y_res!r} "
+            f"{aligned_mon.x_min + aligned_mon.x_size * aligned_mon.x_res!r} {aligned_mon.y_max!r}"
+        )
+        click.echo(
+            "\nTo compare it with karios process, resample the reference onto its grid:\n"
+            f"  gdalwarp -r cubic -te {extent} -ts {aligned_mon.x_size} {aligned_mon.y_size} "
+            f"{reference_image} <reference_on_grid>.tif"
+        )
 
         return 0
 
