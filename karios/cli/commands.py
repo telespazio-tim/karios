@@ -20,6 +20,8 @@
 Provides command line interface for KARIOS functionality.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -69,7 +71,11 @@ click.rich_click.OPTION_GROUPS = {
         },
         {
             "name": "Advanced Options",
-            "options": ["--enable-large-shift-detection", "--enable-coarse-to-fine"],
+            "options": [
+                "--enable-large-shift-detection",
+                "--enable-coarse-to-fine",
+                "--laplacian-power",
+            ],
         },
         {
             "name": "Logging Options",
@@ -230,6 +236,17 @@ def cli() -> None:
     is_flag=True,
     help="Match by descending the image pyramid explicitly, keeping key points near data edges",
 )
+@click.option(
+    "--laplacian-power",
+    type=click.FloatRange(0.0, 1.0),
+    default=1.0,
+    help=(
+        "Shape of the Laplacian rescale feeding the KLT tracker: 0 keeps it as-is, "
+        "1 saturates it to a near-binary response (the historical CV_8U behaviour's "
+        "cross-sensor robustness, made explicit and tunable)."
+    ),
+    show_default=True,
+)
 @click.option("--debug", "-d", is_flag=True, help="Enable Debug mode")
 @click.option("--no-log-file", is_flag=True, help="Do not log in file")
 @click.option(
@@ -257,6 +274,7 @@ def process(
     dem_description: Optional[str],
     enable_large_shift_detection: bool,
     enable_coarse_to_fine: bool,
+    laplacian_power: float,
     no_log_file: bool,
     debug: bool,
     log_file_path: str,
@@ -310,6 +328,12 @@ def process(
         output_dir = out / f"{monitored_image.stem}_{reference_image.stem}"
         os.makedirs(output_dir, exist_ok=True)
 
+        # Copy the configuration as soon as we know where results will be
+        # written, so it is there even if processing fails partway through -
+        # useful to know exactly what was attempted. Overwritten below with
+        # resolved "auto" values once/if processing succeeds.
+        shutil.copy(conf, output_dir)
+
         # Create runtime configuration
         runtime_configuration = RuntimeConfiguration(
             output_directory=output_dir,
@@ -322,6 +346,8 @@ def process(
             enable_large_shift_detection=enable_large_shift_detection,
             enable_coarse_to_fine=enable_coarse_to_fine,
             no_values=list(no_value) if no_value else None,
+            debug=debug,
+            laplacian_power=laplacian_power,
         )
 
         # Validate configuration
@@ -335,8 +361,8 @@ def process(
             monitored_image, reference_image, mask_file, dem_file, resume, vector_mask
         )
 
-        # Copy configuration to the output directory. When any klt_matching field was
-        # in "auto" mode, replace it with the resolved value so the output config
+        # When any klt_matching field was in "auto" mode, overwrite the config
+        # already copied above with the resolved value, so the output config
         # reflects what actually ran.
         klt_conf = processing_configuration.klt_configuration
         ksize_resolved = None
@@ -369,8 +395,6 @@ def process(
             out_conf_path = output_dir / Path(conf).name
             with open(out_conf_path, "w", encoding="utf-8") as f:
                 json.dump(conf_data, f, indent=4)
-        else:
-            shutil.copy(conf, output_dir)
 
         logger.info("Processing completed successfully")
         logger.info("Results written to %s", output_dir)

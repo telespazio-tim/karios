@@ -17,6 +17,8 @@
 # limitations under the License.
 """Module to plot images, radial error and theta error"""
 
+from __future__ import annotations
+
 import logging
 
 import numpy as np
@@ -201,6 +203,12 @@ class OverviewPlot(AbstractPlot):
         lim_min = 0
         if self._config.shift_auto_axes_limit:
             lim_max = dist.mean() + dist.std() * 3
+            if lim_max <= lim_min:
+                # Radial error is >= 0 everywhere and TwoSlopeNorm needs a
+                # strictly ascending vmin/vcenter/vmax - a perfect match
+                # (e.g. an image matched against itself) is uniformly zero
+                # and would otherwise raise here.
+                lim_max = lim_min + 1e-6
             kwargs = {
                 "norm": colors.TwoSlopeNorm(
                     vmin=lim_min, vcenter=(lim_max - lim_min) / 2, vmax=lim_max

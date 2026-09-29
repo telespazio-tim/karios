@@ -8,6 +8,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from karios.core.configuration import (
+    AccuracyAnalysisConfiguration,
+    KLTConfiguration,
+    ProcessingConfiguration,
+    ShiftConfiguration,
+)
 from karios.report import html_report
 from karios.report.html_report import (
     _BANNER_ASSET,
@@ -106,6 +112,7 @@ def generator_fixture(tmp_path):
     runtime_config.generate_kp_chips = True
     runtime_config.dem_description = "dem"
     runtime_config.output_directory = tmp_path
+    runtime_config.laplacian_power = 1.0
 
     return HtmlReportGenerator(
         output_dir=tmp_path,
@@ -150,3 +157,55 @@ def test_generate_succeeds_without_branding_assets(generator, tmp_path, monkeypa
     content = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "<header>" in content
     assert "KARIOS Processing Report" in content
+
+
+def _klt_configuration(**overrides) -> KLTConfiguration:
+    defaults = dict(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.1,
+        xStart=0,
+        tile_size=20000,
+        laplacian_kernel_size=7,
+        outliers_filtering=False,
+    )
+    defaults.update(overrides)
+    return KLTConfiguration(**defaults)
+
+
+def test_config_rows_show_laplacian_power(generator):
+    """The resolved Laplacian power used for the run must be visible."""
+    generator.laplacian_ksize_label = "7"
+    generator.laplacian_polarity_label = "Normal"
+    generator.runtime_config.laplacian_power = 0.35
+
+    html = generator._build_config_rows_html()
+
+    assert "<tr><th>Laplacian Power</th><td>0.35</td></tr>" in html
+
+
+def test_config_rows_do_not_duplicate_resolved_klt_fields(generator):
+    """laplacian_kernel_size/laplacian_invert_polarity must appear only once
+    (the resolved summary row), not again under their raw field names from
+    the as-configured KLT Matching section - which, outside "auto" mode,
+    would just repeat the exact same value under a different label."""
+    generator.laplacian_ksize_label = "mon=5, ref=7 (auto)"
+    generator.laplacian_polarity_label = "Normal"
+    generator.processing_config = ProcessingConfiguration()
+    generator.processing_config.klt_configuration = _klt_configuration(laplacian_kernel_size="auto")
+    generator.processing_config.shift_image_processing_configuration = ShiftConfiguration(
+        bias_correction_min_threshold=2
+    )
+    generator.processing_config.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
+        confidence_threshold=0.4
+    )
+
+    html = generator._build_config_rows_html()
+
+    assert html.count("laplacian_kernel_size") == 0
+    assert html.count("laplacian_invert_polarity") == 0
+    assert "<tr><th>Laplacian Kernel Size</th><td>mon=5, ref=7 (auto)</td></tr>" in html
+    # Other KLT fields are still dumped as usual.
+    assert "<tr><th>tile_size</th><td>20000</td></tr>" in html

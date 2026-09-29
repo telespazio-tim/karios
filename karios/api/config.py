@@ -29,6 +29,8 @@ The configuration covers:
 - Visualization options (title prefixes, DEM descriptions)
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
@@ -60,6 +62,15 @@ class RuntimeConfiguration:
                    can be read from input images
         title_prefix: Optional prefix for chart titles (max 26 characters)
         dem_description: Optional DEM source description for plots
+        debug: Whether to also generate the key point density/quality coverage
+                   plot - a higher point count is not by itself evidence of a
+                   good registration, since points can cluster in the most
+                   textured regions and leave the rest of the scene unmatched
+        laplacian_power: Shape of the Laplacian rescale feeding the KLT tracker.
+                   0 keeps the percentile-normalized value as-is; 1 saturates it to a
+                   near-binary response, matching the historical CV_8U behaviour's
+                   cross-sensor matching robustness. Values in between interpolate
+                   via a signed power law. Defaults to 1.
     """
 
     output_directory: Union[str, Path]
@@ -72,6 +83,8 @@ class RuntimeConfiguration:
     pixel_size: Optional[float] = None
     title_prefix: Optional[str] = None
     dem_description: Optional[str] = None
+    debug: bool = False
+    laplacian_power: float = 1.0
 
     def __post_init__(self):
         if self.enable_large_shift_detection and self.enable_coarse_to_fine:
@@ -80,6 +93,11 @@ class RuntimeConfiguration:
                 "combined: both remove a coarse displacement, large shift by "
                 "pre-shifting the monitored image and coarse-to-fine by seeding "
                 "the tracker, so applying them together corrects it twice."
+            )
+
+        if not 0.0 <= self.laplacian_power <= 1.0:
+            raise ConfigurationError(
+                f"laplacian_power must be between 0 and 1, got {self.laplacian_power}."
             )
 
         # Some call sites (e.g. plot path builders) join paths with the `/`

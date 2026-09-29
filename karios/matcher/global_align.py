@@ -31,6 +31,8 @@ Pipeline:
        cv2.warpPerspective, rendered onto ref's canvas.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass, field

@@ -113,12 +113,12 @@ class MutualInfoService:
         x1_max = monitored.x_size - self._chip_margin
         y1_max = monitored.y_size - self._chip_margin
 
+        # A point too close to either edge for a full chip is silently
+        # skipped (NaN) - normal for KP near the tile boundary, not worth a
+        # log line per point.
         if x0_offset < 0 or y0_offset < 0 or x1_offset < 0 or y1_offset < 0:
-            logger.warning("Point to close to image top or left boundaries, skip it")
             return np.nan
-
         if x0 >= x0_max or y0 >= y0_max or x1 >= x1_max or y1 >= y1_max:
-            logger.warning("Point to close to image bottom or right boundaries, skip it")
             return np.nan
 
         chip_ref = self._extract_chip(x0, y0, reference)

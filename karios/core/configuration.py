@@ -22,6 +22,8 @@ Represents the configuration of the application.
 Contains inputs, outputs and processings parameters.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -99,6 +101,16 @@ class CEPlotConfiguration:
 
 
 @dataclass
+class CoveragePlotConfiguration:
+    """Coverage Plot module configuration class"""
+
+    fig_size: int = 12
+    grid_size: int = 20
+    quality_colormap: str = "RdYlGn"
+    zncc_threshold: float = 0.8
+
+
+@dataclass
 class AccuracyAnalysisConfiguration:
     """Accuracy analysis module configuration class"""
 
@@ -124,6 +136,7 @@ class ProcessingConfiguration:
         self.shift_plot_configuration: Optional[ShiftPlotConfiguration] = None
         self.dem_plot_configuration: Optional[DemPlotConfiguration] = None
         self.ce_plot_configuration: Optional[CEPlotConfiguration] = None
+        self.coverage_plot_configuration: Optional[CoveragePlotConfiguration] = None
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> "ProcessingConfiguration":
@@ -189,6 +202,10 @@ class ProcessingConfiguration:
             **config_dict["plot_configuration"]["dem"]
         )
         self.ce_plot_configuration = CEPlotConfiguration(**config_dict["plot_configuration"]["ce"])
+        # Optional: absent from older configuration files, defaults apply.
+        self.coverage_plot_configuration = CoveragePlotConfiguration(
+            **config_dict["plot_configuration"].get("coverage", {})
+        )
 
     def _load_configuration_file(self, filepath: str) -> dict[str, Any]:
         """Check that the provided configuration file exists and is valid.

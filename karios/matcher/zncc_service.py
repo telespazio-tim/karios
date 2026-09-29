@@ -205,14 +205,12 @@ class ZNCCService:
         x1_max = monitored.x_size - self._chip_margin
         y1_max = monitored.y_size - self._chip_margin
 
-        # verify top and left
+        # A point too close to either edge for a full chip is silently
+        # skipped (NaN) - normal for KP near the tile boundary, not worth a
+        # log line per point (see _compute_mi below, which does the same).
         if x0_offset < 0 or y0_offset < 0 or x1_offset < 0 or y1_offset < 0:
-            logger.warning("Point to close to image top or left boundaries, skip it")
             return np.nan
-
-        # verify bottom and right (need x + chip_margin + 1 <= x_size, i.e. x < x_max)
         if x0 >= x0_max or y0 >= y0_max or x1 >= x1_max or y1 >= y1_max:
-            logger.warning("Point to close to image bottom or right boundaries, skip it")
             return np.nan
 
         chip_ref = self._extract_chip(x0, y0, reference)

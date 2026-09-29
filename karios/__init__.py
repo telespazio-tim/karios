@@ -20,6 +20,17 @@
 A tool for comparing and matching images using KLT feature tracking.
 """
 
-from karios.api.config import RuntimeConfiguration
-from karios.api.core import KariosAPI
-from karios.version import __version__
+import matplotlib
+
+# Every plot karios makes is written straight to a file (plt.savefig), never
+# shown interactively, so a GUI backend is both unneeded and a source of
+# platform fragility (e.g. a broken/missing Tcl-Tk install crashing figure
+# creation on some CI runners). Set before any karios.report module gets a
+# chance to import pyplot, since the backend can no longer change once a
+# figure has been created.
+matplotlib.use("Agg")
+
+# pylint: disable=wrong-import-position
+from karios.api.config import RuntimeConfiguration  # noqa: E402
+from karios.api.core import KariosAPI  # noqa: E402
+from karios.version import __version__  # noqa: E402

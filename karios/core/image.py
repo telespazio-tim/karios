@@ -433,8 +433,13 @@ class GdalRasterImage:
             image (GdalRasterImage): image to compare with
 
         Returns:
-            bool: True images have same geometric and geographic specifications
+            bool: True images have same geometric and geographic specifications.
+                False (not an exception) when either image has no spatial
+                reference at all - e.g. a plain array saved as GeoTIFF without
+                ever being geocoded - since there is then nothing to compare.
         """
+        if self.spatial_ref is None or image.spatial_ref is None:
+            return False
         return (
             self.spatial_ref.IsSame(image.spatial_ref)
             and (self._geo == image._geo)
@@ -448,7 +453,8 @@ class GdalRasterImage:
         Returns:
             str: Images geometric and geographic specifications info
         """
-        return f"""Projection: {self.projection}
+        projection = self.projection or "<none - image has no spatial reference>"
+        return f"""Projection: {projection}
         GetGeoTransform: {self._geo}
         X Size: {self.x_size}
         Y Size: {self.y_size}

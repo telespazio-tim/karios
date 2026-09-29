@@ -17,6 +17,8 @@
 # limitations under the License.
 """Module to generate HTML reports for KARIOS results."""
 
+from __future__ import annotations
+
 import base64
 import datetime
 import logging
@@ -390,6 +392,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <img src="{ce_plot}" alt="CE Plot">
         </div>
         {dem_plots_html}
+        {coverage_plot_html}
     </div>
 
     <div class="footer">
@@ -583,13 +586,20 @@ class HtmlReportGenerator:
             return ", ".join(f"{k}={v}" for k, v in value.items())
         return str(value)
 
+    # Fields already shown, resolved, in the summary rows above (e.g. "auto"
+    # is replaced there by the kernel size/polarity actually selected) - the
+    # raw per-section dump below skips them so the same field doesn't appear
+    # twice under two different names with two different values.
+    _KLT_FIELDS_SHOWN_IN_SUMMARY = frozenset({"laplacian_kernel_size", "laplacian_invert_polarity"})
+
     def _build_config_rows_html(self) -> str:
         """Build the full set of <tr> rows for the collapsible Configuration table.
 
         The first rows are the high-level summary (pixel size, large-shift, the
         resolved Laplacian kernel size and polarity, title prefix). Below them,
-        every dataclass field from each section of processing_configuration is
-        emitted as its own row, grouped by section header.
+        every remaining dataclass field from each section of
+        processing_configuration is emitted as its own row, grouped by section
+        header - except the KLT fields already covered, resolved, above.
         """
         import dataclasses
 
@@ -611,6 +621,7 @@ class HtmlReportGenerator:
             ("Coarse-to-Fine Matching", coarse_to_fine_label),
             ("Laplacian Kernel Size", self.laplacian_ksize_label),
             ("Laplacian Polarity", self.laplacian_polarity_label),
+            ("Laplacian Power", f"{self.runtime_config.laplacian_power:.2f}"),
             ("Title Prefix", self.runtime_config.title_prefix or "None"),
         ]
         for label, value in summary_rows:
@@ -632,6 +643,8 @@ class HtmlReportGenerator:
                 continue
             rows.append(f'<tr class="config-section-header"><th colspan="2">{header}</th></tr>')
             for field in dataclasses.fields(section):
+                if header == "KLT Matching" and field.name in self._KLT_FIELDS_SHOWN_IN_SUMMARY:
+                    continue
                 value = self._format_config_value(getattr(section, field.name))
                 rows.append(f"<tr><th>{field.name}</th><td>{value}</td></tr>")
 
@@ -822,6 +835,15 @@ class HtmlReportGenerator:
                 </div>"""
             dem_plots_html += "</div>"
 
+        coverage_plot_html = ""
+        if self.report_paths.coverage_plot:
+            coverage_plot_html = f"""
+                <h3>Key Point Coverage (Debug)</h3>
+                <div class="image-container">
+                    <span class="image-title">05 - Density &amp; Quality Coverage</span>
+                    <img src="{Path(self.report_paths.coverage_plot).name}" alt="Coverage Plot">
+                </div>"""
+
         # 1. Generate Summary Page (report.html)
         summary_content = HTML_TEMPLATE.format(
             css_styles=css_styles,
@@ -849,6 +871,7 @@ class HtmlReportGenerator:
             dy_plot=Path(self.report_paths.dy_plot).name,
             ce_plot=Path(self.report_paths.ce_plot).name,
             dem_plots_html=dem_plots_html,
+            coverage_plot_html=coverage_plot_html,
         )
 
         report_file = self.output_dir / "report.html"

@@ -33,6 +33,8 @@ finite pixels instead costs a little contrast and is indifferent to how extreme
 the outliers are.
 """
 
+from __future__ import annotations
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -67,3 +69,74 @@ def to_uint8(arr: NDArray, percentiles: tuple[float, float] = DEFAULT_PERCENTILE
         return np.zeros(arr.shape, np.uint8)
 
     return np.clip((values - low) / (high - low) * 255.0, 0, 255).astype(np.uint8)
+
+
+def laplacian_to_uint8(response: NDArray, percentile: float = 98.0, power: float = 1.0) -> NDArray:
+    """Rescale a signed Laplacian response to uint8 with a percentile-normalized power law.
+
+    cv2.Laplacian's own CV_8U output clips every negative response to 0 and
+    saturates large positive ones at 255 - measured on real imagery, that
+    collapses 95%+ of pixels to the two extremes. That near-binary shape is
+    not pure loss, though: on real multi-sensor pairs it made matching more
+    robust, by discarding each sensor's exact gain/contrast and keeping only
+    "is there a strong edge here". The bugs were that negative responses were
+    discarded rather than mapped symmetrically, and that where the "binary"
+    threshold actually fell was an accident of kernel size and image dtype
+    rather than a deliberate, tunable choice.
+
+    This fixes both while keeping the same "how binary" trade-off explicit.
+    The response is first normalized by a percentile of its magnitude - the
+    same idea `to_uint8` already applies to the raw image - so a few extreme
+    pixels don't set the scale for the whole tile, and the sign survives
+    (clip to [-1, 1] rather than [0, 1]). `power` then reshapes that
+    normalized, sign-preserved value with a signed power law - `sign(y) *
+    |y|**exponent`, where `exponent = 1 - power`:
+
+    - `power=0` (`exponent=1`): the shape is left alone - a plain,
+      percentile-normalized linear value, the "original" (non-binarized)
+      signal.
+    - `power=1` (`exponent=0`): every nonzero-response pixel saturates to
+      +-1 - functionally the old near-binary behaviour, but symmetric and
+      deliberate rather than an artifact of CV_8U's clipping.
+    - values in between smoothly interpolate: lower exponents push weaker
+      edges toward saturation sooner, without discarding the ones that
+      remain below the noise floor (a response of exactly 0 always maps to
+      128, regardless of `power`, since `sign(0) == 0`).
+
+    Args:
+        response: signed Laplacian response, any real dtype.
+        percentile: percentile of the response magnitude used to normalize
+            it before shaping. Defaults to 98.
+        power: 0 keeps the percentile-normalized value as a plain linear
+            signal; 1 pushes every nonzero response to full saturation
+            (binary); in between interpolates via a signed power law.
+            Defaults to 1.
+
+    Returns:
+        NDArray: uint8 array of the same shape, 128 where the response is
+            exactly zero.
+    """
+    abs_response = np.abs(response)
+    bound = np.percentile(abs_response, percentile)
+    if bound <= 0:
+        # Fewer than `100 - percentile`% of pixels carry any response at all -
+        # common on tiles that are mostly flat with only a small, sharp
+        # feature (a handful of edge pixels among a uniform background).
+        # Falling back to the actual maximum still normalizes into (-1, 1]
+        # instead of discarding those real edges as if the tile had none.
+        bound = abs_response.max()
+    if bound <= 0:
+        return np.full(response.shape, 128, dtype=np.uint8)
+
+    # The only clip left before shaping is the unavoidable one: fitting into
+    # 8 bits eventually. `bound` calibrates contrast, not survival - it is
+    # reached only by the top few percent, not most of the tile.
+    y_norm = np.clip(response.astype(np.float64) / bound, -1.0, 1.0)
+
+    exponent = 1.0 - power
+    if exponent <= 0:
+        shaped = np.sign(y_norm)
+    else:
+        shaped = np.sign(y_norm) * np.abs(y_norm) ** exponent
+
+    return np.clip(np.round(shaped * 127.0 + 128.0), 0, 255).astype(np.uint8)

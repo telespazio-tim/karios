@@ -46,6 +46,12 @@
     "ce": {
       "fig_size": 9,
       "ce_scatter_colormap": "jet"
+    },
+    "coverage": {
+      "fig_size": 12,
+      "grid_size": 20,
+      "quality_colormap": "RdYlGn",
+      "zncc_threshold": 0.8
     }
   }
 }

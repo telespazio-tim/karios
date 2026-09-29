@@ -17,6 +17,8 @@
 # limitations under the License.
 """Module to generate KP chip images of monitored and reference images."""
 
+from __future__ import annotations
+
 import glob
 import logging
 import os
@@ -30,7 +32,7 @@ from osgeo import gdal
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage, open_gdal_dataset
-from karios.core.radiometry import to_uint8
+from karios.core.radiometry import laplacian_to_uint8, to_uint8
 
 logger = logging.getLogger(__name__)
 
@@ -394,6 +396,7 @@ class ChipService:
         confident_threshold: float,
         output_dir: str | Path,
         laplacian_ksize: dict[str, int] | None = None,
+        laplacian_power: float = 1.0,
     ):
         """
         This function generates a maximum of 100 chip images of KP for monitored and reference images.
@@ -470,6 +473,7 @@ class ChipService:
                     reference_filename=reference.file_name,
                     laplacian_ksize=laplacian_ksize,
                     out_dir_laplacian=laplacian_dir_path,
+                    laplacian_power=laplacian_power,
                 )
 
         logger.info("Chips generated in %s", chips_dir_path)
@@ -502,7 +506,7 @@ class ChipService:
             tiff_files = glob.glob("*.TIFF")
 
             if not tiff_files:
-                print(f"No TIFF files found in {directory_path}")
+                logger.warning("No TIFF files found in %s", directory_path)
                 return
 
             # Sort files for consistent ordering
@@ -518,8 +522,15 @@ class ChipService:
                 VRTNodata=0,  # False for mosaic (single band)
             )
 
-            # Create the VRT
-            vrt_ds = gdal.BuildVRT(output_vrt_name, tiff_files, options=vrt_options)
+            # Create the VRT. Chips are plain pixel crops with no geotransform
+            # of their own, so GDAL warns "does not support ungeoreferenced
+            # image" once per file - expected here, not actionable, and would
+            # otherwise flood the log with one line per chip.
+            gdal.PushErrorHandler("CPLQuietErrorHandler")
+            try:
+                vrt_ds = gdal.BuildVRT(output_vrt_name, tiff_files, options=vrt_options)
+            finally:
+                gdal.PopErrorHandler()
 
             if vrt_ds is not None:
                 # Close the dataset
@@ -543,6 +554,7 @@ class ChipService:
         reference_filename: str,  # for out folder
         laplacian_ksize: dict[str, int] | None = None,
         out_dir_laplacian: Path | None = None,
+        laplacian_power: float = 1.0,
     ):
         """
         Generate KP chip using gdal translate for monitored and reference dataset in corresponding output dir.
@@ -617,6 +629,7 @@ class ChipService:
                 y0_offset,
                 ref_ksize,
                 out_dir_laplacian / reference_filename / f"REF_{x0}_{y0}.TIFF",
+                laplacian_power,
             )
             self._write_laplacian_chip(
                 monitored,
@@ -624,6 +637,7 @@ class ChipService:
                 y1_offset,
                 mon_ksize,
                 out_dir_laplacian / monitored_filename / f"MON_{x0}_{y0}.TIFF",
+                laplacian_power,
             )
 
     def _write_laplacian_chip(
@@ -633,11 +647,14 @@ class ChipService:
         yoff: int,
         ksize: int,
         out_path: Path,
+        power: float = 1.0,
     ):
         data = dataset.GetRasterBand(1).ReadAsArray(xoff, yoff, self._chip_size, self._chip_size)
         if data is None:
             return
-        lap = cv2.Laplacian(to_uint8(data), cv2.CV_8U, ksize=ksize)
+        lap = laplacian_to_uint8(
+            cv2.Laplacian(to_uint8(data), cv2.CV_32F, ksize=ksize), power=power
+        )
         driver = gdal.GetDriverByName("GTiff")
         ds = driver.Create(str(out_path), self._chip_size, self._chip_size, 1, gdal.GDT_Byte)
         ds.GetRasterBand(1).WriteArray(lap)

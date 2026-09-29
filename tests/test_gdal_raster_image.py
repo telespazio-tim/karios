@@ -278,6 +278,71 @@ def test_is_compatible_with():
         assert image1.is_compatible_with(image2) is True
 
 
+def test_is_compatible_with_no_spatial_ref_on_other_image():
+    """A missing spatial reference (e.g. a plain array saved as GeoTIFF,
+    never geocoded) must return False, not raise - previously
+    `self.spatial_ref.IsSame(...)` crashed with AttributeError on None."""
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = "EPSG:4326"
+        mock_spatial_ref = Mock()
+        mock_dataset.GetSpatialRef.return_value = mock_spatial_ref
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image1 = GdalRasterImage("/fake/path/image1.tif")
+        image2 = GdalRasterImage("/fake/path/image2.tif")
+        image2.spatial_ref = None  # not georeferenced
+
+        assert image1.is_compatible_with(image2) is False
+
+
+def test_is_compatible_with_no_spatial_ref_on_self():
+    """Same as above, checked from the other side of the comparison."""
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = ""
+        mock_dataset.GetSpatialRef.return_value = None
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image1 = GdalRasterImage("/fake/path/image1.tif")
+        image2 = GdalRasterImage("/fake/path/image2.tif")
+
+        assert image1.spatial_ref is None
+        assert image1.is_compatible_with(image2) is False
+
+
+def test_image_information_reports_missing_spatial_reference():
+    """The diagnostic string shown in the raised KariosException must say
+    plainly that there is no spatial reference, not just an empty string."""
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = ""
+        mock_dataset.GetSpatialRef.return_value = None
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image = GdalRasterImage("/fake/path/image.tif")
+
+        assert "no spatial reference" in image.image_information
+
+
 if __name__ == "__main__":
     test_gdal_raster_image_initialization()
     test_gdal_raster_image_properties()
@@ -290,4 +355,7 @@ if __name__ == "__main__":
     test_open_gdal_dataset_context_manager()
     test_open_gdal_dataset_context_manager_failure()
     test_is_compatible_with()
+    test_is_compatible_with_no_spatial_ref_on_other_image()
+    test_is_compatible_with_no_spatial_ref_on_self()
+    test_image_information_reports_missing_spatial_reference()
     print("All GdalRasterImage tests passed!")

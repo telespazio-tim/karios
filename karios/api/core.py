@@ -44,6 +44,11 @@ from karios.matcher.mutual_info_service import MutualInfoService
 from karios.matcher.zncc_service import ZNCCService
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
+from karios.report.coverage_plot import (
+    CoveragePlot,
+    compute_density_grid,
+    coverage_statistics,
+)
 from karios.report.html_report import HtmlReportGenerator
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
@@ -101,6 +106,7 @@ class ReportPaths:
     dem_plots: list[str]
     products: list[str]
     html_report: Optional[str] = None
+    coverage_plot: Optional[str] = None
 
 
 class KariosAPI:
@@ -149,6 +155,7 @@ class KariosAPI:
             self._runtime_configuration.output_directory,
             self._runtime_configuration.no_values,
             self._runtime_configuration.enable_coarse_to_fine,
+            laplacian_power=self._runtime_configuration.laplacian_power,
         )
 
         self._zncc_service = ZNCCService()
@@ -372,6 +379,12 @@ class KariosAPI:
         # Generate DEM plots if DEM is provided
         dem_plots = self._generate_dem_plots(match_result, output_dir, dem_file_path)
 
+        # Debug mode: also analyze how uniformly key points cover the scene,
+        # not just how many were found.
+        coverage_plot_path = None
+        if self._runtime_configuration.debug:
+            coverage_plot_path = self._generate_coverage_plot(match_result, output_dir)
+
         report_paths = ReportPaths(
             overview_plot=str(overview_path),
             dx_plot=str(dx_plot_path),
@@ -379,6 +392,7 @@ class KariosAPI:
             ce_plot=str(ce_plot_path),
             dem_plots=dem_plots,
             products=product_paths,
+            coverage_plot=str(coverage_plot_path) if coverage_plot_path else None,
         )
 
         # Always generate HTML report
@@ -409,6 +423,7 @@ class KariosAPI:
             self._processing_configuration.accuracy_analysis_configuration.confidence_threshold,
             self._runtime_configuration.output_directory,
             laplacian_ksize=self._resolve_laplacian_ksize(),
+            laplacian_power=self._runtime_configuration.laplacian_power,
         )
 
     def _resolve_laplacian_ksize(self) -> dict[str, int] | None:
@@ -1042,6 +1057,43 @@ class KariosAPI:
         )
         ce_plot.plot(ce_path)
         return ce_path
+
+    def _generate_coverage_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
+        """Generate the key point density/quality coverage plot (debug mode only).
+
+        Args:
+            match_result: Match result
+            output_dir: Output directory
+
+        Returns:
+            Path to the generated plot
+        """
+        counts = compute_density_grid(
+            match_result.points,
+            match_result.monitored_image.x_size,
+            match_result.monitored_image.y_size,
+            self._processing_configuration.coverage_plot_configuration.grid_size,
+        )
+        stats = coverage_statistics(counts)
+        logger.info(
+            "KP coverage: %s points, %s/%s empty cells (%.1f%%), coefficient of variation %.2f "
+            "(lower = more uniform)",
+            stats["total_points"],
+            stats["empty_cells"],
+            stats["total_cells"],
+            100 * stats["empty_cell_ratio"],
+            stats["coefficient_of_variation"],
+        )
+
+        coverage_plot = CoveragePlot(
+            self._processing_configuration.coverage_plot_configuration,
+            match_result.monitored_image,
+            match_result.points,
+            self._runtime_configuration.title_prefix,
+        )
+        coverage_path = output_dir / "05_coverage.png"
+        coverage_plot.plot(coverage_path)
+        return coverage_path
 
     def _generate_dem_plots(
         self, match_result: MatchResult, output_dir: Path, dem_file_path: Optional[Path]
