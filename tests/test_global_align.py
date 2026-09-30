@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from click.testing import CliRunner
 
-from osgeo import gdal
+from osgeo import gdal, osr
 
 from karios.cli import commands
 from karios.core.image import GdalRasterImage
@@ -314,6 +314,7 @@ def test_prior_maps_pixel_centers():
 
         def __init__(self, x_min, y_max, res):
             self.x_min, self.y_max, self.x_res, self.y_res = x_min, y_max, res, -res
+            self.geo_transform = (x_min, res, 0.0, y_max, 0.0, -res)
 
     prior = global_align._prior_from_georefs(Image(300.0, 900.0, 5.0), Image(0.0, 1000.0, 10.0))
 
@@ -526,3 +527,100 @@ def test_tiled_sift_aligns_like_the_whole_image(shifted_pair, monkeypatch):
 
     assert alignment.matrix[0, 2] == pytest.approx(5, abs=0.5)
     assert alignment.matrix[1, 2] == pytest.approx(3, abs=0.5)
+
+
+def _rotated_wgs84(lon, lat, step, angle_deg, mirror):
+    """Geotransform in degrees, `step` degrees per pixel, rotated and optionally mirrored."""
+    a = np.radians(angle_deg)
+    col = np.array([np.cos(a), np.sin(a)]) * step * (-1 if mirror else 1)
+    row = np.array([np.sin(a), -np.cos(a)]) * step
+    return (lon, col[0], row[0], lat, col[1], row[1])
+
+
+@pytest.fixture(name="wgs84_pair", scope="module")
+def wgs84_pair_fixture(tmp_path_factory):
+    """ref in UTM 31N at 20 m; mon in WGS 84 at ~5 m, rotated 30° and mirrored.
+
+    mon's pixels are sampled from ref at their true place; its georeferencing
+    then claims a place 200 m east and 150 m north of it. Returns (mon, ref,
+    truth), truth mapping mon pixel centers to ref's.
+    """
+    tmp = tmp_path_factory.mktemp("wgs84")
+    rng = np.random.default_rng(11)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (700, 700)).astype(np.float32), (0, 0), 3)
+    texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
+    ref_geo = (600000.0, 20.0, 0.0, 4830000.0, 0.0, -20.0)
+    ref = _geotiff(tmp / "ref.tif", texture, 600000.0, 4830000.0, 20.0)
+
+    wgs84, utm = osr.SpatialReference(), osr.SpatialReference()
+    wgs84.ImportFromEPSG(4326)
+    utm.ImportFromEPSG(32631)
+    for srs in (wgs84, utm):
+        srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    to_utm = osr.CoordinateTransformation(wgs84, utm)
+    to_wgs84 = osr.CoordinateTransformation(utm, wgs84)
+    # True grid: from UTM (604000, 4826000), 4.5e-5 degrees per pixel (~4-5 m)
+    lon0, lat0, _ = to_wgs84.TransformPoint(604000.0, 4826000.0)
+    true_geo = _rotated_wgs84(lon0, lat0, 4.5e-5, 30.0, mirror=True)
+
+    size = 500
+    rows, cols = np.mgrid[0:size, 0:size].astype(np.float64)
+    lon = true_geo[0] + (cols + 0.5) * true_geo[1] + (rows + 0.5) * true_geo[2]
+    lat = true_geo[3] + (cols + 0.5) * true_geo[4] + (rows + 0.5) * true_geo[5]
+    east_north = np.array(to_utm.TransformPoints(np.column_stack([lon.ravel(), lat.ravel()])))
+    ref_x = (east_north[:, 0] - ref_geo[0]) / ref_geo[1] - 0.5
+    ref_y = (east_north[:, 1] - ref_geo[3]) / ref_geo[5] - 0.5
+    map_x = ref_x.reshape(size, size).astype(np.float32)
+    map_y = ref_y.reshape(size, size).astype(np.float32)
+    mon_array = cv2.remap(texture.astype(np.float32), map_x, map_y, cv2.INTER_CUBIC)
+    mon_array = np.clip(mon_array, 1, 65535).astype(np.uint16)
+
+    # Georeferencing off by 200 m east and 150 m north
+    off_lon, off_lat, _ = to_wgs84.TransformPoint(604200.0, 4826150.0)
+    claimed = list(true_geo)
+    claimed[0] += off_lon - lon0
+    claimed[3] += off_lat - lat0
+    path = tmp / "mon.tif"
+    dataset = gdal.GetDriverByName("GTiff").Create(str(path), size, size, 1, gdal.GDT_UInt16)
+    dataset.SetProjection(wgs84.ExportToWkt())
+    dataset.SetGeoTransform(claimed)
+    dataset.GetRasterBand(1).WriteArray(mon_array)
+    dataset = None
+
+    # A homography fits the true mapping within 0.01 ref px over this 2.5 km footprint
+    grid = (slice(None, None, 50), slice(None, None, 50))
+    sample = np.column_stack([cols[grid].ravel(), rows[grid].ravel()])
+    true_ref = np.column_stack([map_x[grid].ravel(), map_y[grid].ravel()]).astype(np.float64)
+    truth, _ = cv2.findHomography(sample, true_ref, 0)
+    return GdalRasterImage(str(path)), ref, truth
+
+
+def test_prior_is_reprojected_across_crs(wgs84_pair):
+    """A rotated, mirrored WGS 84 mon gets a prior on a UTM ref, off by its georeferencing only."""
+    mon, ref, truth = wgs84_pair
+
+    prior = global_align._prior_from_georefs(mon, ref)
+
+    corners = np.array([[0.0, 0.0], [500.0, 0.0], [500.0, 500.0], [0.0, 500.0]])
+    found = global_align._footprint_points(prior, corners)
+    offset = found - global_align._footprint_points(truth, corners)
+    # 200 m east, 150 m north: +10 ref px in x, -7.5 in y (ref rows go south)
+    assert offset[:, 0] == pytest.approx(10, abs=0.2)
+    assert offset[:, 1] == pytest.approx(-7.5, abs=0.2)
+    # Mirrored grid: the prior's linear part reverses orientation
+    assert np.linalg.det(prior[:2, :2]) < 0
+
+
+def test_rotated_mirrored_wgs84_mon_aligns_on_utm_ref(wgs84_pair):
+    mon, ref, truth = wgs84_pair
+
+    alignment = detect_global_alignment(
+        mon.array, ref.array, prior=global_align._prior_from_georefs(mon, ref)
+    )
+
+    # From 12.5 ref px off: the center lands on the truth, the corners carry
+    # ECC's scale uncertainty on a 125 ref px footprint
+    center = np.array([[250.0, 250.0]])
+    found = global_align._footprint_points(alignment.matrix, center)
+    assert np.abs(found - global_align._footprint_points(truth, center)).max() < 0.05
+    assert _center_error(alignment.matrix, truth, size=500) < 0.6

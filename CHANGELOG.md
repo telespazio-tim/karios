@@ -75,6 +75,12 @@
   the jump to the zero fill; eroding it raises the correlation of identical images from 0.77 to
   0.999. ECC now also works on the reference around the monitored footprint only, 8x faster on
   a footprint a quarter of the crop.
+- **`karios align` uses the georeferencing whatever the CRS and grid orientation**: the prior was
+  only built for two north-up images in the same CRS, so a PhiSat scene in WGS 84 on a rotated,
+  mirrored grid ran blind on a UTM Sentinel-2 tile, matching the whole images for 6 RANSAC inliers
+  of 841. The prior is now fitted on a grid of monitored pixels reprojected into the reference's
+  pixels (within 0.9 px over that 22 km scene), and the monitored image is straightened by it
+  into the reference's orientation before matching, as SIFT does not handle mirrored images.
 - **Images in a geographic CRS or on a rotated grid no longer crash `karios process`**: the first
   geotransform term was taken as the pixel size in meters, so a PhiSat scene in WGS 84 on a
   rotated grid got -5.6e-05 "m", which inverted the circular error histogram range. A metric

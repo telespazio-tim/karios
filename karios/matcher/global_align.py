@@ -54,7 +54,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from osgeo import gdal
+from osgeo import gdal, osr
 
 from karios.core.image import GdalRasterImage
 from karios.core.radiometry import to_uint8
@@ -136,33 +136,84 @@ def _preprocess(arr: np.ndarray) -> np.ndarray:
     return clahe.apply(img)
 
 
+def _north_up(geo_transform: tuple) -> bool:
+    return geo_transform[2] == 0 and geo_transform[4] == 0
+
+
 def _prior_from_georefs(
     monitored: GdalRasterImage, reference: GdalRasterImage
 ) -> Optional[np.ndarray]:
-    """Build the 3x3 homography mon_pixel → ref_pixel implied by the two
-    geotransforms, assuming both images are georeferenced in the same CRS
-    and north-up (zero skew terms in their geotransforms — true for almost
-    all satellite GeoTIFFs).
+    """Build the 3x3 homography mon_pixel → ref_pixel implied by the two georeferencings.
 
-    Returns None when no usable prior can be built (missing projection or
-    mismatched CRS).
+    Two north-up images in the same CRS give it exactly from their
+    geotransforms. Otherwise a grid of mon pixels is mapped through mon's
+    full geotransform, reprojected into ref's CRS and brought to ref pixels,
+    and the homography is fitted to it: this takes any pair of CRS and rotated
+    or mirrored grids, like a PhiSat scene in WGS 84 on a Sentinel-2 tile in
+    UTM, fitted within a reference pixel over 22 km.
+
+    Returns None when no usable prior can be built (an image without CRS, or
+    a reprojection failing).
     """
     if not monitored.projection or not reference.projection:
         return None
+    mon_geo, ref_geo = monitored.geo_transform, reference.geo_transform
     try:
-        if not monitored.spatial_ref.IsSame(reference.spatial_ref):
-            return None
+        same_crs = bool(monitored.spatial_ref.IsSame(reference.spatial_ref))
     except Exception:
         return None
-    sx = monitored.x_res / reference.x_res
-    sy = monitored.y_res / reference.y_res
-    tx = (monitored.x_min - reference.x_min) / reference.x_res
-    ty = (monitored.y_max - reference.y_max) / reference.y_res
-    # Geotransforms place pixel corners, OpenCV pixel centers: see _pixel_scale()
-    return np.array(
-        [[sx, 0.0, tx + (sx - 1) / 2], [0.0, sy, ty + (sy - 1) / 2], [0.0, 0.0, 1.0]],
-        dtype=np.float64,
+    if same_crs and _north_up(mon_geo) and _north_up(ref_geo):
+        sx = monitored.x_res / reference.x_res
+        sy = monitored.y_res / reference.y_res
+        tx = (monitored.x_min - reference.x_min) / reference.x_res
+        ty = (monitored.y_max - reference.y_max) / reference.y_res
+        # Geotransforms place pixel corners, OpenCV pixel centers: see _pixel_scale()
+        return np.array(
+            [[sx, 0.0, tx + (sx - 1) / 2], [0.0, sy, ty + (sy - 1) / 2], [0.0, 0.0, 1.0]],
+            dtype=np.float64,
+        )
+    return _fit_prior(monitored, reference)
+
+
+PRIOR_GRID = 11  # mon pixels per side reprojected to fit a prior across CRS
+
+
+def _fit_prior(monitored: GdalRasterImage, reference: GdalRasterImage) -> Optional[np.ndarray]:
+    """Least squares homography mon_pixel → ref_pixel on a reprojected grid of mon pixels."""
+    mon_srs = osr.SpatialReference(wkt=monitored.projection)
+    ref_srs = osr.SpatialReference(wkt=reference.projection)
+    for srs in (mon_srs, ref_srs):
+        # x = easting or longitude, whatever the CRS definition's axis order
+        srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    ref_inverse = gdal.InvGeoTransform(reference.geo_transform)
+    if ref_inverse is None:
+        return None
+
+    # Pixel centers, on OpenCV's integers; the geotransform maps corners, half a pixel out
+    cols, rows = np.meshgrid(
+        np.linspace(0, monitored.x_size - 1, PRIOR_GRID),
+        np.linspace(0, monitored.y_size - 1, PRIOR_GRID),
     )
+    mon_px = np.column_stack([cols.ravel(), rows.ravel()])
+    try:
+        geo = [gdal.ApplyGeoTransform(monitored.geo_transform, x + 0.5, y + 0.5) for x, y in mon_px]
+        reprojected = osr.CoordinateTransformation(mon_srs, ref_srs).TransformPoints(geo)
+    except Exception as e:  # pylint: disable=broad-except
+        logger.warning("Cannot reproject mon into ref's CRS: %s", e)
+        return None
+    ref_px = np.array([gdal.ApplyGeoTransform(ref_inverse, x, y) for x, y, *_ in reprojected])
+    ref_px -= 0.5
+    if not np.isfinite(ref_px).all():
+        return None
+
+    matrix, _ = cv2.findHomography(mon_px, ref_px, 0)
+    if matrix is None:
+        return None
+    residual = np.abs(_footprint_points(matrix, mon_px) - ref_px).max()
+    logger.info(
+        "Geotransform prior reprojected from mon's CRS: fitted within %.2f ref px", residual
+    )
+    return matrix
 
 
 @dataclass
@@ -246,6 +297,27 @@ def _work_frame(
         size = (max(1, round(cw / scale)), max(1, round(ch / scale)))
         ref_work = cv2.resize(ref_work, size, interpolation=cv2.INTER_AREA)
     ref_scale = _pixel_scale(ref_work.shape[1] / cw, ref_work.shape[0] / ch)
+
+    # Straighten mon into ref's orientation when the prior rotates, mirrors or
+    # shears it: SIFT is not mirror invariant, the translation search needs
+    # both images north-up alike, and ECC only corrects small differences
+    rectify = ref_scale @ crop @ prior @ np.linalg.inv(mon_to_work)
+    rectify /= rectify[2, 2]
+    aligned_axes = np.allclose(rectify[:2, :2], np.eye(2), atol=1e-3)
+    if not aligned_axes or np.abs(rectify[2, :2]).max() > 1e-9:
+        wh, ww = mon_work.shape
+        corners = _footprint(rectify, ww, wh)
+        (bx0, by0), (bx1, by1) = np.floor(corners.min(axis=0)), np.ceil(corners.max(axis=0))
+        to_canvas = np.array([[1.0, 0.0, -bx0], [0.0, 1.0, -by0], [0.0, 0.0, 1.0]]) @ rectify
+        size = (int(bx1 - bx0), int(by1 - by0))
+        m32 = to_canvas.astype(np.float32)
+        mon_work = cv2.warpPerspective(mon_work, m32, size, flags=cv2.INTER_LINEAR)
+        valid_u8 = valid_work.astype(np.uint8)
+        covered = cv2.warpPerspective(valid_u8, m32, size, flags=cv2.INTER_NEAREST)
+        # Bilinear warping blends the edge of the data with the zero fill
+        valid_work = cv2.erode(covered, np.ones((3, 3), np.uint8)) > 0
+        mon_to_work = to_canvas @ mon_to_work
+        logger.info("mon straightened into ref's orientation by the prior: %s", _decompose(rectify))
 
     return _WorkFrame(
         mon=mon_work,
@@ -933,7 +1005,7 @@ def apply_global_alignment(
             _decompose(prior),
         )
     else:
-        logger.info("No geotransform prior (CRS mismatch or unreferenced)")
+        logger.info("No geotransform prior (unreferenced image, or reprojection failed)")
 
     alignment = detect_global_alignment(
         mon_arr, ref_arr, prior=prior, sift_nfeatures=sift_nfeatures
