@@ -44,7 +44,7 @@ from karios.matcher.patch_scores import compute_patch_scores
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
 from karios.report.html_report import HtmlReportGenerator
-from karios.report.mosaic import generate_mosaic, generate_overlay
+from karios.report.mosaic import equalized_pair, generate_mosaic, generate_overlay
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
 from karios.report.shift_by_alt_plot import MeanShiftByAltitudeGroupPlot
@@ -374,13 +374,23 @@ class KariosAPI:
         dx_plot_path = self._generate_dx_plot(match_result, output_dir)
         dy_plot_path = self._generate_dy_plot(match_result, output_dir)
         ce_plot_path = self._generate_ce_plot(match_result, accuracy_analysis, output_dir)
+        # Both images equalized once when the mosaic and the overlay use them
+        equalized = None
+        config = self._runtime_configuration
+        if config.mosaic_tile_size and config.generate_overlay:
+            equalized = equalized_pair(
+                match_result.monitored_image,
+                match_result.reference_image,
+                mask=match_result.mask,
+                no_values=self._runtime_configuration.no_values,
+            )
         mosaic_path = (
-            self._generate_mosaic(match_result, output_dir)
+            self._generate_mosaic(match_result, output_dir, equalized)
             if self._runtime_configuration.mosaic_tile_size
             else None
         )
         overlay_path = (
-            self._generate_overlay(match_result, output_dir)
+            self._generate_overlay(match_result, output_dir, equalized)
             if self._runtime_configuration.generate_overlay
             else None
         )
@@ -996,12 +1006,15 @@ class KariosAPI:
         overview_plot.plot(overview_path)
         return overview_path
 
-    def _generate_mosaic(self, match_result: MatchResult, output_dir: Path) -> Path:
+    def _generate_mosaic(
+        self, match_result: MatchResult, output_dir: Path, equalized=None
+    ) -> Path:
         """Generate the checkerboard mosaic of the monitored and reference images.
 
         Args:
             match_result: Match result
             output_dir: Output directory
+            equalized: equalized_pair() of the images, if already computed
 
         Returns:
             Path to the generated image
@@ -1013,14 +1026,18 @@ class KariosAPI:
             self._runtime_configuration.mosaic_tile_size,
             mask=match_result.mask,
             no_values=self._runtime_configuration.no_values,
+            equalized=equalized,
         )
 
-    def _generate_overlay(self, match_result: MatchResult, output_dir: Path) -> Path:
+    def _generate_overlay(
+        self, match_result: MatchResult, output_dir: Path, equalized=None
+    ) -> Path:
         """Generate the color overlay of the monitored and reference images.
 
         Args:
             match_result: Match result
             output_dir: Output directory
+            equalized: equalized_pair() of the images, if already computed
 
         Returns:
             Path to the generated image
@@ -1031,6 +1048,7 @@ class KariosAPI:
             output_dir / "06_overlay",
             mask=match_result.mask,
             no_values=self._runtime_configuration.no_values,
+            equalized=equalized,
         )
 
     def _generate_dx_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
