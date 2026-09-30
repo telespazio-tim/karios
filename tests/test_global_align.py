@@ -87,8 +87,9 @@ def _run_align(tmp_path, monkeypatch, *options):
 def test_cli_passes_sift_nfeatures(tmp_path, monkeypatch):
     result, calls = _run_align(tmp_path, monkeypatch, "--sift-nfeatures", "5000")
 
-    assert result.exit_code == 0, result.output
     assert calls == [{"sift_nfeatures": 5000}]
+    # The fake alignment raises: align reports the failure in its exit status
+    assert result.exit_code == 1, result.output
 
 
 def test_cli_sift_nfeatures_defaults_to_10000(tmp_path, monkeypatch):
@@ -625,3 +626,26 @@ def test_rotated_mirrored_wgs84_mon_aligns_on_utm_ref(wgs84_pair):
     found = global_align._footprint_points(alignment.matrix, center)
     assert np.abs(found - global_align._footprint_points(truth, center)).max() < 0.05
     assert _center_error(alignment.matrix, truth, size=500) < 0.6
+
+
+def test_cli_quotes_the_reference_in_the_printed_gdalwarp(tmp_path, monkeypatch):
+    """A reference named like a shell substitution is quoted in the command to paste."""
+    grid = {"x_size": 10, "y_size": 10, "x_res": 5.0, "y_res": -5.0, "x_min": 0.0, "y_max": 50.0}
+    aligned = type("Aligned", (), {**grid, "file_name": "mon_global_aligned.tif"})()
+    reference = type("Ref", (), {"x_res": 10.0, "y_res": -10.0})()
+    alignment = global_align.GlobalAlignment(matrix=np.eye(3), n_inliers=4, n_matches=4)
+    monkeypatch.setattr(commands, "GdalRasterImage", lambda path: reference)
+    monkeypatch.setattr(
+        commands, "apply_global_alignment", lambda *args, **kwargs: (aligned, None, alignment)
+    )
+    mon, ref = tmp_path / "mon.tif", tmp_path / "$(touch pwned).tif"
+    mon.touch()
+    ref.touch()
+
+    result = CliRunner().invoke(
+        commands.cli, ["align", str(mon), str(ref), "--out", str(tmp_path / "out"), "--no-log-file"]
+    )
+
+    assert result.exit_code == 0, result.output
+    command = next(line for line in result.output.splitlines() if "gdalwarp" in line)
+    assert f"'{ref}'" in command
