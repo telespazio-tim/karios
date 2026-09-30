@@ -22,8 +22,10 @@ import datetime
 import html
 import logging
 from pathlib import Path
-from urllib.parse import quote
 from typing import TYPE_CHECKING, Optional
+from urllib.parse import quote
+
+from karios.report.chip_service import chip_dir_names
 
 if TYPE_CHECKING:
     from karios.api.config import RuntimeConfiguration
@@ -995,8 +997,10 @@ class HtmlReportGenerator:
 
         # 4. Generate Chips Page if needed
         if has_chips:
-            mon_name = self.match_result.monitored_image.file_name
-            ref_name = self.match_result.reference_image.file_name
+            mon_name, ref_name = chip_dir_names(
+                self.match_result.monitored_image.file_name,
+                self.match_result.reference_image.file_name,
+            )
 
             mon_vrt = _url("chips", mon_name, "monitored_chips.vrt")
             ref_vrt = _url("chips", ref_name, "reference_chips.vrt")

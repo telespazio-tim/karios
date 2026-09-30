@@ -253,3 +253,15 @@ def test_configuration_values_are_escaped(generator):
 
     assert "<img" not in rows
     assert "&lt;img src=x onerror=alert(4)&gt;" in rows
+
+
+def test_chip_links_follow_directories_of_same_named_images(generator, tmp_path):
+    """Same file names get suffixed chip directories: the report links to those."""
+    generator.match_result.monitored_image.file_name = "B04.jp2"
+    generator.match_result.reference_image.file_name = "B04.jp2"
+
+    generator.generate()
+
+    chips = (tmp_path / "chips.html").read_text(encoding="utf-8")
+    assert 'href="chips/B04.jp2_monitored/monitored_chips.vrt"' in chips
+    assert 'href="chips/B04.jp2_reference/reference_chips.vrt"' in chips
