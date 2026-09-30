@@ -34,6 +34,60 @@
 
 ### Fix
 
+- **`karios align` recovers large georeferencing errors between images of different
+  resolutions**: SIFT ran on both whole images at native resolution, so a monitored image 7x
+  finer than the reference had keypoints of details the reference cannot show, and its small
+  footprint left most reference keypoints without a counterpart (166 of 5000 on a
+  PhiSat/Sentinel-2 pair); ECC, which only corrects a few pixels, could not recover a
+  georeferencing 5 km off either, and the highest ECC score then picked a -144° rotation from 5
+  RANSAC inliers. With a geotransform prior, matching now runs at the coarser resolution on the
+  reference cropped around the monitored footprint, a correlation search corrects the prior's
+  translation as an extra ECC start, implausible estimates are rejected, and the others compare
+  on common pixels. On that pair: 26/42 RANSAC inliers instead of 5/15, and `karios process` on
+  the output measures 794 key points with a 0.6-0.7 px spread and a 0.1 px mean shift, against
+  65 with 2.4-3.3 px for ECC from the georeferencing alone. The prior now also maps pixel
+  centers, as OpenCV does, instead of the geotransform's pixel corners.
+- **`karios align` keeps the monitored resolution**: the aligned monitored image was written on
+  the reference's grid, so a 4 m PhiSat image aligned on a 30 m Sentinel-2 tile came out at
+  30 m, downsampled 7x by bilinear interpolation. Both outputs now share a grid covering the
+  monitored image's valid footprint, nested in the reference's grid at the reference pixel
+  divided by the smallest integer keeping the monitored resolution (3.75 m for PhiSat). Unlike
+  the reverted attempt, which covered the whole reference footprint (26267 px square for
+  PhiSat), the grid spans the monitored data only (5904 x 6272 px). `karios align` now writes
+  that image only: the reference and the alternative ECC candidates are no longer written, and
+  the command prints the `gdalwarp` call that resamples the reference onto the output grid for
+  `karios process`.
+- **`karios align` handles 10 m references**: OpenCV's brute-force matcher refuses more than
+  262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
+  compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
+  FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` peak memory down from 7.2 to 2.1 GB** on a PhiSat scene and a 10 m
+  Sentinel-2 tile, and 3 min 40 s instead of 6 min 20 s. OpenCV's SIFT doubles its input
+  before building the pyramid, about 200 bytes per pixel: 6 GB for the 28 Mpx reference crop.
+  Images wider than 2048 px are now detected by tiles read with a 128 px margin, keeping each
+  tile's core keypoints; the thresholds being absolute, 99.98% of the keypoints lie within
+  0.01 px of the whole image's. The reference is also stretched and equalized on its crop only,
+  instead of the whole 120 Mpx tile.
+- **ECC refinement in `karios align` corrected the wrong way**: ECC's warp maps the reference
+  onto the pre-warped monitored image, and was composed without inverting it, so every
+  refinement doubled its starting error instead of removing it (a start 2.5 px off ended 5 px
+  off on the other side). Its mask also reached the edge of the data, where the gradients see
+  the jump to the zero fill; eroding it raises the correlation of identical images from 0.77 to
+  0.999. ECC now also works on the reference around the monitored footprint only, 8x faster on
+  a footprint a quarter of the crop.
+- **`karios align` uses the georeferencing whatever the CRS and grid orientation**: the prior was
+  only built for two north-up images in the same CRS, so a PhiSat scene in WGS 84 on a rotated,
+  mirrored grid ran blind on a UTM Sentinel-2 tile, matching the whole images for 6 RANSAC inliers
+  of 841. The prior is now fitted on a grid of monitored pixels reprojected into the reference's
+  pixels (within 0.9 px over that 22 km scene), and the monitored image is straightened by it
+  into the reference's orientation before matching, as SIFT does not handle mirrored images.
+- **Images in a geographic CRS or on a rotated grid no longer crash `karios process`**: the first
+  geotransform term was taken as the pixel size in meters, so a PhiSat scene in WGS 84 on a
+  rotated grid got -5.6e-05 "m", which inverted the circular error histogram range. A metric
+  pixel size is now only read from a projected CRS on a north-up grid; other images are
+  measured in pixels, unless `--input-pixel-size` is given. Their EPSG code is read too (it only
+  was for projected CRS), so the key point GeoJSON is written, and the raster products copy the
+  reference's full geotransform instead of dropping its rotation terms.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.
@@ -48,8 +102,8 @@
   or replicated content does not move consistently between the two images, so a window
   overlapping it scores worse than a truncated one.
 
-- **`karios align` subcommand**: standalone command that warps the monitored image onto the reference grid. Writes the primary aligned output plus one sibling per ECC-converged candidate for visual A/B comparison in QGIS.
-- **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `0` = unlimited by default): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
+- **`karios align` subcommand**: standalone command that warps the monitored image into the reference frame, keeping its resolution, and writes it georeferenced in the reference's CRS.
+- **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `10000` by default, `0` = unlimited): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
 
 ### Improvements
 

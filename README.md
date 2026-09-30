@@ -787,31 +787,33 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 ### Global Alignment (`karios align`)
 
-`karios align` estimates and applies a global 2D homography to bring the monitored image onto the reference's pixel grid. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
+`karios align` estimates and applies a global 2D homography to bring the monitored image into the reference's frame, without losing its resolution. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
 
 ```bash
 karios align monitored.tif reference.tif --out ./aligned
-# Optionally, limit the SIFT keypoints to the 20000 strongest per image
+# Optionally, keep the 20000 strongest SIFT keypoints per image instead of 10000 (0 keeps all)
 karios align monitored.tif reference.tif --out ./aligned --sift-nfeatures 20000
-karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_global_aligned.tiff
+# karios process needs both images on one grid: resample the reference onto the
+# aligned image's, with the gdalwarp command `karios align` prints, e.g.
+gdalwarp -r cubic -te 637530 4805820 659670 4829340 -ts 5904 6272 reference.tif ./aligned/reference_on_grid.tif
+karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_on_grid.tif
 ```
 
 The pipeline:
 
 1. **Preprocess** both inputs to uint8 with a percentile stretch and CLAHE, which equalises radiometry between sensors.
-2. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default every keypoint is kept; `--sift-nfeatures N` keeps only the N strongest per image, which bounds the brute-force matching time and memory on large images.
-3. **Match** descriptors with a brute-force L2 matcher, then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
-4. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC.
-5. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), starting from both the RANSAC fit and — when available — a geotransform-derived prior. The highest ECC wins.
-6. **Warp** the monitored image with `cv2.warpPerspective` onto the reference's pixel grid. Reference is passed through unchanged. Both outputs share the reference's geotransform so they overlay directly in QGIS.
+2. **Work at a common resolution** when both images are georeferenced: their georeferencing gives a prior homography — directly from the geotransforms for two north-up images in the same CRS, otherwise fitted on a grid of monitored pixels reprojected into the reference's pixels, which takes any pair of CRS and rotated or mirrored grids (a PhiSat scene in WGS 84 fits a UTM Sentinel-2 tile within a pixel). The monitored image is straightened by the prior into the reference's orientation, since SIFT does not handle a mirrored image; the finer image is area-averaged down to the coarser one's pixel size, and the reference is cropped to the monitored footprint plus a search margin of half its size. Otherwise a much finer monitored image has keypoints of details the reference cannot show, and a small footprint leaves most reference keypoints without a counterpart.
+3. **Search the translation** left by the georeferencing, by zero-mean correlation of a fully valid central block of the monitored image over the search window. ECC only corrects a few pixels, so a georeferencing kilometres off needs this coarse start.
+4. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default the 10000 strongest per image are kept; `--sift-nfeatures N` keeps the N strongest, and `0` keeps them all, at the cost of a longer matching on large images.
+5. **Match** descriptors with a brute-force L2 matcher, or a FLANN KD-tree above 10⁸ descriptor pairs (a scene on a 10 m Sentinel-2 crop can have half a million reference keypoints), then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
+6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
+7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), from every starting point: the RANSAC fit, the prior and the translation search.
+8. **Select**: with a prior, estimates too far from it to be a georeferencing correction are rejected (a reflection, a scale change beyond ×1.5, an anisotropy beyond 1.3, a rotation beyond 30°, or a move beyond the search window), and the gradient correlation of the others, computed on the pixels they all cover, picks the result. Without a prior, the RANSAC fit refined by ECC is kept.
+9. **Warp** the monitored image with `cv2.warpPerspective` onto a grid covering its valid footprint in the reference, nested in the reference's grid: its pixel is the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels). The output is georeferenced in the reference's CRS, so it overlays the reference directly in QGIS.
 
-The command writes:
+The command writes `<mon_stem>_global_aligned.tiff`, the monitored image warped into the reference frame.
 
-- `<mon_stem>_global_aligned.tiff` — the monitored image warped into the reference frame
-- `<ref_stem>_global_aligned.tiff` — the reference, passed through unchanged
-- `<mon_stem>_global_aligned__<source>_ecc<score>.tiff` — one sibling per ECC-converged starting point (e.g. `__RANSAC_ecc0.221.tiff`, `__prior_ecc0.046.tiff`). On weakly-correlated cross-sensor imagery, ECC scores can be too low to discriminate reliably — opening every candidate in QGIS and overlaying on the reference lets you pick the visually best one by eye.
-
-The final 3×3 homography and an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio) are printed to stdout.
+The final 3×3 homography, an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio), the output grid and the `gdalwarp` command resampling the reference onto it are printed to stdout.
 
 **Use cases**:
 

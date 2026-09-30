@@ -331,12 +331,21 @@ class GdalRasterImage:
         return self._no_data_value
 
     def have_pixel_resolution(self) -> bool:
-        """Indicate if the image have a pixel size
+        """Indicate if the image has a pixel size in its CRS linear unit, usable as meters.
+
+        Only a projected CRS on a north-up grid gives one: in a geographic CRS the
+        geotransform steps are degrees, and on a rotated grid they are not the
+        pixel sides (a PhiSat scene in WGS 84 has 5.14 m by 4.57 m pixels, 16°
+        apart). Such images are measured in pixels, like unreferenced ones,
+        unless the user provides a pixel size.
 
         Returns:
             bool: 'True' if the image have a pixel size.
         """
-        return bool(self.projection)
+        if not self.projection or self.spatial_ref is None:
+            return False
+        north_up = self._geo[2] == 0 and self._geo[4] == 0
+        return bool(self.spatial_ref.IsProjected()) and north_up
 
     def get_epsg(self) -> str | None:
         """Return image EPSG code as
@@ -344,10 +353,11 @@ class GdalRasterImage:
         Returns:
             str|None: EPSG code as "EPSG: XXXX"
         """
-        if self.have_pixel_resolution():
-            srs = osr.SpatialReference(wkt=self.projection)
-            return srs.GetAttrValue("PROJCS|AUTHORITY", 1)
-        return None
+        if not self.projection:
+            return None
+        srs = osr.SpatialReference(wkt=self.projection)
+        # PROJCS|AUTHORITY only exists for projected CRS: a WGS 84 image has none
+        return srs.GetAuthorityCode(None)
 
     def read(self, band_id, x_off, y_off, x_size, y_size) -> NDArray:
         # pylint: disable=too-many-arguments
