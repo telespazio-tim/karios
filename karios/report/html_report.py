@@ -19,8 +19,10 @@
 
 import base64
 import datetime
+import html
 import logging
 from pathlib import Path
+from urllib.parse import quote
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -29,6 +31,20 @@ if TYPE_CHECKING:
     from karios.core.configuration import ProcessingConfiguration
 
 logger = logging.getLogger(__name__)
+
+
+def _text(value) -> str:
+    """`value` escaped for HTML text and quoted attributes.
+
+    File names, the title prefix and configuration values come from the user:
+    a file named `<svg onload=...>.tif` would otherwise run in the report.
+    """
+    return html.escape(str(value), quote=True)
+
+
+def _url(*segments) -> str:
+    """Relative URL of path `segments`, each percent-encoded, escaped for an attribute."""
+    return html.escape("/".join(quote(str(segment)) for segment in segments), quote=True)
 
 # Branding assets shipped alongside this module, inlined into the report pages
 # as data URIs so each page stands on its own without sidecar files.
@@ -651,7 +667,7 @@ class HtmlReportGenerator:
             ("Title Prefix", self.runtime_config.title_prefix or "None"),
         ]
         for label, value in summary_rows:
-            rows.append(f"<tr><th>{label}</th><td>{value}</td></tr>")
+            rows.append(f"<tr><th>{_text(label)}</th><td>{_text(value)}</td></tr>")
 
         if self.processing_config is None:
             return "\n".join(rows)
@@ -667,10 +683,12 @@ class HtmlReportGenerator:
         for header, section in sections:
             if section is None:
                 continue
-            rows.append(f'<tr class="config-section-header"><th colspan="2">{header}</th></tr>')
+            rows.append(
+                f'<tr class="config-section-header"><th colspan="2">{_text(header)}</th></tr>'
+            )
             for field in dataclasses.fields(section):
                 value = self._format_config_value(getattr(section, field.name))
-                rows.append(f"<tr><th>{field.name}</th><td>{value}</td></tr>")
+                rows.append(f"<tr><th>{_text(field.name)}</th><td>{_text(value)}</td></tr>")
 
         return "\n                        ".join(rows)
 
@@ -781,9 +799,10 @@ class HtmlReportGenerator:
             ref_ch = self._make_crosshair_svg(ref_cx, ref_cy, CHIP_DISPLAY)
             mon_ch = self._make_crosshair_svg(mon_cx, mon_cy, CHIP_DISPLAY)
 
-            ref_raw_src = f"chips/{ref_name}/{ref_png.name}"
+            ref_raw_src = _url("chips", ref_name, ref_png.name)
             mon_raw_path = self.output_dir / "chips" / mon_name / f"MON_{x0}_{y0}.png"
-            mon_raw_src = f"chips/{mon_name}/MON_{x0}_{y0}.png" if mon_raw_path.exists() else None
+            mon_png = f"MON_{x0}_{y0}.png"
+            mon_raw_src = _url("chips", mon_name, mon_png) if mon_raw_path.exists() else None
 
             raw_row = (
                 f'<div class="chip-row">'
@@ -797,12 +816,12 @@ class HtmlReportGenerator:
                 ref_lap_path = self.output_dir / "chips_laplacian" / ref_name / f"REF_{x0}_{y0}.png"
                 mon_lap_path = self.output_dir / "chips_laplacian" / mon_name / f"MON_{x0}_{y0}.png"
                 ref_lap_src = (
-                    f"chips_laplacian/{ref_name}/REF_{x0}_{y0}.png"
+                    _url("chips_laplacian", ref_name, f"REF_{x0}_{y0}.png")
                     if ref_lap_path.exists()
                     else None
                 )
                 mon_lap_src = (
-                    f"chips_laplacian/{mon_name}/MON_{x0}_{y0}.png"
+                    _url("chips_laplacian", mon_name, f"MON_{x0}_{y0}.png")
                     if mon_lap_path.exists()
                     else None
                 )
@@ -872,8 +891,8 @@ class HtmlReportGenerator:
                 )
                 dem_plots_html += f"""
                 <div class="image-container">
-                    <span class="image-title">DEM - {title}</span>
-                    <img src="{relative_path}" alt="{title} Plot">
+                    <span class="image-title">DEM - {_text(title)}</span>
+                    <img src="{_url(relative_path)}" alt="{_text(title)} Plot">
                 </div>"""
             dem_plots_html += "</div>"
 
@@ -883,10 +902,10 @@ class HtmlReportGenerator:
             header_banner_html=header_banner_html,
             nav_links=nav_links("report.html"),
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            monitored_image=self.match_result.monitored_image.file_name,
-            reference_image=self.match_result.reference_image.file_name,
-            mask_file=self.match_result.mask.file_name if self.match_result.mask else "None",
-            dem_file=self.dem_file_path.name if self.dem_file_path else "None",
+            monitored_image=_text(self.match_result.monitored_image.file_name),
+            reference_image=_text(self.match_result.reference_image.file_name),
+            mask_file=_text(self.match_result.mask.file_name if self.match_result.mask else "None"),
+            dem_file=_text(self.dem_file_path.name if self.dem_file_path else "None"),
             config_rows_html=self._build_config_rows_html(),
             matched_points=len(self.match_result.points),
             valid_pixels=self.accuracy_analysis.valid_pixels,
@@ -921,15 +940,15 @@ class HtmlReportGenerator:
 
                 products_rows += f"""
                 <tr>
-                    <td>{p_type}</td>
-                    <td>{p_name}</td>
-                    <td><a href="{p_name}" download>Download</a></td>
+                    <td>{_text(p_type)}</td>
+                    <td>{_text(p_name)}</td>
+                    <td><a href="{_url(p_name)}" download>Download</a></td>
                 </tr>"""
 
             products_content = PRODUCTS_TEMPLATE.format(
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
-                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                title_prefix=_text(self.runtime_config.title_prefix or "KARIOS"),
                 nav_links=nav_links("products.html"),
                 products_rows=products_rows,
             )
@@ -963,12 +982,12 @@ class HtmlReportGenerator:
             page_content = IMAGE_PAGE_TEMPLATE.format(
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
-                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                title_prefix=_text(self.runtime_config.title_prefix or "KARIOS"),
                 nav_links=nav_links(page),
                 page_title=page_title,
-                monitored_image=self.match_result.monitored_image.file_name,
-                reference_image=self.match_result.reference_image.file_name,
-                image=Path(image).name,
+                monitored_image=_text(self.match_result.monitored_image.file_name),
+                reference_image=_text(self.match_result.reference_image.file_name),
+                image=_url(Path(image).name),
                 description=description,
             )
             with open(self.output_dir / page, "w", encoding="utf-8") as f:
@@ -979,8 +998,8 @@ class HtmlReportGenerator:
             mon_name = self.match_result.monitored_image.file_name
             ref_name = self.match_result.reference_image.file_name
 
-            mon_vrt = f"chips/{mon_name}/monitored_chips.vrt"
-            ref_vrt = f"chips/{ref_name}/reference_chips.vrt"
+            mon_vrt = _url("chips", mon_name, "monitored_chips.vrt")
+            ref_vrt = _url("chips", ref_name, "reference_chips.vrt")
             chips_vrt_links = f'<li><a href="{mon_vrt}">Monitored Chips VRT</a></li>'
             chips_vrt_links += f'<li><a href="{ref_vrt}">Reference Chips VRT</a></li>'
 
@@ -990,7 +1009,7 @@ class HtmlReportGenerator:
             chips_content = CHIPS_TEMPLATE.format(
                 css_styles=css_styles,
                 header_banner_html=header_banner_html,
-                title_prefix=self.runtime_config.title_prefix or "KARIOS",
+                title_prefix=_text(self.runtime_config.title_prefix or "KARIOS"),
                 nav_links=nav_links("chips.html"),
                 chips_vrt_links=chips_vrt_links,
                 chips_section_html=chips_section_html,

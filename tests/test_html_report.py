@@ -214,3 +214,42 @@ def test_generate_without_overlay(generator, tmp_path):
 
     assert not (tmp_path / "overlay.html").exists()
     assert "overlay.html" not in (tmp_path / "report.html").read_text(encoding="utf-8")
+
+
+def test_user_values_are_escaped_in_every_page(generator, tmp_path):
+    """Crafted file names, title prefix and products cannot inject markup into the pages."""
+    tag = "<svg onload=alert(1)>"
+    generator.match_result.monitored_image.file_name = f"{tag}.tif"
+    generator.match_result.reference_image.file_name = 'ref" onmouseover="alert(2).tif'
+    generator.runtime_config.title_prefix = "<script>alert(3)</script>"
+    generator.report_paths.products = [f"{tag}.json"]
+
+    generator.generate()
+
+    for page in ["report.html", "mosaic.html", "overlay.html", "products.html", "chips.html"]:
+        content = (tmp_path / page).read_text(encoding="utf-8")
+        assert tag not in content, page
+        assert '" onmouseover="' not in content, page
+        assert "<script>alert(3)" not in content, page
+    report = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "&lt;svg onload=alert(1)&gt;.tif" in report
+
+
+def test_chip_links_are_percent_encoded(generator, tmp_path):
+    """A file name with characters special to URLs still links to its chips directory."""
+    generator.match_result.reference_image.file_name = "ref #1?.tif"
+
+    generator.generate()
+
+    chips = (tmp_path / "chips.html").read_text(encoding="utf-8")
+    assert 'href="chips/ref%20%231%3F.tif/reference_chips.vrt"' in chips
+
+
+def test_configuration_values_are_escaped(generator):
+    """A configuration value carrying markup is shown as text."""
+    generator.laplacian_polarity_label = "<img src=x onerror=alert(4)>"
+
+    rows = generator._build_config_rows_html()
+
+    assert "<img" not in rows
+    assert "&lt;img src=x onerror=alert(4)&gt;" in rows
