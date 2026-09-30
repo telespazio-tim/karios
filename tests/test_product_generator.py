@@ -37,6 +37,7 @@ def test_products_keep_the_rotated_georeferencing(tmp_path):
             "score": [0.8, 0.9],
             "radial error": [0.41, 0.54],
             "angle": [76.0, 112.0],
+            "zncc_score": [0.93, float("nan")],
         }
     )
     config = RuntimeConfiguration(
@@ -58,3 +59,5 @@ def test_products_keep_the_rotated_georeferencing(tmp_path):
     assert geojson["crs"]["properties"]["name"] == "urn:ogc:def:crs:EPSG::4326"
     lon, lat = geojson["features"][0]["geometry"]["coordinates"]
     assert [lon, lat] == list(gdal.ApplyGeoTransform(PHISAT_WGS84, 10.0, 20.0))
+    assert geojson["features"][0]["properties"]["zncc_score"] == 0.93
+    assert geojson["features"][1]["properties"]["zncc_score"] is None

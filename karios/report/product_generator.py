@@ -25,7 +25,7 @@ import os
 
 import numpy as np
 from osgeo import gdal
-from pandas import DataFrame, Series
+from pandas import DataFrame
 
 from karios.api.config import RuntimeConfiguration
 from karios.core.image import GdalRasterImage
@@ -45,39 +45,29 @@ def _row_slices(sorted_y: np.ndarray):
         yield int(row), int(start), int(end)
 
 
-def _to_feature(series: Series, geo_transform: tuple, properties: list[str]) -> dict:
-    """Creates a GeoJSON Point feature of a panda `Series`.
-    The panda Series MUST contains axis `x0`, `y0` and properties listed by `properties` parameter.
-    Series value of `properties` axis MUST be numbers.
-    Computes X,Y coordinates of the feature point geometry in image coordinates reference system
-    by implementing https://gdal.org/en/latest/tutorials/geotransforms_tut.html
-    To do so, it uses the given `geo_transform` that should be retrieve from the source image
-    by using gdal `GetGeoTransform` function of `DataSet` object.
-    Series values of `properties` axis are put in the feature properties object.
+def _to_features(points: DataFrame, geo_transform: tuple, properties: list[str]) -> list[dict]:
+    """GeoJSON Point features of every row of `points`, located by `geo_transform`.
 
-    Args:
-        series (Series): x0;y0;dx;dy;score series
-        geo_transform (tuple): target image geotransform
-        properties (list(str)): names of series axis to put as properties in the feature
-
-    Returns:
-        dict: GeoJSON feature
+    Computed column by column, where a DataFrame.apply over the rows took 1-3 s
+    for the 15k key points of a 30 m scene. The coordinates follow
+    https://gdal.org/en/latest/tutorials/geotransforms_tut.html, rotation terms
+    included; NaN properties become None (null), numbers Python floats.
     """
-    # Compute x, y coordinates in image CRS defined by geo_transform
-    x = geo_transform[0] + series["x0"] * geo_transform[1] + series["y0"] * geo_transform[2]
-    y = geo_transform[3] + series["x0"] * geo_transform[4] + series["y0"] * geo_transform[5]
+    x0 = points["x0"].to_numpy(dtype=np.float64)
+    y0 = points["y0"].to_numpy(dtype=np.float64)
+    xs = (geo_transform[0] + x0 * geo_transform[1] + y0 * geo_transform[2]).tolist()
+    ys = (geo_transform[3] + x0 * geo_transform[4] + y0 * geo_transform[5]).tolist()
+    values = points[properties].to_numpy(dtype=np.float64)
+    rows = np.where(np.isnan(values), None, values).tolist()
+    return [
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [x, y]},
+            "properties": dict(zip(properties, row)),
+        }
+        for x, y, row in zip(xs, ys, rows)
+    ]
 
-    # Build and return the feature
-    return {
-        "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [x, y]},
-        # 1* allow convert np.float32 to float that
-        # allow json serialization (serialize np.float32 fail)
-        # nan set to none for good json serialisation
-        "properties": {
-            prop: None if np.isnan(series[prop]) else 1 * series[prop] for prop in properties
-        },
-    }
 
 
 class ProductGenerator:
@@ -228,12 +218,8 @@ class ProductGenerator:
         if "mutual_info_score" in self._points.columns:
             columns_to_export.append("mutual_info_score")
 
-        # creates feature for each dataframe rows
-        feature_as_series = self._points.apply(
-            _to_feature,
-            axis=1,
-            geo_transform=self._reference_image.geo_transform,
-            properties=columns_to_export,
+        features = _to_features(
+            self._points, self._reference_image.geo_transform, columns_to_export
         )
 
         feature_collection = {
@@ -242,7 +228,7 @@ class ProductGenerator:
                 "type": "name",
                 "properties": {"name": f"urn:ogc:def:crs:EPSG::{self._reference_image.get_epsg()}"},
             },
-            "features": feature_as_series.to_list(),
+            "features": features,
         }
 
         output_file = os.path.join(self._config.output_directory, "kp_delta.json")
