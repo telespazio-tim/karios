@@ -791,7 +791,7 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 ```bash
 karios align monitored.tif reference.tif --out ./aligned
-# Optionally, limit the SIFT keypoints to the 20000 strongest per image
+# Optionally, keep the 20000 strongest SIFT keypoints per image instead of 10000 (0 keeps all)
 karios align monitored.tif reference.tif --out ./aligned --sift-nfeatures 20000
 # karios process needs both images on one grid: resample the reference onto the
 # aligned image's, with the gdalwarp command `karios align` prints, e.g.
@@ -804,7 +804,7 @@ The pipeline:
 1. **Preprocess** both inputs to uint8 with a percentile stretch and CLAHE, which equalises radiometry between sensors.
 2. **Work at a common resolution** when both images are georeferenced: their georeferencing gives a prior homography — directly from the geotransforms for two north-up images in the same CRS, otherwise fitted on a grid of monitored pixels reprojected into the reference's pixels, which takes any pair of CRS and rotated or mirrored grids (a PhiSat scene in WGS 84 fits a UTM Sentinel-2 tile within a pixel). The monitored image is straightened by the prior into the reference's orientation, since SIFT does not handle a mirrored image; the finer image is area-averaged down to the coarser one's pixel size, and the reference is cropped to the monitored footprint plus a search margin of half its size. Otherwise a much finer monitored image has keypoints of details the reference cannot show, and a small footprint leaves most reference keypoints without a counterpart.
 3. **Search the translation** left by the georeferencing, by zero-mean correlation of a fully valid central block of the monitored image over the search window. ECC only corrects a few pixels, so a georeferencing kilometres off needs this coarse start.
-4. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default every keypoint is kept; `--sift-nfeatures N` keeps only the N strongest per image, which bounds the brute-force matching time and memory on large images.
+4. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default the 10000 strongest per image are kept; `--sift-nfeatures N` keeps the N strongest, and `0` keeps them all, at the cost of a longer matching on large images.
 5. **Match** descriptors with a brute-force L2 matcher, or a FLANN KD-tree above 10⁸ descriptor pairs (a scene on a 10 m Sentinel-2 crop can have half a million reference keypoints), then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
 6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
 7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), from every starting point: the RANSAC fit, the prior and the translation search.

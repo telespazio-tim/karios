@@ -61,7 +61,7 @@ from karios.core.radiometry import to_uint8
 
 logger = logging.getLogger(__name__)
 
-SIFT_NFEATURES = 0  # default max number of keypoints kept per image, 0 = unlimited
+SIFT_NFEATURES = 10000  # default max number of keypoints kept per image, 0 = unlimited
 SIFT_CONTRAST_THRESHOLD = 0.02  # default 0.04; lower → more keypoints in low-contrast regions
 SIFT_EDGE_THRESHOLD = 10
 # SIFT runs on tiles of images larger than this side, each read with a margin

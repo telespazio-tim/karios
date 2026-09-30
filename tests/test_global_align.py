@@ -46,14 +46,15 @@ def test_sift_nfeatures_limits_keypoints_per_image(shifted_pair, caplog):
     assert alignment.matrix[1, 2] == pytest.approx(3, abs=0.5)
 
 
-def test_sift_nfeatures_defaults_to_unlimited(shifted_pair, caplog):
+def test_sift_nfeatures_defaults_to_10000(shifted_pair, caplog):
     mon, ref = shifted_pair
     caplog.set_level(logging.INFO, logger=global_align.__name__)
 
     detect_global_alignment(mon, ref)
 
-    assert global_align.SIFT_NFEATURES == 0
-    assert min(_keypoint_counts(caplog)) > 300
+    assert global_align.SIFT_NFEATURES == 10000
+    # This small pair has fewer: all are kept
+    assert 300 < min(_keypoint_counts(caplog)) <= max(_keypoint_counts(caplog)) <= 10010
 
 
 def test_negative_sift_nfeatures_is_rejected(shifted_pair):
@@ -90,10 +91,10 @@ def test_cli_passes_sift_nfeatures(tmp_path, monkeypatch):
     assert calls == [{"sift_nfeatures": 5000}]
 
 
-def test_cli_sift_nfeatures_defaults_to_unlimited(tmp_path, monkeypatch):
+def test_cli_sift_nfeatures_defaults_to_10000(tmp_path, monkeypatch):
     _, calls = _run_align(tmp_path, monkeypatch)
 
-    assert calls == [{"sift_nfeatures": 0}]
+    assert calls == [{"sift_nfeatures": 10000}]
 
 
 def test_cli_rejects_negative_sift_nfeatures(tmp_path, monkeypatch):

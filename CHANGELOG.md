@@ -103,7 +103,7 @@
   overlapping it scores worse than a truncated one.
 
 - **`karios align` subcommand**: standalone command that warps the monitored image into the reference frame, keeping its resolution, and writes it georeferenced in the reference's CRS.
-- **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `0` = unlimited by default): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
+- **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `10000` by default, `0` = unlimited): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
 
 ### Improvements
 
