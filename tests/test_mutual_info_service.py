@@ -70,26 +70,20 @@ def test_mutual_info_service_initialization():
 
 
 def test_mutual_info_service_compute_mutual_info():
-    """Test MutualInfoService compute_mutual_info method with mocked images."""
+    """compute_mutual_info gives, for every point, what _compute_mutual_info gives."""
     service = MutualInfoService()
+    rng = np.random.default_rng(0)
+    array = rng.integers(0, 4000, (120, 120)).astype(np.uint16)
+    image = Mock(array=array, x_size=120, y_size=120)
+    df = pd.DataFrame(
+        {"x0": [30.0, 40.0, 5.0], "y0": [30.0, 40.0, 60.0], "dx": [1, -1, 0], "dy": [1, -1, 0]}
+    )
 
-    df = pd.DataFrame({"x0": [30, 40], "y0": [30, 40], "dx": [1, -1], "dy": [1, -1]})
+    result = service.compute_mutual_info(df, image, image)
 
-    mock_monitored = Mock(spec=GdalRasterImage)
-    mock_reference = Mock(spec=GdalRasterImage)
-    mock_monitored.clear_cache = Mock()
-    mock_reference.clear_cache = Mock()
-
-    with patch.object(df, "apply") as mock_apply:
-        mock_apply.return_value = pd.Series([1.6, 1.4], index=df.index)
-
-        result = service.compute_mutual_info(df, mock_monitored, mock_reference)
-
-        mock_apply.assert_called_once()
-        assert len(result) == 2
-        mock_monitored.clear_cache.assert_called_once()
-        mock_reference.clear_cache.assert_called_once()
-
+    expected = df.apply(service._compute_mutual_info, axis=1, monitored=image, reference=image)
+    np.testing.assert_allclose(result.to_numpy(), expected.to_numpy(), rtol=1e-12)
+    assert np.isnan(result.iloc[2])  # too close to the left edge
 
 def test_mutual_info_service_boundary_near_left():
     """Test _compute_mutual_info returns NaN for points too close to top/left boundary."""
