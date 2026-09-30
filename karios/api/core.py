@@ -623,7 +623,12 @@ class KariosAPI:
             logger.info("Load vector mask file %s", vector_mask_path)
             from karios.core.image import rasterize_vector_mask
 
-            vector_mask = rasterize_vector_mask(str(vector_mask_path), monitored_image)
+            # In the output directory rather than a temporary file: the mask is
+            # read again by the reports, and temporary files were never removed
+            output_dir = Path(self._runtime_configuration.output_directory)
+            vector_mask = rasterize_vector_mask(
+                str(vector_mask_path), monitored_image, str(output_dir / "vector_mask.tif")
+            )
             logger.info("Vector mask rasterized and loaded")
 
         # If no masks provided, return None
@@ -643,15 +648,11 @@ class KariosAPI:
             np.uint8
         )
 
-        # Create combined mask
-        import tempfile
-
-        temp_file = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
-
-        raster_mask.to_raster(temp_path, combined_array)
-        combined_mask = GdalRasterImage(temp_path)
+        # Create combined mask, next to the other outputs
+        output_dir = Path(self._runtime_configuration.output_directory)
+        combined_path = str(output_dir / "combined_mask.tif")
+        raster_mask.to_raster(combined_path, combined_array)
+        combined_mask = GdalRasterImage(combined_path)
 
         # Log statistics
         raster_valid = np.sum(raster_mask.array > 0)

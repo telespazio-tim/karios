@@ -230,6 +230,8 @@ class TestVectorMaskIntegration:
         assert mask.y_size == 50
         # Mask array should exist (rasterization may not produce features due to coordinate issues)
         assert mask.array is not None
+        # Written with the other outputs, not left in a temporary directory
+        assert mask.filepath == str(tmp_path / "results" / "vector_mask.tif")
 
     def test_api_without_vector_mask(self, tmp_path):
         """Test that API works normally without vector mask."""
@@ -355,6 +357,7 @@ class TestVectorMaskIntegration:
 
         # Vector mask should be loaded (not the raster mask)
         assert mask is not None
+        assert mask.filepath == str(tmp_path / "results" / "combined_mask.tif")
 
 
 if __name__ == "__main__":
