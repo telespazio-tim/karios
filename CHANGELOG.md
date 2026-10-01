@@ -61,6 +61,11 @@
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
   FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **Tiled SIFT keeps only each tile's strongest keypoints**: every tile computed the descriptors
+  of all its keypoints, 550k on a 10 m reference crop, for the 10000 strongest of the image to
+  be kept. A keypoint among the image's strongest is among its tile's, so tiles are now capped
+  at the same count before computing descriptors: the same keypoints and descriptors, sorted in
+  a tile-independent order, for half the SIFT time.
 - **`karios align` refines only the best starting point to convergence**: ECC ran its 200
   iterations from every starting point (RANSAC, prior, translation search), and the ones that
   lose ran them without converging, 51-69% of a 10 m PhiSat alignment. Every start now gets a

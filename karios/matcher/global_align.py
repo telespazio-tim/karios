@@ -504,8 +504,12 @@ def _detect_sift(
 ) -> tuple[list, Optional[np.ndarray]]:
     """SIFT keypoints and descriptors of `img`, by tiles when it is large, see SIFT_TILE_PX.
 
-    `sift` is built with nfeatures=0 for tiling; the `nfeatures` strongest
-    keypoints of the whole image are then kept, 0 keeps them all.
+    `sift` keeps at most `nfeatures` keypoints per tile (0: all), before
+    computing their descriptors: a keypoint among the image's `nfeatures`
+    strongest is among its tile's, so the image's strongest are then kept from
+    far fewer descriptors, the same ones. They are sorted by response, then
+    position and angle, so the order does not depend on the tiles either:
+    RANSAC samples matches by index.
     """
     h, w = img.shape
     if max(h, w) <= SIFT_TILE_PX:
@@ -531,11 +535,17 @@ def _detect_sift(
     if not keypoints:
         return [], None
     descriptors = np.array(descriptors, dtype=np.float32)
-    if nfeatures and len(keypoints) > nfeatures:
-        strongest = np.argsort([-kp.response for kp in keypoints], kind="stable")[:nfeatures]
-        keypoints = [keypoints[i] for i in strongest]
-        descriptors = descriptors[strongest]
-    return keypoints, descriptors
+    order = np.lexsort(
+        (
+            [kp.angle for kp in keypoints],
+            [kp.pt[0] for kp in keypoints],
+            [kp.pt[1] for kp in keypoints],
+            [-kp.response for kp in keypoints],
+        )
+    )
+    if nfeatures:
+        order = order[:nfeatures]
+    return [keypoints[i] for i in order], descriptors[order]
 
 
 def _sift_homography(
@@ -561,9 +571,8 @@ def _sift_homography(
     )
 
     def detect(img: np.ndarray) -> tuple[list, Optional[np.ndarray]]:
-        tiled = max(img.shape) > SIFT_TILE_PX
         sift = cv2.SIFT_create(
-            nfeatures=0 if tiled else sift_nfeatures,
+            nfeatures=sift_nfeatures,
             contrastThreshold=SIFT_CONTRAST_THRESHOLD,
             edgeThreshold=SIFT_EDGE_THRESHOLD,
         )

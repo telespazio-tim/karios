@@ -726,3 +726,25 @@ def test_only_the_best_probe_is_refined_to_convergence(fine_pair, monkeypatch):
     assert calls.count(global_align.ECC_MAX_ITERS) == 1
     assert calls.count(global_align.ECC_PROBE_ITERS) == len(calls) - 1 >= 2
     assert _center_error(alignment.matrix, truth) < 0.5
+
+
+def test_capping_tiles_keeps_the_same_strongest_keypoints(large_texture, monkeypatch):
+    """Capping each tile at N gives the image's N strongest, in the same order."""
+    monkeypatch.setattr(global_align, "SIFT_TILE_PX", 256)
+
+    def sift(nfeatures):
+        return cv2.SIFT_create(
+            nfeatures=nfeatures,
+            contrastThreshold=global_align.SIFT_CONTRAST_THRESHOLD,
+            edgeThreshold=global_align.SIFT_EDGE_THRESHOLD,
+        )
+
+    uncapped, uncapped_desc = global_align._detect_sift(sift(0), large_texture, 150)
+    capped, capped_desc = global_align._detect_sift(sift(150), large_texture, 150)
+
+    def key(keypoints):
+        return [(kp.pt, kp.size, kp.angle, kp.response) for kp in keypoints]
+
+    assert len(capped) == 150
+    assert key(capped) == key(uncapped)
+    assert np.array_equal(capped_desc, uncapped_desc)
