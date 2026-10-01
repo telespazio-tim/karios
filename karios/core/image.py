@@ -42,6 +42,43 @@ class GdalError(Exception):
     """
 
 
+# Drivers that read pixels or features from other files or the network on the
+# dataset's behalf. A ".tif" that is really a VRT can map any local file into
+# pixels (raw raster bands) or make requests (remote sources); inputs are
+# expected to hold their own data. Convert such datasets with gdal_translate or
+# ogr2ogr first.
+REFUSED_RASTER_DRIVERS = frozenset(
+    {"VRT", "GTI", "DERIVED", "WMS", "WMTS", "WCS", "HTTP", "EEDAI", "DAAS", "PLMOSAIC",
+     "OGCAPI", "STACIT", "STACTA"}
+)
+REFUSED_VECTOR_DRIVERS = frozenset(
+    {"OGR_VRT", "WFS", "OAPIF", "CSW", "Elasticsearch", "CouchDB", "MongoDBv3", "PostgreSQL",
+     "MySQL", "MSSQLSpatial", "OCI", "ODBC", "NGW", "Carto", "AmigoCloud", "EEDA", "PLSCENES",
+     "GPSBabel"}
+)
+NETWORK_PATHS = (
+    "/vsicurl", "/vsis3", "/vsigs", "/vsiaz", "/vsiadls", "/vsioss", "/vsiswift", "/vsihdfs",
+    "/vsiwebhdfs", "http://", "https://", "ftp://",
+)
+
+
+def check_dataset_path(path: str, kind: int = gdal.OF_RASTER) -> None:
+    """Refuse network paths and drivers that read other data, before opening anything.
+
+    `kind` is gdal.OF_RASTER or gdal.OF_VECTOR. Raises GdalError.
+    """
+    lowered = str(path).lower()
+    if any(prefix in lowered for prefix in NETWORK_PATHS):
+        raise GdalError(f"Network paths are not accepted as input: {path}")
+    driver = gdal.IdentifyDriverEx(str(path), kind)
+    refused = REFUSED_VECTOR_DRIVERS if kind == gdal.OF_VECTOR else REFUSED_RASTER_DRIVERS
+    if driver is not None and driver.ShortName in refused:
+        raise GdalError(
+            f"{path} is a {driver.ShortName} dataset, which reads other files or the network; "
+            "convert it to a self-contained file first (gdal_translate or ogr2ogr)"
+        )
+
+
 @contextmanager
 def open_gdal_dataset(dataset_path: str) -> Iterator[gdal.Dataset]:
     """
@@ -59,6 +96,7 @@ def open_gdal_dataset(dataset_path: str) -> Iterator[gdal.Dataset]:
     Raises:
         GdalError: If the dataset cannot be opened
     """
+    check_dataset_path(dataset_path)
     ds = gdal.Open(dataset_path)
     if ds is None:
         raise GdalError(f"Failed to open dataset: {dataset_path}")
@@ -125,6 +163,7 @@ def rasterize_vector_mask(
     logger.info("Rasterizing vector mask: %s", vector_path)
 
     # Open vector file
+    check_dataset_path(vector_path, gdal.OF_VECTOR)
     vector_ds = gdal.OpenEx(vector_path, gdal.OF_VECTOR)
     if vector_ds is None:
         raise GdalError(f"Failed to open vector file: {vector_path}")

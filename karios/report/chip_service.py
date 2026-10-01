@@ -35,6 +35,17 @@ from karios.core.radiometry import to_uint8
 logger = logging.getLogger(__name__)
 
 
+
+def chip_dir_names(monitored_name: str, reference_name: str) -> tuple[str, str]:
+    """Directory names of the monitored and reference chips: their file names.
+
+    Images with the same file name in different folders get `_monitored` and
+    `_reference` suffixes, as both directories would otherwise be the same.
+    """
+    if monitored_name == reference_name:
+        return f"{monitored_name}_monitored", f"{reference_name}_reference"
+    return monitored_name, reference_name
+
 class CenterAndQuarterCellPointSelector:
     """
     Select points from image cells using center + quarter strategy.
@@ -442,9 +453,10 @@ class ChipService:
             logger.warning("Chips output dir already exists, clean it")
             shutil.rmtree(chips_dir_path)
 
+        mon_dir, ref_dir = chip_dir_names(monitored.file_name, reference.file_name)
         os.mkdir(chips_dir_path)
-        os.mkdir(chips_dir_path / monitored.file_name)
-        os.mkdir(chips_dir_path / reference.file_name)
+        os.mkdir(chips_dir_path / mon_dir)
+        os.mkdir(chips_dir_path / ref_dir)
 
         laplacian_dir_path = None
         if laplacian_ksize is not None:
@@ -453,8 +465,8 @@ class ChipService:
                 logger.warning("Laplacian chips output dir already exists, clean it")
                 shutil.rmtree(laplacian_dir_path)
             os.mkdir(laplacian_dir_path)
-            os.mkdir(laplacian_dir_path / monitored.file_name)
-            os.mkdir(laplacian_dir_path / reference.file_name)
+            os.mkdir(laplacian_dir_path / mon_dir)
+            os.mkdir(laplacian_dir_path / ref_dir)
 
         # load only once mon and ref gdal dataset
         with open_gdal_dataset(monitored.filepath) as mon_dataset:
@@ -466,8 +478,8 @@ class ChipService:
                     monitored=mon_dataset,
                     reference=ref_dataset,
                     out_dir=chips_dir_path,
-                    monitored_filename=monitored.file_name,
-                    reference_filename=reference.file_name,
+                    monitored_filename=mon_dir,
+                    reference_filename=ref_dir,
                     laplacian_ksize=laplacian_ksize,
                     out_dir_laplacian=laplacian_dir_path,
                 )
@@ -476,13 +488,13 @@ class ChipService:
 
         filtered_points.to_csv(chips_dir_path / "chips.csv", sep=";", index=False)
 
-        self._create_vrt(chips_dir_path / monitored.file_name, "monitored_chips.vrt")
-        self._create_vrt(chips_dir_path / reference.file_name, "reference_chips.vrt")
+        self._create_vrt(chips_dir_path / mon_dir, "monitored_chips.vrt")
+        self._create_vrt(chips_dir_path / ref_dir, "reference_chips.vrt")
 
         if laplacian_dir_path is not None:
             logger.info("Laplacian chips generated in %s", laplacian_dir_path)
-            self._create_vrt(laplacian_dir_path / monitored.file_name, "monitored_chips.vrt")
-            self._create_vrt(laplacian_dir_path / reference.file_name, "reference_chips.vrt")
+            self._create_vrt(laplacian_dir_path / mon_dir, "monitored_chips.vrt")
+            self._create_vrt(laplacian_dir_path / ref_dir, "reference_chips.vrt")
 
     def _create_vrt(self, directory_path: Path, output_vrt_name="chips.vrt"):
         """
@@ -640,6 +652,12 @@ class ChipService:
         lap = cv2.Laplacian(to_uint8(data), cv2.CV_8U, ksize=ksize)
         driver = gdal.GetDriverByName("GTiff")
         ds = driver.Create(str(out_path), self._chip_size, self._chip_size, 1, gdal.GDT_Byte)
+        # Georeferenced like the image chip, which gdal.Translate georeferences:
+        # without it gdalbuildvrt skipped every Laplacian chip and wrote empty VRTs
+        geo = dataset.GetGeoTransform()
+        x_origin, y_origin = gdal.ApplyGeoTransform(geo, xoff, yoff)
+        ds.SetGeoTransform((x_origin, geo[1], geo[2], y_origin, geo[4], geo[5]))
+        ds.SetProjection(dataset.GetProjection())
         ds.GetRasterBand(1).WriteArray(lap)
         ds.FlushCache()
         ds = None

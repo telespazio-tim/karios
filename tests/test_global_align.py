@@ -87,8 +87,9 @@ def _run_align(tmp_path, monkeypatch, *options):
 def test_cli_passes_sift_nfeatures(tmp_path, monkeypatch):
     result, calls = _run_align(tmp_path, monkeypatch, "--sift-nfeatures", "5000")
 
-    assert result.exit_code == 0, result.output
     assert calls == [{"sift_nfeatures": 5000}]
+    # The fake alignment raises: align reports the failure in its exit status
+    assert result.exit_code == 1, result.output
 
 
 def test_cli_sift_nfeatures_defaults_to_10000(tmp_path, monkeypatch):
@@ -625,3 +626,157 @@ def test_rotated_mirrored_wgs84_mon_aligns_on_utm_ref(wgs84_pair):
     found = global_align._footprint_points(alignment.matrix, center)
     assert np.abs(found - global_align._footprint_points(truth, center)).max() < 0.05
     assert _center_error(alignment.matrix, truth, size=500) < 0.6
+
+
+def test_cli_quotes_the_reference_in_the_printed_gdalwarp(tmp_path, monkeypatch):
+    """A reference named like a shell substitution is quoted in the command to paste."""
+    grid = {"x_size": 10, "y_size": 10, "x_res": 5.0, "y_res": -5.0, "x_min": 0.0, "y_max": 50.0}
+    aligned = type("Aligned", (), {**grid, "file_name": "mon_global_aligned.tif"})()
+    reference = type("Ref", (), {"x_res": 10.0, "y_res": -10.0})()
+    alignment = global_align.GlobalAlignment(matrix=np.eye(3), n_inliers=4, n_matches=4)
+    monkeypatch.setattr(commands, "GdalRasterImage", lambda path: reference)
+    monkeypatch.setattr(
+        commands, "apply_global_alignment", lambda *args, **kwargs: (aligned, None, alignment)
+    )
+    mon, ref = tmp_path / "mon.tif", tmp_path / "$(touch pwned).tif"
+    mon.touch()
+    ref.touch()
+
+    result = CliRunner().invoke(
+        commands.cli, ["align", str(mon), str(ref), "--out", str(tmp_path / "out"), "--no-log-file"]
+    )
+
+    assert result.exit_code == 0, result.output
+    command = next(line for line in result.output.splitlines() if "gdalwarp" in line)
+    assert f"'{ref}'" in command
+
+
+def test_raster_windows_read_only_the_requested_window(tmp_path):
+    texture = np.arange(60 * 80, dtype=np.uint16).reshape(60, 80)
+    image = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 10.0)
+    windows = global_align.RasterWindows(image)
+
+    assert windows.shape == (60, 80)
+    assert np.array_equal(windows[10:25, 5:40], texture[10:25, 5:40])
+    assert np.array_equal(windows[50:999, 70:999], texture[50:, 70:])  # clipped like a slice
+    assert image._array is None  # windows never loaded the whole band
+    assert np.array_equal(np.asarray(windows), texture)
+
+
+def test_alignment_with_a_prior_reads_the_search_window_only(tmp_path):
+    rng = np.random.default_rng(6)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (600, 600)).astype(np.float32), (0, 0), 3)
+    texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 20.0)
+    mon_array = cv2.resize(texture[150:350, 180:380], (800, 800), interpolation=cv2.INTER_CUBIC)
+    mon = _geotiff(tmp_path / "mon.tif", mon_array, 500000.0 + 180 * 20, 5000000.0 - 150 * 20, 5.0)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    global_align.apply_global_alignment(mon, ref, None, out)
+
+    assert ref._array is None
+
+
+@pytest.fixture(name="small_footprint_pair", scope="module")
+def small_footprint_pair_fixture():
+    """mon 4x finer than ref, a 100 ref px footprint at (500, 450) in a 1000 px ref."""
+    rng = np.random.default_rng(12)
+    ref = cv2.GaussianBlur(rng.uniform(0, 255, (1000, 1000)).astype(np.float32), (0, 0), 3)
+    ref = cv2.normalize(ref, None, 10, 250, cv2.NORM_MINMAX)
+    mon = cv2.resize(ref[450:550, 500:600], (400, 400), interpolation=cv2.INTER_CUBIC)
+    return mon, ref, _truth(500, 450, 4)
+
+
+def test_georeferencing_off_by_more_than_the_window_widens_it(small_footprint_pair, caplog):
+    """70 ref px off with a 50 px margin: the window doubles and the alignment is found."""
+    mon, ref, truth = small_footprint_pair
+    caplog.set_level(logging.INFO, logger=global_align.__name__)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 70, -65))
+
+    assert "widening the search margin" in caplog.text
+    assert _center_error(alignment.matrix, truth, size=400) < 0.5
+
+
+def test_georeferencing_within_the_window_does_not_widen_it(small_footprint_pair, caplog):
+    mon, ref, truth = small_footprint_pair
+    caplog.set_level(logging.INFO, logger=global_align.__name__)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 15, -10))
+
+    assert "widening" not in caplog.text
+    assert _center_error(alignment.matrix, truth, size=400) < 0.5
+
+
+def test_only_the_best_probe_is_refined_to_convergence(fine_pair, monkeypatch):
+    """Every start gets a short ECC probe; the full ECC runs once, from the winner."""
+    mon, ref, truth = fine_pair
+    calls = []
+    refine = global_align._refine_with_ecc
+
+    def spy(mon_u8, ref_u8, init, max_iters=global_align.ECC_MAX_ITERS):
+        calls.append(max_iters)
+        return refine(mon_u8, ref_u8, init, max_iters)
+
+    monkeypatch.setattr(global_align, "_refine_with_ecc", spy)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 40, -30))
+
+    assert calls.count(global_align.ECC_MAX_ITERS) == 1
+    assert calls.count(global_align.ECC_PROBE_ITERS) == len(calls) - 1 >= 2
+    assert _center_error(alignment.matrix, truth) < 0.5
+
+
+def test_capping_tiles_keeps_the_same_strongest_keypoints(large_texture, monkeypatch):
+    """Capping each tile at N gives the image's N strongest, in the same order."""
+    monkeypatch.setattr(global_align, "SIFT_TILE_PX", 256)
+
+    def sift(nfeatures):
+        return cv2.SIFT_create(
+            nfeatures=nfeatures,
+            contrastThreshold=global_align.SIFT_CONTRAST_THRESHOLD,
+            edgeThreshold=global_align.SIFT_EDGE_THRESHOLD,
+        )
+
+    uncapped, uncapped_desc = global_align._detect_sift(sift(0), large_texture, 150)
+    capped, capped_desc = global_align._detect_sift(sift(150), large_texture, 150)
+
+    def key(keypoints):
+        return [(kp.pt, kp.size, kp.angle, kp.response) for kp in keypoints]
+
+    assert len(capped) == 150
+    assert key(capped) == key(uncapped)
+    assert np.array_equal(capped_desc, uncapped_desc)
+
+
+def test_aligned_integer_pixels_are_rounded_not_truncated():
+    """Interpolated values go back to integers by rounding: no -0.5 DN bias."""
+    values = np.array([[0.4, 0.6, 1.5, 2.49], [65535.7, -3.2, 100.0, 7.51]], dtype=np.float32)
+
+    as_uint16 = global_align._to_dtype(values, np.uint16)
+
+    assert as_uint16.tolist() == [[0, 1, 2, 2], [65535, 0, 100, 8]]
+    assert global_align._to_dtype(values, np.float32) is not values
+    assert np.array_equal(global_align._to_dtype(values, np.float32), values)
+
+
+def test_aligned_output_has_no_rounding_bias(tmp_path, monkeypatch):
+    """A smooth integer image shifted by half a pixel keeps its mean; truncation lowered it."""
+    yy, xx = np.mgrid[0:300, 0:300]
+    texture = (2000 + 900 * np.sin(xx / 13.0) * np.cos(yy / 17.0)).astype(np.uint16)
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 10.0)
+    mon = _geotiff(tmp_path / "mon.tif", texture, 500000.0, 5000000.0, 10.0)
+    out = tmp_path / "out"
+    out.mkdir()
+    shift = np.array([[1.0, 0.0, 0.5], [0.0, 1.0, 0.5], [0.0, 0.0, 1.0]])
+    alignment = global_align.GlobalAlignment(matrix=shift, n_inliers=4, n_matches=4)
+    monkeypatch.setattr(global_align, "detect_global_alignment", lambda *args, **kwargs: alignment)
+
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
+
+    inner = (slice(20, -20), slice(20, -20))
+    exact = cv2.warpPerspective(
+        texture.astype(np.float32), shift, (300, 300), flags=cv2.INTER_LINEAR
+    )
+    assert abs(aligned.array[inner].mean() - exact[inner].mean()) < 0.05

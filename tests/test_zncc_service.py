@@ -133,40 +133,25 @@ def test_zncc_service_initialization():
 
 
 def test_zncc_service_compute_zncc():
-    """Test ZNCCService compute_zncc method with mocked images."""
+    """compute_zncc and compute_mi give, for every point, what the per-point methods give."""
     service = ZNCCService()
+    rng = np.random.default_rng(0)
+    array = rng.integers(0, 4000, (120, 120)).astype(np.uint16)
+    image = Mock(array=array, x_size=120, y_size=120)
+    df = pd.DataFrame(
+        {"x0": [30.0, 40.0, 5.0], "y0": [30.0, 40.0, 60.0], "dx": [1, -1, 0], "dy": [1, -1, 0]}
+    )
 
-    # Create test dataframe
-    df = pd.DataFrame({"x0": [30, 40], "y0": [30, 40], "dx": [1, -1], "dy": [1, -1]})
+    zncc = service.compute_zncc(df, image, image)
+    nmi = service.compute_mi(df, image, image)
 
-    # Create mock images
-    mock_monitored = Mock(spec=GdalRasterImage)
-    mock_reference = Mock(spec=GdalRasterImage)
-
-    # Mock the clear_cache method
-    mock_monitored.clear_cache = Mock()
-    mock_reference.clear_cache = Mock()
-
-    # Mock the application to return expected results directly to avoid pandas issues
-    with patch.object(df, "apply") as mock_apply:
-        # Make the apply method return our expected series
-        mock_apply.return_value = pd.Series([0.8, 0.7], index=df.index)
-
-        result = service.compute_zncc(df, mock_monitored, mock_reference)
-
-        # Check that apply was called with the right arguments
-        mock_apply.assert_called_once()
-
-        # Check the result properties (we mocked it to return a series with 2 values)
-        assert len(result) == 2
-
-        # Verify clear_cache was called
-        mock_monitored.clear_cache.assert_called_once()
-        mock_reference.clear_cache.assert_called_once()
-
+    for result, method in ((zncc, service._compute_zncc), (nmi, service._compute_mi)):
+        expected = df.apply(method, axis=1, monitored=image, reference=image)
+        np.testing.assert_allclose(result.to_numpy(), expected.to_numpy(), rtol=1e-12)
+    assert np.isnan(zncc.iloc[2])  # too close to the left edge
 
 def test_zncc_service_compute_zncc_boundary_conditions():
-    """Test ZNCCService with boundary conditions."""
+    """Points whose patch leaves the image get NaN."""
     service = ZNCCService()
 
     # Create test dataframe with points near boundaries
@@ -178,38 +163,14 @@ def test_zncc_service_compute_zncc_boundary_conditions():
             "dy": [0, 0],
         }
     )
+    array = np.random.default_rng(0).integers(0, 4000, (100, 100)).astype(np.uint16)
+    image = Mock(array=array, x_size=100, y_size=100)
 
-    mock_monitored = Mock(spec=GdalRasterImage)
-    mock_reference = Mock(spec=GdalRasterImage)
+    result = service.compute_zncc(df, image, image)
 
-    # Configure mock images with 100x100 size
-    mock_monitored.x_size = 100
-    mock_monitored.y_size = 100
-    mock_reference.x_size = 100
-    mock_reference.y_size = 100
-
-    mock_monitored.clear_cache = Mock()
-    mock_reference.clear_cache = Mock()
-
-    # Mock the application to return expected results directly to avoid pandas issues
-    with patch.object(df, "apply") as mock_apply:
-        # Make the apply method return NaN for boundary condition testing
-        mock_apply.return_value = pd.Series([np.nan, np.nan], index=df.index)
-
-        result = service.compute_zncc(df, mock_monitored, mock_reference)
-
-        # Check that apply was called with the right arguments
-        mock_apply.assert_called_once()
-
-        # Check the result properties (we mocked it to return a series with 2 NaN values)
-        assert len(result) == 2
-        assert pd.isna(result.iloc[0])
-        assert pd.isna(result.iloc[1])
-
-        # Verify clear_cache was called
-        mock_monitored.clear_cache.assert_called_once()
-        mock_reference.clear_cache.assert_called_once()
-
+    assert len(result) == 2
+    assert pd.isna(result.iloc[0])
+    assert pd.isna(result.iloc[1])
 
 def test_zncc_service_extract_chip():
     """Test ZNCCService _extract_chip method."""

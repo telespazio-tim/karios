@@ -84,6 +84,14 @@ BRUTE_FORCE_MAX_PAIRS = 100_000_000
 FLANN_TREES = 5
 FLANN_CHECKS = 64
 ECC_MAX_ITERS = 200
+# Iterations of the ECC probe run from every start; only the start whose probe
+# correlates best is refined up to ECC_MAX_ITERS, again from that start. The
+# other starts used to run their 200 iterations without converging, 51-69% of
+# a 10 m PhiSat alignment, only to lose: after 25 iterations they already
+# correlate ten times less. Restarting from the winner's probe instead would
+# re-warp the image and drift to a neighbouring optimum: on PhiSat, 2.5 min for
+# a CE90 1% worse than the probe's own start converging in 11 s.
+ECC_PROBE_ITERS = 25
 ECC_EPS = 1e-6
 ECC_MARGIN_PX = 64  # ref kept around mon's pre-warped footprint for ECC to move into
 MIN_VALID_PIXELS = 1000  # fewest valid pixels an ECC run or a correlation score needs
@@ -95,6 +103,11 @@ MAX_SCALE_CHANGE = 1.5  # largest scale factor from the prior, either way
 MAX_ANISOTROPY = 1.3  # largest ratio between the scale factors of both axes
 MAX_ROTATION_DEG = 30.0
 MIN_SHIFT_BLOCK_PX = 32  # smallest central block the translation search correlates
+# The window is widened, doubling the margin up to the whole reference, when
+# the best alignment lands this far into the margin on either axis, or
+# correlates this poorly: the georeferencing may be off by more than the window
+EDGE_OF_WINDOW = 0.75
+LOW_GRADIENT_CORRELATION = 0.2
 # Output pixel sizes within this share of mon's estimated one count as keeping
 # its resolution: the scale estimate itself carries about a percent of noise
 OUTPUT_RESOLUTION_TOLERANCE = 0.02
@@ -127,6 +140,30 @@ class GlobalAlignment:
     def score(self) -> float:
         """RANSAC inlier ratio in [0, 1]."""
         return self.n_inliers / self.n_matches if self.n_matches else 0.0
+
+
+class RasterWindows:
+    """A raster's shape and pixels, read one window at a time rather than as a whole.
+
+    `windows[y0:y1, x0:x1]` reads that window only; np.asarray(windows) reads
+    the whole band. The alignment reads the reference around the monitored
+    footprint: on a 10 m Sentinel-2 tile, 10 s and 625 MB for the whole
+    JPEG 2000 against 4 s and 300 MB for a PhiSat crop.
+    """
+
+    def __init__(self, image: GdalRasterImage):
+        self._image = image
+        self.shape = (image.y_size, image.x_size)
+
+    def __getitem__(self, key: tuple[slice, slice]) -> np.ndarray:
+        rows, cols = key
+        y0, y1, _ = rows.indices(self.shape[0])
+        x0, x1, _ = cols.indices(self.shape[1])
+        return self._image.read(1, x0, y0, x1 - x0, y1 - y0)
+
+    def __array__(self, dtype=None):
+        array = self._image.array
+        return array if dtype is None else array.astype(dtype)
 
 
 def _preprocess(arr: np.ndarray) -> np.ndarray:
@@ -226,6 +263,7 @@ class _WorkFrame:
     mon_to_work: np.ndarray  # 3x3, mon full resolution px -> `mon` px
     ref_to_work: np.ndarray  # 3x3, ref full resolution px -> `ref` crop px
     margin: float  # search margin around mon's prior footprint, in `ref` px
+    covers_ref: bool  # the crop is the whole reference: no wider window exists
 
     def to_work(self, matrix: np.ndarray) -> np.ndarray:
         """mon → ref homography at full resolution, expressed between the working images."""
@@ -259,13 +297,15 @@ def _footprint(matrix: np.ndarray, width: int, height: int) -> np.ndarray:
 
 
 def _work_frame(
-    mon_arr: np.ndarray, ref_arr: np.ndarray, prior: np.ndarray
+    mon_arr: np.ndarray, ref_arr, prior: np.ndarray, fraction: float = GEOREF_SEARCH_FRACTION
 ) -> Optional[_WorkFrame]:
     """Crop ref around mon's prior footprint, preprocess both, bring them to the coarser resolution.
 
-    Only the crop of ref is preprocessed: a small mon on a 10 m tile would
-    otherwise stretch and equalize 120 Mpx to use a few of them. Returns None
-    when the prior footprint does not overlap ref.
+    The crop extends `fraction` of the footprint's size past it on each side.
+    `ref_arr` may be a RasterWindows, which reads that crop only. Only the crop
+    of ref is preprocessed: a small mon on a 10 m tile would otherwise stretch
+    and equalize 120 Mpx to use a few of them. Returns None when the prior
+    footprint does not overlap ref.
     """
     # Pixel size of mon relative to ref, from the prior's area scale
     scale = float(np.sqrt(abs(np.linalg.det(prior[:2, :2]))))
@@ -274,7 +314,7 @@ def _work_frame(
 
     corners = _footprint(prior, mw, mh)
     (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
-    margin = GEOREF_SEARCH_FRACTION * max(x1 - x0, y1 - y0)
+    margin = fraction * max(x1 - x0, y1 - y0)
     cx0, cy0 = max(0, int(np.floor(x0 - margin))), max(0, int(np.floor(y0 - margin)))
     cx1, cy1 = min(rw, int(np.ceil(x1 + margin))), min(rh, int(np.ceil(y1 + margin)))
     if cx1 <= cx0 or cy1 <= cy0:
@@ -326,6 +366,7 @@ def _work_frame(
         mon_to_work=mon_to_work,
         ref_to_work=ref_scale @ crop,
         margin=margin * ref_scale[0, 0],
+        covers_ref=(cx0, cy0, cx1, cy1) == (0, 0, rw, rh),
     )
 
 
@@ -373,24 +414,24 @@ def _search_translation(frame: _WorkFrame, start: np.ndarray) -> Optional[np.nda
     return shift @ start
 
 
+def _at_mon_center(matrix: np.ndarray, frame: _WorkFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Position in ref px and 2x2 Jacobian of the mon → ref `matrix` at mon's center."""
+    mh, mw = frame.mon.shape
+    center = np.linalg.inv(frame.mon_to_work) @ np.array([mw / 2, mh / 2, 1.0])
+    p = matrix @ center
+    w = p[2]
+    jacobian = (matrix[:2, :2] * w - np.outer(p[:2], matrix[2, :2])) / w**2
+    return p[:2] / w, jacobian
+
+
 def _plausibility(matrix: np.ndarray, prior: np.ndarray, frame: _WorkFrame) -> Optional[str]:
     """Why `matrix` is too far from `prior` to be a georeferencing correction, None if it is not.
 
     Compares the linear parts at mon's center, where the homography is
     linearized, and the positions of mon's center.
     """
-    mh, mw = frame.mon.shape
-    center = np.linalg.inv(frame.mon_to_work) @ np.array([mw / 2, mh / 2, 1.0])
-
-    def local(h: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Position and 2x2 Jacobian of h at mon's center."""
-        p = h @ center
-        w = p[2]
-        jacobian = (h[:2, :2] * w - np.outer(p[:2], h[2, :2])) / w**2
-        return p[:2] / w, jacobian
-
-    pos, jacobian = local(matrix)
-    prior_pos, prior_jacobian = local(prior)
+    pos, jacobian = _at_mon_center(matrix, frame)
+    prior_pos, prior_jacobian = _at_mon_center(prior, frame)
     relative = jacobian @ np.linalg.inv(prior_jacobian)
     if np.linalg.det(relative) <= 0:
         return "mirrors the image"
@@ -463,8 +504,12 @@ def _detect_sift(
 ) -> tuple[list, Optional[np.ndarray]]:
     """SIFT keypoints and descriptors of `img`, by tiles when it is large, see SIFT_TILE_PX.
 
-    `sift` is built with nfeatures=0 for tiling; the `nfeatures` strongest
-    keypoints of the whole image are then kept, 0 keeps them all.
+    `sift` keeps at most `nfeatures` keypoints per tile (0: all), before
+    computing their descriptors: a keypoint among the image's `nfeatures`
+    strongest is among its tile's, so the image's strongest are then kept from
+    far fewer descriptors, the same ones. They are sorted by response, then
+    position and angle, so the order does not depend on the tiles either:
+    RANSAC samples matches by index.
     """
     h, w = img.shape
     if max(h, w) <= SIFT_TILE_PX:
@@ -490,11 +535,17 @@ def _detect_sift(
     if not keypoints:
         return [], None
     descriptors = np.array(descriptors, dtype=np.float32)
-    if nfeatures and len(keypoints) > nfeatures:
-        strongest = np.argsort([-kp.response for kp in keypoints], kind="stable")[:nfeatures]
-        keypoints = [keypoints[i] for i in strongest]
-        descriptors = descriptors[strongest]
-    return keypoints, descriptors
+    order = np.lexsort(
+        (
+            [kp.angle for kp in keypoints],
+            [kp.pt[0] for kp in keypoints],
+            [kp.pt[1] for kp in keypoints],
+            [-kp.response for kp in keypoints],
+        )
+    )
+    if nfeatures:
+        order = order[:nfeatures]
+    return [keypoints[i] for i in order], descriptors[order]
 
 
 def _sift_homography(
@@ -520,9 +571,8 @@ def _sift_homography(
     )
 
     def detect(img: np.ndarray) -> tuple[list, Optional[np.ndarray]]:
-        tiled = max(img.shape) > SIFT_TILE_PX
         sift = cv2.SIFT_create(
-            nfeatures=0 if tiled else sift_nfeatures,
+            nfeatures=sift_nfeatures,
             contrastThreshold=SIFT_CONTRAST_THRESHOLD,
             edgeThreshold=SIFT_EDGE_THRESHOLD,
         )
@@ -622,17 +672,24 @@ def _footprint_points(matrix: np.ndarray, points: np.ndarray) -> np.ndarray:
 
 def detect_global_alignment(
     mon_arr: np.ndarray,
-    ref_arr: np.ndarray,
+    ref_arr,
     prior: Optional[np.ndarray] = None,
     sift_nfeatures: int = SIFT_NFEATURES,
 ) -> GlobalAlignment:
     """Estimate a 2D homography (8 DOF) that maps mon pixels into ref pixels,
     via SIFT + RANSAC, then refined with ECC on Sobel gradient magnitudes.
 
+    `ref_arr` is an array, or a RasterWindows reading only the windows used.
+
     `prior` (optional 3x3 homography from geotransforms) sets the working
     resolution and the search window, gives two more ECC starting points, the
     prior itself and its translation corrected by correlation, and bounds how
-    far the result may depart from it. See the module docstring.
+    far the result may depart from it. See the module docstring. The window
+    extends GEOREF_SEARCH_FRACTION of the monitored footprint past it, and is
+    doubled, up to the whole reference, while the result is doubtful: no
+    plausible estimate, a gradient correlation under LOW_GRADIENT_CORRELATION,
+    or a shift beyond EDGE_OF_WINDOW of the margin. The best result of the
+    windows tried, by gradient correlation in the widest, is kept.
 
     `sift_nfeatures` is the number of SIFT keypoints kept in each image, the
     ones with the strongest response (OpenCV may keep a few more tied with the
@@ -642,25 +699,85 @@ def detect_global_alignment(
     if sift_nfeatures < 0:
         raise ValueError(f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}")
 
-    frame = None
-    if prior is not None:
-        frame = _work_frame(mon_arr, ref_arr, prior)
+    if prior is None:
+        return _align_without_prior(
+            _preprocess(mon_arr), _preprocess(np.asarray(ref_arr)), sift_nfeatures
+        )
+
+    # Align in a window around the prior footprint, widened while the result
+    # looks like the georeferencing error might exceed it
+    attempts: list[_WindowAlignment] = []
+    fraction = GEOREF_SEARCH_FRACTION
+    while True:
+        frame = _work_frame(mon_arr, ref_arr, prior, fraction)
         if frame is None:
             logger.warning("Prior footprint does not overlap ref: prior ignored")
-            prior = None
-        else:
-            logger.info(
-                "Working images: mon=%dx%d  ref crop=%dx%d  search margin=%.0f px",
-                frame.mon.shape[1],
-                frame.mon.shape[0],
-                frame.ref.shape[1],
-                frame.ref.shape[0],
-                frame.margin,
+            return _align_without_prior(
+                _preprocess(mon_arr), _preprocess(np.asarray(ref_arr)), sift_nfeatures
             )
+        logger.info(
+            "Working images: mon=%dx%d  ref crop=%dx%d  search margin=%.0f px",
+            frame.mon.shape[1],
+            frame.mon.shape[0],
+            frame.ref.shape[1],
+            frame.ref.shape[0],
+            frame.margin,
+        )
+        attempt = _align_in_window(frame, prior, sift_nfeatures)
+        attempts.append(attempt)
+        if not attempt.doubts:
+            break
+        if frame.covers_ref:
+            logger.warning(
+                "Alignment doubtful with the whole reference searched: %s",
+                "; ".join(attempt.doubts),
+            )
+            break
+        fraction *= 2
+        logger.warning(
+            "%s: widening the search margin to %.0f%% of the footprint",
+            "; ".join(attempt.doubts),
+            100 * fraction,
+        )
 
-    if frame is None:
-        return _align_without_prior(_preprocess(mon_arr), _preprocess(ref_arr), sift_nfeatures)
+    if len(attempts) == 1:
+        return attempts[0].alignment
+    # Each window's result, compared on the widest window's common pixels
+    frame = attempts[-1].frame
+    matrices = [frame.to_work(attempt.alignment.matrix) for attempt in attempts]
+    scores, count = _gradient_correlation(frame, matrices)
+    if np.isnan(scores).all():
+        # The results do not even overlap: the narrower windows missed the scene
+        logger.info("Search window results do not overlap; keeping the widest window's")
+        return attempts[-1].alignment
+    best = int(np.nanargmax(scores))
+    logger.info(
+        "Search windows compared on %d common px: %s, keeping window %d",
+        count,
+        "  ".join(f"{i + 1}={score:.4f}" for i, score in enumerate(scores)),
+        best + 1,
+    )
+    return attempts[best].alignment
 
+
+@dataclass
+class _WindowAlignment:
+    """Result of aligning within one search window, and why it may be wrong."""
+
+    alignment: GlobalAlignment
+    frame: _WorkFrame
+    doubts: list = field(default_factory=list)  # empty when the result looks right
+
+
+def _align_in_window(
+    frame: _WorkFrame, prior: np.ndarray, sift_nfeatures: int
+) -> _WindowAlignment:
+    """Align mon within `frame`: SIFT, translation search and ECC from each start, then select.
+
+    The result is doubted when no estimate is plausible, when it correlates
+    poorly, or when it lands near the edge of the window: the true alignment
+    might then lie beyond it.
+    """
     # Starting points, as homographies between the working images
     starts: list[tuple[str, np.ndarray]] = []
     n_inliers = n_matches = 0
@@ -676,18 +793,19 @@ def detect_global_alignment(
     if shifted is not None:
         starts.append(("shift", shifted))
 
-    # ECC refinement on Sobel gradients (sensor-invariant) from every start,
-    # keeping the refined estimates plausible as a georeferencing correction
+    # A short ECC probe on Sobel gradients (sensor-invariant) from every start,
+    # keeping the probes plausible as a georeferencing correction
     converged: list[tuple[str, np.ndarray, float]] = []
+    origins: dict[str, np.ndarray] = dict(starts)
     for name, init in starts:
-        refined, ecc_score = _refine_with_ecc(frame.mon, frame.ref, init)
+        refined, ecc_score = _refine_with_ecc(frame.mon, frame.ref, init, ECC_PROBE_ITERS)
         if refined is None:
-            logger.warning("ECC from %s: failed", name)
+            logger.warning("ECC probe from %s: failed", name)
             continue
         full = frame.to_full(refined)
         reason = _plausibility(full, prior, frame)
         logger.info(
-            "ECC from %s: %s  ECC=%.4f%s",
+            "ECC probe from %s: %s  ECC=%.4f%s",
             name,
             _decompose(full),
             ecc_score,
@@ -705,12 +823,17 @@ def detect_global_alignment(
             if _plausibility(frame.to_full(init), prior, frame) is None
         ]
         scores, _ = _gradient_correlation(frame, [frame.to_work(m) for _, m in plausible])
+        doubts = ["no ECC refinement converged to a plausible alignment"]
         if not plausible or np.isnan(scores).all():
             logger.warning("No plausible alignment; keeping the geotransform prior")
-            return GlobalAlignment(matrix=prior, n_inliers=n_inliers, n_matches=n_matches)
-        name, matrix = plausible[int(np.nanargmax(scores))]
+            alignment = GlobalAlignment(matrix=prior, n_inliers=n_inliers, n_matches=n_matches)
+            return _WindowAlignment(alignment, frame, doubts)
+        best = int(np.nanargmax(scores))
+        name, matrix = plausible[best]
         logger.warning("No ECC refinement converged; keeping the %s estimate unrefined", name)
-        return GlobalAlignment(matrix=matrix, n_inliers=n_inliers, n_matches=n_matches)
+        alignment = GlobalAlignment(matrix=matrix, n_inliers=n_inliers, n_matches=n_matches)
+        doubts += _window_doubts(matrix, prior, frame, scores[best])
+        return _WindowAlignment(alignment, frame, doubts)
 
     scores, count = _gradient_correlation(frame, [frame.to_work(m) for _, m, _ in converged])
     if not np.isnan(scores).all():
@@ -724,14 +847,43 @@ def detect_global_alignment(
         # Too few pixels in common: fall back to each run's own ECC score
         best = int(np.argmax([ecc for _, _, ecc in converged]))
     name, matrix, ecc_score = converged[best]
-    logger.info("Selected alignment: ECC-refined from %s (ECC=%.4f)", name, ecc_score)
 
-    return GlobalAlignment(
+    # Only the best probe's start is refined to convergence
+    refined, final_score = _refine_with_ecc(frame.mon, frame.ref, origins[name])
+    if refined is not None and _plausibility(frame.to_full(refined), prior, frame) is None:
+        matrix, ecc_score = frame.to_full(refined), final_score
+        converged[best] = (name, matrix, ecc_score)
+    else:
+        logger.warning("Full ECC from %s failed or is implausible; keeping its probe", name)
+    logger.info("Selected alignment: ECC-refined from %s (ECC=%.4f)", name, ecc_score)
+    final_scores, _ = _gradient_correlation(frame, [frame.to_work(matrix)])
+
+    alignment = GlobalAlignment(
         matrix=matrix,
         n_inliers=n_inliers,
         n_matches=n_matches,
         candidates=converged,
     )
+    return _WindowAlignment(alignment, frame, _window_doubts(matrix, prior, frame, final_scores[0]))
+
+
+def _window_doubts(
+    matrix: np.ndarray, prior: np.ndarray, frame: _WorkFrame, score: float
+) -> list[str]:
+    """Signs that the alignment found in `frame` may be cut short by its window."""
+    doubts = []
+    if np.isfinite(score) and score < LOW_GRADIENT_CORRELATION:
+        doubts.append(f"gradient correlation {score:.2f} below {LOW_GRADIENT_CORRELATION}")
+    position, _ = _at_mon_center(matrix, frame)
+    prior_position, _ = _at_mon_center(prior, frame)
+    shift = np.abs(position - prior_position)
+    margin = frame.margin / frame.ref_to_work[0, 0]  # in ref full resolution px
+    if shift.max() > EDGE_OF_WINDOW * margin:
+        doubts.append(
+            f"shift of {shift.max():.0f} ref px from the prior, beyond {EDGE_OF_WINDOW:.0%} "
+            f"of the {margin:.0f} px search margin"
+        )
+    return doubts
 
 
 def _align_without_prior(mon: np.ndarray, ref: np.ndarray, sift_nfeatures: int) -> GlobalAlignment:
@@ -790,6 +942,7 @@ def _refine_with_ecc(
     mon_u8: np.ndarray,
     ref_u8: np.ndarray,
     init: np.ndarray,
+    max_iters: int = ECC_MAX_ITERS,
 ) -> tuple[Optional[np.ndarray], float]:
     """Refine the mon → ref homography with cv2.findTransformECC.
 
@@ -850,7 +1003,7 @@ def _refine_with_ecc(
 
     criteria = (
         cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-        ECC_MAX_ITERS,
+        max_iters,
         ECC_EPS,
     )
     try:
@@ -978,6 +1131,17 @@ def _output_grid(
     return OutputGrid(factor, x0, y0, (x1 - x0) * factor, (y1 - y0) * factor)
 
 
+def _to_dtype(values: np.ndarray, dtype) -> np.ndarray:
+    """Interpolated `values` back to the image's `dtype`, rounded and clipped for integers.
+
+    A plain astype truncates: 0.9 became 0, a -0.5 DN bias on every pixel.
+    """
+    if np.issubdtype(dtype, np.integer):
+        info = np.iinfo(dtype)
+        return np.clip(np.rint(values), info.min, info.max).astype(dtype)
+    return values.astype(dtype)
+
+
 def apply_global_alignment(
     monitored: GdalRasterImage,
     reference: GdalRasterImage,
@@ -996,7 +1160,8 @@ def apply_global_alignment(
     see detect_global_alignment().
     """
     mon_arr = monitored.array
-    ref_arr = reference.array
+    # Read window by window: with a prior only the search window is ever read
+    ref_arr = RasterWindows(reference)
 
     prior = _prior_from_georefs(monitored, reference)
     if prior is not None:
@@ -1038,13 +1203,16 @@ def apply_global_alignment(
     )
 
     border_mon = float(monitored.no_data_value) if monitored.no_data_value is not None else 0.0
-    aligned_mon = cv2.warpPerspective(
-        mon_arr.astype(np.float32),
-        warp_m,
-        out_size,
-        flags=cv2.INTER_LINEAR,
-        borderValue=border_mon,
-    ).astype(mon_arr.dtype)
+    aligned_mon = _to_dtype(
+        cv2.warpPerspective(
+            mon_arr.astype(np.float32),
+            warp_m,
+            out_size,
+            flags=cv2.INTER_LINEAR,
+            borderValue=border_mon,
+        ),
+        mon_arr.dtype,
+    )
 
     mon_stem = Path(monitored.file_name).stem
     mon_suffix = Path(monitored.file_name).suffix or ".tif"

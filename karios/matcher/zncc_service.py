@@ -26,6 +26,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage
+from karios.matcher.patch_scores import compute_patch_scores
 
 logger = logging.getLogger(__name__)
 
@@ -174,15 +175,7 @@ class ZNCCService:
             Series: zncc score series, with same index as the given dataframe, contains NaN at index not computed
         """
         logger.info("Compute ZNCC for %s points", len(df))
-
-        score = df.apply(self._compute_zncc, axis=1, monitored=monitored, reference=reference)
-
-        monitored.clear_cache()
-        reference.clear_cache()
-
-        logger.info("ZNCC computation finish")
-
-        return score
+        return compute_patch_scores(df, monitored, reference)["zncc_score"]
 
     def _compute_zncc(self, series: Series, monitored, reference):
 
@@ -252,11 +245,7 @@ class ZNCCService:
             Series: NMI score series, same index as df, NaN where not computed
         """
         logger.info("Compute NMI for %s points", len(df))
-        score = df.apply(self._compute_mi, axis=1, monitored=monitored, reference=reference)
-        monitored.clear_cache()
-        reference.clear_cache()
-        logger.info("NMI computation finish")
-        return score
+        return compute_patch_scores(df, monitored, reference)["mi_score"]
 
     def _compute_mi(self, series: Series, monitored, reference):
         x0 = int(series["x0"])

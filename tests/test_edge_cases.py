@@ -57,97 +57,39 @@ def test_zncc2_extreme_values():
 
 
 def test_zncc_service_edge_cases():
-    """Test ZNCCService with edge case inputs."""
+    """ZNCCService on an empty and a single point selection."""
     service = ZNCCService()
+    array = np.random.default_rng(0).integers(0, 4000, (100, 100)).astype(np.uint16)
+    image = Mock(array=array, x_size=100, y_size=100)
 
-    # Test with empty dataframe
-    empty_df = pd.DataFrame(columns=["x0", "y0", "dx", "dy"])
-    mock_monitored = Mock(spec=GdalRasterImage)
-    mock_reference = Mock(spec=GdalRasterImage)
+    empty_df = pd.DataFrame(columns=["x0", "y0", "dx", "dy"], dtype=float)
+    assert len(service.compute_zncc(empty_df, image, image)) == 0
 
-    mock_monitored.clear_cache = Mock()
-    mock_reference.clear_cache = Mock()
-
-    # Mock the application to return expected results directly to avoid pandas issues
-    with patch.object(empty_df, "apply") as mock_apply:
-        # Make the apply method return our expected series
-        mock_apply.return_value = pd.Series([], dtype=object, index=empty_df.index)
-
-        result = service.compute_zncc(empty_df, mock_monitored, mock_reference)
-
-        # Check that apply was called with the right arguments
-        mock_apply.assert_called_once()
-
-        # Check the result properties (we mocked it to return an empty series)
-        assert len(result) == 0
-
-        # Verify clear_cache was called
-        mock_monitored.clear_cache.assert_called_once()
-        mock_reference.clear_cache.assert_called_once()
-
-    # Test with single point
     single_point_df = pd.DataFrame({"x0": [30.0], "y0": [30.0], "dx": [1.0], "dy": [1.0]})
+    result = service.compute_zncc(single_point_df, image, image)
 
-    with patch.object(single_point_df, "apply") as mock_apply:
-        mock_apply.return_value = pd.Series([0.85], index=single_point_df.index)
-
-        result = service.compute_zncc(single_point_df, mock_monitored, mock_reference)
-
-        # Check the result properties
-        assert len(result) == 1
-        assert result.iloc[0] == 0.85
-
+    assert len(result) == 1
+    expected = service._compute_zncc(single_point_df.iloc[0], monitored=image, reference=image)
+    assert result.iloc[0] == pytest.approx(expected)
 
 def test_zncc_service_boundary_points():
-    """Test ZNCCService with points at image boundaries."""
+    """Points exactly at the boundary: a 57 px patch fits from 28 to 971 in a 1000 px image."""
     service = ZNCCService()
-
-    # Create points that are exactly at the boundary where they might be skipped
-    # Chip margin is 28, so x0=28, y0=28 with dx=0, dy=0 should be valid
-    # But x0=27, y0=27 would have offset < 0 and be skipped
     boundary_df = pd.DataFrame(
         {
-            "x0": [
-                27.0,
-                28.0,
-                971.0,
-                972.0,
-            ],  # Assuming 1000x1000 image, 972+28=1000 (edge)
+            "x0": [27.0, 28.0, 971.0, 972.0],
             "y0": [27.0, 28.0, 971.0, 972.0],
             "dx": [0.0, 0.0, 0.0, 0.0],
             "dy": [0.0, 0.0, 0.0, 0.0],
         }
     )
+    array = np.random.default_rng(0).integers(0, 4000, (1000, 1000)).astype(np.uint16)
+    image = Mock(array=array, x_size=1000, y_size=1000)
 
-    mock_monitored = Mock(spec=GdalRasterImage)
-    mock_reference = Mock(spec=GdalRasterImage)
+    result = service.compute_zncc(boundary_df, image, image)
 
-    # Set image size to 1000x1000
-    mock_monitored.x_size = 1000
-    mock_monitored.y_size = 1000
-    mock_reference.x_size = 1000
-    mock_reference.y_size = 1000
-
-    mock_monitored.clear_cache = Mock()
-    mock_reference.clear_cache = Mock()
-
-    # Mock the application to return expected results directly to avoid pandas issues
-    with patch.object(boundary_df, "apply") as mock_apply:
-        # Make the apply method return NaN for boundary condition testing
-        mock_apply.return_value = pd.Series([0.9, 0.9, 0.9, 0.9], index=boundary_df.index)
-
-        result = service.compute_zncc(boundary_df, mock_monitored, mock_reference)
-
-        # Check that apply was called with the right arguments
-        mock_apply.assert_called_once()
-
-        # Check the result properties
-        assert len(result) == 4
-
-        # Verify clear_cache was called
-        mock_monitored.clear_cache.assert_called_once()
-        mock_reference.clear_cache.assert_called_once()
-
+    assert len(result) == 4
+    assert result.isna().tolist() == [True, False, False, True]
 
 def test_klt_tracker_edge_cases():
     """Test KLT tracker with edge cases."""

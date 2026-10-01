@@ -24,7 +24,6 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy import stats as sp_stats
 from scipy.interpolate import interpn
 
 from karios.accuracy_analysis.accuracy_statistics import GeometricStat
@@ -213,7 +212,9 @@ class CircularErrorPlot(AbstractPlot):
         out_str_list.append(f"Total Pixels: {str(npixtotal)}")
         out_str_list.append(f"Nbr of bins : {str(len(hist))}")
 
-        # Normal Test :
+        # Normal Test, scipy.stats imported here: 0.6 s at startup otherwise
+        from scipy import stats as sp_stats  # pylint: disable=import-outside-toplevel
+
         k2, p = sp_stats.normaltest(hist)
         alpha = 1e-3
         if p < alpha:  # null hypothesis: hist comes from a normal distribution

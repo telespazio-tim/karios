@@ -282,3 +282,35 @@ def test_overlay_is_disabled_by_default(tmp_path):
 def test_negative_mosaic_tile_size_is_rejected(tmp_path):
     with pytest.raises(ConfigurationError, match="mosaic_tile_size"):
         _runtime_configuration(tmp_path, mosaic_tile_size=-1)
+
+
+@pytest.mark.parametrize("dtype", [np.uint16, np.int16, np.int32, np.uint8])
+def test_integer_equalization_matches_the_sort(dtype, monkeypatch):
+    """The histogram path gives the ranks np.unique gives, fill and hidden pixels at 0."""
+    rng = np.random.default_rng(0)
+    low = 0 if np.issubdtype(dtype, np.unsignedinteger) else -300
+    array = rng.integers(low, 250, (200, 200)).astype(dtype)
+    invalid = rng.random((200, 200)) < 0.1
+    img = _image(array)
+
+    by_histogram = mosaic._to_gray(img, invalid)
+    monkeypatch.setattr(mosaic, "MAX_HISTOGRAM_BINS", -1)
+    by_sort = mosaic._to_gray(img, invalid)
+
+    assert np.array_equal(by_histogram, by_sort)
+
+
+def test_shared_equalization_gives_the_same_outputs(tmp_path):
+    rng = np.random.default_rng(0)
+    ref = _image(rng.integers(1, 4000, (64, 64)).astype(np.uint16))
+    mon = _image(rng.integers(1, 4000, (64, 64)).astype(np.uint16))
+    pair = mosaic.equalized_pair(mon, ref)
+
+    writers = (
+        lambda stem, **kwargs: generate_mosaic(mon, ref, stem, 16, **kwargs),
+        lambda stem, **kwargs: generate_overlay(mon, ref, stem, **kwargs),
+    )
+    for write in writers:
+        own = _read_rgb(write(tmp_path / "own"))
+        shared = _read_rgb(write(tmp_path / "shared", equalized=pair))
+        assert np.array_equal(own, shared)

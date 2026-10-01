@@ -26,6 +26,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage
+from karios.matcher.patch_scores import compute_patch_scores
 
 logger = logging.getLogger(__name__)
 
@@ -85,17 +86,7 @@ class MutualInfoService:
             Series: mutual info score series, with same index as df, contains NaN where not computed
         """
         logger.info("Compute mutual information for %s points", len(df))
-
-        score = df.apply(
-            self._compute_mutual_info, axis=1, monitored=monitored, reference=reference
-        )
-
-        monitored.clear_cache()
-        reference.clear_cache()
-
-        logger.info("Mutual information computation finish")
-
-        return score
+        return compute_patch_scores(df, monitored, reference)["mutual_info_score"]
 
     def _compute_mutual_info(self, series: Series, monitored, reference):
         x0 = int(series["x0"])

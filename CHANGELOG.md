@@ -61,6 +61,26 @@
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
   FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` rounds interpolated integer pixels**: the monitored image was warped in
+  float32 then cast to its integer type, which truncates: every pixel lost 0.5 DN on average
+  (0.37 DN measured on a smooth image shifted by half a pixel). Values are now rounded and
+  clipped to the type's range.
+- **Tiled SIFT keeps only each tile's strongest keypoints**: every tile computed the descriptors
+  of all its keypoints, 550k on a 10 m reference crop, for the 10000 strongest of the image to
+  be kept. A keypoint among the image's strongest is among its tile's, so tiles are now capped
+  at the same count before computing descriptors: the same keypoints and descriptors, sorted in
+  a tile-independent order, for half the SIFT time.
+- **`karios align` refines only the best starting point to convergence**: ECC ran its 200
+  iterations from every starting point (RANSAC, prior, translation search), and the ones that
+  lose ran them without converging, 51-69% of a 10 m PhiSat alignment. Every start now gets a
+  25-iteration probe; the probes are compared by gradient correlation and only the winner is
+  refined further.
+- **`karios align` widens its search window when the georeferencing is further off**: matching
+  only searched the reference around the monitored footprint, half its size wider on each side,
+  so a larger georeferencing error gave a wrong result silently. A result with no plausible
+  estimate, a gradient correlation under 0.2, or a shift beyond 75% of the margin now doubles the
+  margin, up to the whole reference, keeping the best result of the windows tried; doubts left
+  with the whole reference searched are logged. Only the window is read from the reference file.
 - **`karios align` peak memory down from 7.2 to 2.1 GB** on a PhiSat scene and a 10 m
   Sentinel-2 tile, and 3 min 40 s instead of 6 min 20 s. OpenCV's SIFT doubles its input
   before building the pyramid, about 200 bytes per pixel: 6 GB for the 28 Mpx reference crop.

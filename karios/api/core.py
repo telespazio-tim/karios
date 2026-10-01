@@ -40,12 +40,11 @@ from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
-from karios.matcher.mutual_info_service import MutualInfoService
-from karios.matcher.zncc_service import ZNCCService
+from karios.matcher.patch_scores import compute_patch_scores
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
 from karios.report.html_report import HtmlReportGenerator
-from karios.report.mosaic import generate_mosaic, generate_overlay
+from karios.report.mosaic import equalized_pair, generate_mosaic, generate_overlay
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
 from karios.report.shift_by_alt_plot import MeanShiftByAltitudeGroupPlot
@@ -154,8 +153,6 @@ class KariosAPI:
             self._runtime_configuration.enable_coarse_to_fine,
         )
 
-        self._zncc_service = ZNCCService()
-        self._mutual_info_service = MutualInfoService()
 
         #
         self._large_shift_applied = False
@@ -377,13 +374,23 @@ class KariosAPI:
         dx_plot_path = self._generate_dx_plot(match_result, output_dir)
         dy_plot_path = self._generate_dy_plot(match_result, output_dir)
         ce_plot_path = self._generate_ce_plot(match_result, accuracy_analysis, output_dir)
+        # Both images equalized once when the mosaic and the overlay use them
+        equalized = None
+        config = self._runtime_configuration
+        if config.mosaic_tile_size and config.generate_overlay:
+            equalized = equalized_pair(
+                match_result.monitored_image,
+                match_result.reference_image,
+                mask=match_result.mask,
+                no_values=self._runtime_configuration.no_values,
+            )
         mosaic_path = (
-            self._generate_mosaic(match_result, output_dir)
+            self._generate_mosaic(match_result, output_dir, equalized)
             if self._runtime_configuration.mosaic_tile_size
             else None
         )
         overlay_path = (
-            self._generate_overlay(match_result, output_dir)
+            self._generate_overlay(match_result, output_dir, equalized)
             if self._runtime_configuration.generate_overlay
             else None
         )
@@ -623,7 +630,12 @@ class KariosAPI:
             logger.info("Load vector mask file %s", vector_mask_path)
             from karios.core.image import rasterize_vector_mask
 
-            vector_mask = rasterize_vector_mask(str(vector_mask_path), monitored_image)
+            # In the output directory rather than a temporary file: the mask is
+            # read again by the reports, and temporary files were never removed
+            output_dir = Path(self._runtime_configuration.output_directory)
+            vector_mask = rasterize_vector_mask(
+                str(vector_mask_path), monitored_image, str(output_dir / "vector_mask.tif")
+            )
             logger.info("Vector mask rasterized and loaded")
 
         # If no masks provided, return None
@@ -643,15 +655,11 @@ class KariosAPI:
             np.uint8
         )
 
-        # Create combined mask
-        import tempfile
-
-        temp_file = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
-
-        raster_mask.to_raster(temp_path, combined_array)
-        combined_mask = GdalRasterImage(temp_path)
+        # Create combined mask, next to the other outputs
+        output_dir = Path(self._runtime_configuration.output_directory)
+        combined_path = str(output_dir / "combined_mask.tif")
+        raster_mask.to_raster(combined_path, combined_array)
+        combined_mask = GdalRasterImage(combined_path)
 
         # Log statistics
         raster_valid = np.sum(raster_mask.array > 0)
@@ -943,28 +951,13 @@ class KariosAPI:
 
                 zncc_candidates = dataframe[dataframe["score"] >= threshold]
 
-                # Initialize score columns with NaN values
-                dataframe["zncc_score"] = np.nan
-                dataframe["mutual_info_score"] = np.nan
-
-                # Compute ZNCC and mutual information scores only for the candidates
-                zncc_scores = self._zncc_service.compute_zncc(
-                    zncc_candidates, monitored_image, reference_image
-                )
-                mutual_info_scores = self._mutual_info_service.compute_mutual_info(
-                    zncc_candidates, monitored_image, reference_image
-                )
-
-                # Assign the computed scores back to the original dataframe using the same indices
-                dataframe.loc[zncc_candidates.index, "zncc_score"] = zncc_scores
-                dataframe.loc[zncc_candidates.index, "mutual_info_score"] = mutual_info_scores
-
-                # Compute NMI scores for the same candidates
-                dataframe["mi_score"] = np.nan
-                mi_scores = self._zncc_service.compute_mi(
-                    zncc_candidates, monitored_image, reference_image
-                )
-                dataframe.loc[zncc_candidates.index, "mi_score"] = mi_scores
+                # ZNCC, Studholme's and normalized mutual information of the
+                # candidates' patches, in one pass; NaN for the other points
+                logger.info("Compute patch scores for %s points", len(zncc_candidates))
+                scores = compute_patch_scores(zncc_candidates, monitored_image, reference_image)
+                for column in scores.columns:
+                    dataframe[column] = np.nan
+                    dataframe.loc[zncc_candidates.index, column] = scores[column]
 
             else:
                 logger.warning("Large shift applied, skip ZNCC")
@@ -1013,12 +1006,15 @@ class KariosAPI:
         overview_plot.plot(overview_path)
         return overview_path
 
-    def _generate_mosaic(self, match_result: MatchResult, output_dir: Path) -> Path:
+    def _generate_mosaic(
+        self, match_result: MatchResult, output_dir: Path, equalized=None
+    ) -> Path:
         """Generate the checkerboard mosaic of the monitored and reference images.
 
         Args:
             match_result: Match result
             output_dir: Output directory
+            equalized: equalized_pair() of the images, if already computed
 
         Returns:
             Path to the generated image
@@ -1030,14 +1026,18 @@ class KariosAPI:
             self._runtime_configuration.mosaic_tile_size,
             mask=match_result.mask,
             no_values=self._runtime_configuration.no_values,
+            equalized=equalized,
         )
 
-    def _generate_overlay(self, match_result: MatchResult, output_dir: Path) -> Path:
+    def _generate_overlay(
+        self, match_result: MatchResult, output_dir: Path, equalized=None
+    ) -> Path:
         """Generate the color overlay of the monitored and reference images.
 
         Args:
             match_result: Match result
             output_dir: Output directory
+            equalized: equalized_pair() of the images, if already computed
 
         Returns:
             Path to the generated image
@@ -1048,6 +1048,7 @@ class KariosAPI:
             output_dir / "06_overlay",
             mask=match_result.mask,
             no_values=self._runtime_configuration.no_values,
+            equalized=equalized,
         )
 
     def _generate_dx_plot(self, match_result: MatchResult, output_dir: Path) -> Path:

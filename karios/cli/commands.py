@@ -23,6 +23,7 @@ Provides command line interface for KARIOS functionality.
 import json
 import logging
 import os
+import shlex
 import shutil
 import sys
 from pathlib import Path, PurePath
@@ -401,7 +402,8 @@ def process(
 
     except Exception as e:
         logger.error("Error during processing: %s", str(e), exc_info=debug)
-        return 1
+        # click ignores a command's return value: only an exit status tells scripts
+        sys.exit(1)
 
 
 @cli.command(
@@ -502,14 +504,14 @@ def align(
         click.echo(
             "\nTo compare it with karios process, resample the reference onto its grid:\n"
             f"  gdalwarp -r cubic -te {extent} -ts {aligned_mon.x_size} {aligned_mon.y_size} "
-            f"{reference_image} <reference_on_grid>.tif"
+            f"{shlex.quote(str(reference_image))} <reference_on_grid>.tif"
         )
 
         return 0
 
     except Exception as e:
         logger.error("Error during align: %s", str(e), exc_info=debug)
-        return 1
+        sys.exit(1)
 
 
 def _validate_configuration(

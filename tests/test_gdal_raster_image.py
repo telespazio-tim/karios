@@ -338,3 +338,50 @@ def test_image_resolution_is_in_pixels_on_a_wgs84_rotated_grid(tmp_path):
 
     assert get_image_resolution(image, image) is None
     assert get_image_resolution(image, image, 4.8) == 4.8
+
+
+def test_vrt_disguised_as_tif_is_refused(tmp_path):
+    """A VRT named .tif could read any local file as pixels: refused before being read."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("SECRET-TOKEN-1234567890")
+    disguised = tmp_path / "innocent.tif"
+    disguised.write_text(
+        f"""<VRTDataset rasterXSize="23" rasterYSize="1">
+  <VRTRasterBand dataType="Byte" band="1" subClass="VRTRawRasterBand">
+    <SourceFilename relativetoVRT="0">{secret}</SourceFilename>
+    <ImageOffset>0</ImageOffset><PixelOffset>1</PixelOffset><LineOffset>23</LineOffset>
+  </VRTRasterBand>
+</VRTDataset>"""
+    )
+
+    with pytest.raises(GdalError, match="VRT dataset"):
+        GdalRasterImage(str(disguised))
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/vsicurl/http://127.0.0.1:9/a.tif", "https://example.com/a.tif", "/vsizip//vsis3/b/a.zip"],
+)
+def test_network_paths_are_refused(path):
+    with pytest.raises(GdalError, match="Network paths"):
+        GdalRasterImage(path)
+
+
+def test_self_contained_geotiff_is_accepted(tmp_path):
+    image = _geotiff(tmp_path / "image.tif", 32631, (600000.0, 30.0, 0.0, 4900020.0, 0.0, -30.0))
+
+    assert image.array.shape == (8, 8)
+
+
+def test_ogr_vrt_vector_mask_is_refused(tmp_path):
+    from karios.core.image import rasterize_vector_mask
+
+    reference = _geotiff(tmp_path / "ref.tif", 32631, (600000.0, 30.0, 0.0, 4900020.0, 0.0, -30.0))
+    vrt = tmp_path / "mask.geojson"
+    vrt.write_text(
+        '<OGRVRTDataSource><OGRVRTLayer name="l"><SrcDataSource>/etc/hosts</SrcDataSource>'
+        "</OGRVRTLayer></OGRVRTDataSource>"
+    )
+
+    with pytest.raises(GdalError, match="OGR_VRT dataset"):
+        rasterize_vector_mask(str(vrt), reference, str(tmp_path / "out.tif"))
