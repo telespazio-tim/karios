@@ -748,3 +748,35 @@ def test_capping_tiles_keeps_the_same_strongest_keypoints(large_texture, monkeyp
     assert len(capped) == 150
     assert key(capped) == key(uncapped)
     assert np.array_equal(capped_desc, uncapped_desc)
+
+
+def test_aligned_integer_pixels_are_rounded_not_truncated():
+    """Interpolated values go back to integers by rounding: no -0.5 DN bias."""
+    values = np.array([[0.4, 0.6, 1.5, 2.49], [65535.7, -3.2, 100.0, 7.51]], dtype=np.float32)
+
+    as_uint16 = global_align._to_dtype(values, np.uint16)
+
+    assert as_uint16.tolist() == [[0, 1, 2, 2], [65535, 0, 100, 8]]
+    assert global_align._to_dtype(values, np.float32) is not values
+    assert np.array_equal(global_align._to_dtype(values, np.float32), values)
+
+
+def test_aligned_output_has_no_rounding_bias(tmp_path, monkeypatch):
+    """A smooth integer image shifted by half a pixel keeps its mean; truncation lowered it."""
+    yy, xx = np.mgrid[0:300, 0:300]
+    texture = (2000 + 900 * np.sin(xx / 13.0) * np.cos(yy / 17.0)).astype(np.uint16)
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 10.0)
+    mon = _geotiff(tmp_path / "mon.tif", texture, 500000.0, 5000000.0, 10.0)
+    out = tmp_path / "out"
+    out.mkdir()
+    shift = np.array([[1.0, 0.0, 0.5], [0.0, 1.0, 0.5], [0.0, 0.0, 1.0]])
+    alignment = global_align.GlobalAlignment(matrix=shift, n_inliers=4, n_matches=4)
+    monkeypatch.setattr(global_align, "detect_global_alignment", lambda *args, **kwargs: alignment)
+
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
+
+    inner = (slice(20, -20), slice(20, -20))
+    exact = cv2.warpPerspective(
+        texture.astype(np.float32), shift, (300, 300), flags=cv2.INTER_LINEAR
+    )
+    assert abs(aligned.array[inner].mean() - exact[inner].mean()) < 0.05

@@ -61,6 +61,10 @@
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
   FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` rounds interpolated integer pixels**: the monitored image was warped in
+  float32 then cast to its integer type, which truncates: every pixel lost 0.5 DN on average
+  (0.37 DN measured on a smooth image shifted by half a pixel). Values are now rounded and
+  clipped to the type's range.
 - **Tiled SIFT keeps only each tile's strongest keypoints**: every tile computed the descriptors
   of all its keypoints, 550k on a 10 m reference crop, for the 10000 strongest of the image to
   be kept. A keypoint among the image's strongest is among its tile's, so tiles are now capped

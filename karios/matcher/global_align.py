@@ -1131,6 +1131,17 @@ def _output_grid(
     return OutputGrid(factor, x0, y0, (x1 - x0) * factor, (y1 - y0) * factor)
 
 
+def _to_dtype(values: np.ndarray, dtype) -> np.ndarray:
+    """Interpolated `values` back to the image's `dtype`, rounded and clipped for integers.
+
+    A plain astype truncates: 0.9 became 0, a -0.5 DN bias on every pixel.
+    """
+    if np.issubdtype(dtype, np.integer):
+        info = np.iinfo(dtype)
+        return np.clip(np.rint(values), info.min, info.max).astype(dtype)
+    return values.astype(dtype)
+
+
 def apply_global_alignment(
     monitored: GdalRasterImage,
     reference: GdalRasterImage,
@@ -1192,13 +1203,16 @@ def apply_global_alignment(
     )
 
     border_mon = float(monitored.no_data_value) if monitored.no_data_value is not None else 0.0
-    aligned_mon = cv2.warpPerspective(
-        mon_arr.astype(np.float32),
-        warp_m,
-        out_size,
-        flags=cv2.INTER_LINEAR,
-        borderValue=border_mon,
-    ).astype(mon_arr.dtype)
+    aligned_mon = _to_dtype(
+        cv2.warpPerspective(
+            mon_arr.astype(np.float32),
+            warp_m,
+            out_size,
+            flags=cv2.INTER_LINEAR,
+            borderValue=border_mon,
+        ),
+        mon_arr.dtype,
+    )
 
     mon_stem = Path(monitored.file_name).stem
     mon_suffix = Path(monitored.file_name).suffix or ".tif"
