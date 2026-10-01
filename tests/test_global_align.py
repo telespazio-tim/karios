@@ -649,3 +649,61 @@ def test_cli_quotes_the_reference_in_the_printed_gdalwarp(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
     command = next(line for line in result.output.splitlines() if "gdalwarp" in line)
     assert f"'{ref}'" in command
+
+
+def test_raster_windows_read_only_the_requested_window(tmp_path):
+    texture = np.arange(60 * 80, dtype=np.uint16).reshape(60, 80)
+    image = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 10.0)
+    windows = global_align.RasterWindows(image)
+
+    assert windows.shape == (60, 80)
+    assert np.array_equal(windows[10:25, 5:40], texture[10:25, 5:40])
+    assert np.array_equal(windows[50:999, 70:999], texture[50:, 70:])  # clipped like a slice
+    assert image._array is None  # windows never loaded the whole band
+    assert np.array_equal(np.asarray(windows), texture)
+
+
+def test_alignment_with_a_prior_reads_the_search_window_only(tmp_path):
+    rng = np.random.default_rng(6)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (600, 600)).astype(np.float32), (0, 0), 3)
+    texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 20.0)
+    mon_array = cv2.resize(texture[150:350, 180:380], (800, 800), interpolation=cv2.INTER_CUBIC)
+    mon = _geotiff(tmp_path / "mon.tif", mon_array, 500000.0 + 180 * 20, 5000000.0 - 150 * 20, 5.0)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    global_align.apply_global_alignment(mon, ref, None, out)
+
+    assert ref._array is None
+
+
+@pytest.fixture(name="small_footprint_pair", scope="module")
+def small_footprint_pair_fixture():
+    """mon 4x finer than ref, a 100 ref px footprint at (500, 450) in a 1000 px ref."""
+    rng = np.random.default_rng(12)
+    ref = cv2.GaussianBlur(rng.uniform(0, 255, (1000, 1000)).astype(np.float32), (0, 0), 3)
+    ref = cv2.normalize(ref, None, 10, 250, cv2.NORM_MINMAX)
+    mon = cv2.resize(ref[450:550, 500:600], (400, 400), interpolation=cv2.INTER_CUBIC)
+    return mon, ref, _truth(500, 450, 4)
+
+
+def test_georeferencing_off_by_more_than_the_window_widens_it(small_footprint_pair, caplog):
+    """70 ref px off with a 50 px margin: the window doubles and the alignment is found."""
+    mon, ref, truth = small_footprint_pair
+    caplog.set_level(logging.INFO, logger=global_align.__name__)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 70, -65))
+
+    assert "widening the search margin" in caplog.text
+    assert _center_error(alignment.matrix, truth, size=400) < 0.5
+
+
+def test_georeferencing_within_the_window_does_not_widen_it(small_footprint_pair, caplog):
+    mon, ref, truth = small_footprint_pair
+    caplog.set_level(logging.INFO, logger=global_align.__name__)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 15, -10))
+
+    assert "widening" not in caplog.text
+    assert _center_error(alignment.matrix, truth, size=400) < 0.5

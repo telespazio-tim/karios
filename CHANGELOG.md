@@ -61,6 +61,12 @@
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
   FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` widens its search window when the georeferencing is further off**: matching
+  only searched the reference around the monitored footprint, half its size wider on each side,
+  so a larger georeferencing error gave a wrong result silently. A result with no plausible
+  estimate, a gradient correlation under 0.2, or a shift beyond 75% of the margin now doubles the
+  margin, up to the whole reference, keeping the best result of the windows tried; doubts left
+  with the whole reference searched are logged. Only the window is read from the reference file.
 - **`karios align` peak memory down from 7.2 to 2.1 GB** on a PhiSat scene and a 10 m
   Sentinel-2 tile, and 3 min 40 s instead of 6 min 20 s. OpenCV's SIFT doubles its input
   before building the pyramid, about 200 bytes per pixel: 6 GB for the 28 Mpx reference crop.
