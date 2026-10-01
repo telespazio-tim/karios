@@ -84,6 +84,14 @@ BRUTE_FORCE_MAX_PAIRS = 100_000_000
 FLANN_TREES = 5
 FLANN_CHECKS = 64
 ECC_MAX_ITERS = 200
+# Iterations of the ECC probe run from every start; only the start whose probe
+# correlates best is refined up to ECC_MAX_ITERS, again from that start. The
+# other starts used to run their 200 iterations without converging, 51-69% of
+# a 10 m PhiSat alignment, only to lose: after 25 iterations they already
+# correlate ten times less. Restarting from the winner's probe instead would
+# re-warp the image and drift to a neighbouring optimum: on PhiSat, 2.5 min for
+# a CE90 1% worse than the probe's own start converging in 11 s.
+ECC_PROBE_ITERS = 25
 ECC_EPS = 1e-6
 ECC_MARGIN_PX = 64  # ref kept around mon's pre-warped footprint for ECC to move into
 MIN_VALID_PIXELS = 1000  # fewest valid pixels an ECC run or a correlation score needs
@@ -776,18 +784,19 @@ def _align_in_window(
     if shifted is not None:
         starts.append(("shift", shifted))
 
-    # ECC refinement on Sobel gradients (sensor-invariant) from every start,
-    # keeping the refined estimates plausible as a georeferencing correction
+    # A short ECC probe on Sobel gradients (sensor-invariant) from every start,
+    # keeping the probes plausible as a georeferencing correction
     converged: list[tuple[str, np.ndarray, float]] = []
+    origins: dict[str, np.ndarray] = dict(starts)
     for name, init in starts:
-        refined, ecc_score = _refine_with_ecc(frame.mon, frame.ref, init)
+        refined, ecc_score = _refine_with_ecc(frame.mon, frame.ref, init, ECC_PROBE_ITERS)
         if refined is None:
-            logger.warning("ECC from %s: failed", name)
+            logger.warning("ECC probe from %s: failed", name)
             continue
         full = frame.to_full(refined)
         reason = _plausibility(full, prior, frame)
         logger.info(
-            "ECC from %s: %s  ECC=%.4f%s",
+            "ECC probe from %s: %s  ECC=%.4f%s",
             name,
             _decompose(full),
             ecc_score,
@@ -829,7 +838,16 @@ def _align_in_window(
         # Too few pixels in common: fall back to each run's own ECC score
         best = int(np.argmax([ecc for _, _, ecc in converged]))
     name, matrix, ecc_score = converged[best]
+
+    # Only the best probe's start is refined to convergence
+    refined, final_score = _refine_with_ecc(frame.mon, frame.ref, origins[name])
+    if refined is not None and _plausibility(frame.to_full(refined), prior, frame) is None:
+        matrix, ecc_score = frame.to_full(refined), final_score
+        converged[best] = (name, matrix, ecc_score)
+    else:
+        logger.warning("Full ECC from %s failed or is implausible; keeping its probe", name)
     logger.info("Selected alignment: ECC-refined from %s (ECC=%.4f)", name, ecc_score)
+    final_scores, _ = _gradient_correlation(frame, [frame.to_work(matrix)])
 
     alignment = GlobalAlignment(
         matrix=matrix,
@@ -837,7 +855,7 @@ def _align_in_window(
         n_matches=n_matches,
         candidates=converged,
     )
-    return _WindowAlignment(alignment, frame, _window_doubts(matrix, prior, frame, scores[best]))
+    return _WindowAlignment(alignment, frame, _window_doubts(matrix, prior, frame, final_scores[0]))
 
 
 def _window_doubts(
@@ -915,6 +933,7 @@ def _refine_with_ecc(
     mon_u8: np.ndarray,
     ref_u8: np.ndarray,
     init: np.ndarray,
+    max_iters: int = ECC_MAX_ITERS,
 ) -> tuple[Optional[np.ndarray], float]:
     """Refine the mon → ref homography with cv2.findTransformECC.
 
@@ -975,7 +994,7 @@ def _refine_with_ecc(
 
     criteria = (
         cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-        ECC_MAX_ITERS,
+        max_iters,
         ECC_EPS,
     )
     try:

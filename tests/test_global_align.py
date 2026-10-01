@@ -707,3 +707,22 @@ def test_georeferencing_within_the_window_does_not_widen_it(small_footprint_pair
 
     assert "widening" not in caplog.text
     assert _center_error(alignment.matrix, truth, size=400) < 0.5
+
+
+def test_only_the_best_probe_is_refined_to_convergence(fine_pair, monkeypatch):
+    """Every start gets a short ECC probe; the full ECC runs once, from the winner."""
+    mon, ref, truth = fine_pair
+    calls = []
+    refine = global_align._refine_with_ecc
+
+    def spy(mon_u8, ref_u8, init, max_iters=global_align.ECC_MAX_ITERS):
+        calls.append(max_iters)
+        return refine(mon_u8, ref_u8, init, max_iters)
+
+    monkeypatch.setattr(global_align, "_refine_with_ecc", spy)
+
+    alignment = detect_global_alignment(mon, ref, prior=_offset(truth, 40, -30))
+
+    assert calls.count(global_align.ECC_MAX_ITERS) == 1
+    assert calls.count(global_align.ECC_PROBE_ITERS) == len(calls) - 1 >= 2
+    assert _center_error(alignment.matrix, truth) < 0.5

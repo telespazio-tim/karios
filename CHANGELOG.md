@@ -61,6 +61,11 @@
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
   FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` refines only the best starting point to convergence**: ECC ran its 200
+  iterations from every starting point (RANSAC, prior, translation search), and the ones that
+  lose ran them without converging, 51-69% of a 10 m PhiSat alignment. Every start now gets a
+  25-iteration probe; the probes are compared by gradient correlation and only the winner is
+  refined further.
 - **`karios align` widens its search window when the georeferencing is further off**: matching
   only searched the reference around the monitored footprint, half its size wider on each side,
   so a larger georeferencing error gave a wrong result silently. A result with no plausible
