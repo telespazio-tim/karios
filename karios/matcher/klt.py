@@ -29,7 +29,6 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 from pandas import DataFrame
-from skimage import io
 
 from karios.core.configuration import KLTConfiguration
 from karios.core.errors import ConfigurationError
@@ -462,6 +461,9 @@ class KLT:
             if self._conf.laplacian_kernel_size == "auto":
                 self._auto_selected_ksizes.append((mon_ksize, ref_ksize))
             if self._gen_laplacian:
+                # skimage.io costs 0.3 s at import, only for these dumps
+                from skimage import io  # pylint: disable=import-outside-toplevel
+
                 suffix = "_inv" if invert_mon else ""
                 # drop the margin so the dump matches the geometry in its file name
                 tile = (slice(pad_y, pad_y + y_size), slice(pad_x, pad_x + x_size))
