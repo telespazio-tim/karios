@@ -31,6 +31,15 @@
   reference in the green and blue ones, equalized like the mosaic, where aligned features are
   gray and shifted ones fringed in red and cyan. Written as `06_overlay.avif` and displayed in a
   new *Overlay* tab of the HTML report.
+- **`karios align` applies one alignment to the other bands of a product**: aligning each band
+  of one product separately gives slightly different homographies, so the aligned bands no
+  longer overlay. `karios align` now also writes `<mon_stem>_global_alignment.json`, the
+  homography with the georeferencing prior and the grids it relates. `--apply-to BAND`
+  (repeatable) warps other bands by the alignment estimated on the monitored image, and
+  `--load-transform JSON` warps an image by a saved alignment instead of estimating one, without
+  a reference. A band on the aligned band's grid comes out on the same output grid, pixel for
+  pixel; a band on another grid, like a 20 m band of a 10 m product, is placed on the aligned
+  band by their georeferencing and keeps its own grid and CRS.
 
 ### Fix
 

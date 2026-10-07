@@ -37,7 +37,12 @@ from karios.api import KariosAPI, RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
-from karios.matcher.global_align import SIFT_NFEATURES, apply_global_alignment
+from karios.matcher.global_align import (
+    SIFT_NFEATURES,
+    AlignmentTransform,
+    apply_alignment_transform,
+    apply_global_alignment,
+)
 from karios.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -416,6 +421,7 @@ def process(
 )
 @click.argument(
     "reference_image",
+    required=False,
     type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
 )
 @click.option(
@@ -424,6 +430,20 @@ def process(
     default=Path("."),
     help="Output directory for aligned images",
     show_default=True,
+)
+@click.option(
+    "--apply-to",
+    "apply_to",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    help="Another band of the monitored image's product, warped by the same alignment "
+    "instead of one estimated on it. Repeat it for several bands",
+)
+@click.option(
+    "--load-transform",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    help="Alignment saved by a previous run, <mon_stem>_global_alignment.json, applied "
+    "instead of estimating one: REFERENCE_IMAGE is then left out",
 )
 @click.option(
     "--sift-nfeatures",
@@ -445,8 +465,10 @@ def process(
 )
 def align(
     monitored_image: Path,
-    reference_image: Path,
+    reference_image: Optional[Path],
     out: Path,
+    apply_to: tuple[Path, ...],
+    load_transform: Optional[Path],
     sift_nfeatures: int,
     debug: bool,
     no_log_file: bool,
@@ -461,9 +483,26 @@ def align(
     enough to keep mon's resolution, georeferenced in ref's CRS.
 
     \b
+    The bands of one product share its georeferencing error, but the alignment
+    estimated on each differs slightly, and bands aligned one by one no longer
+    overlay. --apply-to warps other bands by the alignment estimated on
+    MONITORED_IMAGE; --load-transform warps MONITORED_IMAGE by an alignment
+    saved by a previous run. A band on the grid the alignment was estimated on
+    comes out on the same output grid, pixel for pixel; a band on another
+    grid, like a 20 m band of a 10 m product, keeps its own grid and CRS.
+
+    \b
     Output written to OUT:
       <mon_stem>_global_aligned<ext>       — mon aligned on ref
+      <mon_stem>_global_alignment.json     — the alignment estimated, to reuse
+                                             with --load-transform
+      <band_stem>_global_aligned<ext>      — each --apply-to band aligned
     """
+    if (reference_image is None) == (load_transform is None):
+        raise click.UsageError(
+            "Give either REFERENCE_IMAGE, to estimate the alignment, or --load-transform, "
+            "to apply a saved one"
+        )
     configure_logging(debug, not no_log_file, log_file_path)
     logger.info("Start align")
 
@@ -471,52 +510,87 @@ def align(
         os.makedirs(out, exist_ok=True)
 
         monitored = GdalRasterImage(str(monitored_image))
-        reference = GdalRasterImage(str(reference_image))
+        if load_transform is None:
+            transform_path = out / f"{monitored_image.stem}_global_alignment.json"
+            reference = GdalRasterImage(str(reference_image))
+            aligned_mon, _, alignment = apply_global_alignment(
+                monitored,
+                reference,
+                None,
+                out,
+                sift_nfeatures=sift_nfeatures,
+                transform_path=transform_path,
+            )
+            _print_alignment(alignment, aligned_mon, reference, reference_image)
+            click.echo(
+                f"\nAlignment saved to {transform_path}, apply it to other bands with:\n"
+                f"  karios align <band> --load-transform {shlex.quote(str(transform_path))}"
+            )
+        else:
+            transform_path = load_transform
+            aligned_mon = apply_alignment_transform(
+                monitored, AlignmentTransform.load(transform_path), out
+            )
+            _print_applied(monitored_image, aligned_mon)
 
-        aligned_mon, _, alignment = apply_global_alignment(
-            monitored, reference, None, out, sift_nfeatures=sift_nfeatures
-        )
-
-        m = alignment.matrix
-        rot = float(np.degrees(np.arctan2(m[1, 0], m[0, 0])))
-        sx = float(np.hypot(m[0, 0], m[0, 1]))
-        sy = float(np.hypot(m[1, 0], m[1, 1]))
-        click.echo(f"rotation:    {rot:+.3f} deg")
-        click.echo(f"scale x/y:   {sx:.4f} / {sy:.4f}")
-        click.echo(f"translation: tx={float(m[0,2]):+.2f}  ty={float(m[1,2]):+.2f}")
-        click.echo(f"perspective: {float(m[2,0]):+.6f}  {float(m[2,1]):+.6f}")
-        click.echo(
-            f"inliers:     {alignment.n_inliers}/{alignment.n_matches} ({alignment.score*100:.1f}%)"
-        )
-        click.echo("\nHomography (mon → ref):")
-        for row in m:
-            click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
-        crs = aligned_mon.spatial_ref.GetName() if aligned_mon.spatial_ref else "no CRS"
-        click.echo(
-            f"\nOutput grid: {aligned_mon.x_size}x{aligned_mon.y_size} px of "
-            f"{aligned_mon.x_res:.6g} x {abs(aligned_mon.y_res):.6g} in {crs} "
-            f"(reference pixel {reference.x_res:.6g} x {abs(reference.y_res):.6g})"
-        )
-        click.echo(f"\nOutput: {aligned_mon.file_name}")
-        # karios process needs both images on one grid, geotransforms equal to
-        # the last bit: -ts would have gdalwarp divide the extent into a pixel
-        # size a few ulps off, as it does for the degrees of a WGS 84 grid
-        extent = (
-            f"{aligned_mon.x_min!r} {aligned_mon.y_max + aligned_mon.y_size * aligned_mon.y_res!r} "
-            f"{aligned_mon.x_min + aligned_mon.x_size * aligned_mon.x_res!r} {aligned_mon.y_max!r}"
-        )
-        click.echo(
-            "\nTo compare it with karios process, resample the reference onto its grid:\n"
-            f"  gdalwarp -r cubic{_target_srs_option(aligned_mon)} -te {extent} "
-            f"-tr {aligned_mon.x_res!r} {abs(aligned_mon.y_res)!r} "
-            f"{shlex.quote(str(reference_image))} <reference_on_grid>.tif"
-        )
+        if apply_to:
+            transform = AlignmentTransform.load(transform_path)
+            click.echo("")
+            for band_path in apply_to:
+                aligned = apply_alignment_transform(GdalRasterImage(str(band_path)), transform, out)
+                _print_applied(band_path, aligned)
 
         return 0
 
     except Exception as e:
         logger.error("Error during align: %s", str(e), exc_info=debug)
         sys.exit(1)
+
+
+def _print_alignment(alignment, aligned_mon, reference, reference_image: Path) -> None:
+    """Print the estimated homography, the output grid and how to compare it with ref."""
+    m = alignment.matrix
+    rot = float(np.degrees(np.arctan2(m[1, 0], m[0, 0])))
+    sx = float(np.hypot(m[0, 0], m[0, 1]))
+    sy = float(np.hypot(m[1, 0], m[1, 1]))
+    click.echo(f"rotation:    {rot:+.3f} deg")
+    click.echo(f"scale x/y:   {sx:.4f} / {sy:.4f}")
+    click.echo(f"translation: tx={float(m[0,2]):+.2f}  ty={float(m[1,2]):+.2f}")
+    click.echo(f"perspective: {float(m[2,0]):+.6f}  {float(m[2,1]):+.6f}")
+    click.echo(
+        f"inliers:     {alignment.n_inliers}/{alignment.n_matches} ({alignment.score*100:.1f}%)"
+    )
+    click.echo("\nHomography (mon → ref):")
+    for row in m:
+        click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
+    crs = aligned_mon.spatial_ref.GetName() if aligned_mon.spatial_ref else "no CRS"
+    click.echo(
+        f"\nOutput grid: {aligned_mon.x_size}x{aligned_mon.y_size} px of "
+        f"{aligned_mon.x_res:.6g} x {abs(aligned_mon.y_res):.6g} in {crs} "
+        f"(reference pixel {reference.x_res:.6g} x {abs(reference.y_res):.6g})"
+    )
+    click.echo(f"\nOutput: {aligned_mon.file_name}")
+    # karios process needs both images on one grid, geotransforms equal to
+    # the last bit: -ts would have gdalwarp divide the extent into a pixel
+    # size a few ulps off, as it does for the degrees of a WGS 84 grid
+    extent = (
+        f"{aligned_mon.x_min!r} {aligned_mon.y_max + aligned_mon.y_size * aligned_mon.y_res!r} "
+        f"{aligned_mon.x_min + aligned_mon.x_size * aligned_mon.x_res!r} {aligned_mon.y_max!r}"
+    )
+    click.echo(
+        "\nTo compare it with karios process, resample the reference onto its grid:\n"
+        f"  gdalwarp -r cubic{_target_srs_option(aligned_mon)} -te {extent} "
+        f"-tr {aligned_mon.x_res!r} {abs(aligned_mon.y_res)!r} "
+        f"{shlex.quote(str(reference_image))} <reference_on_grid>.tif"
+    )
+
+
+def _print_applied(image_path: Path, aligned: GdalRasterImage) -> None:
+    """Print where an image warped by a saved alignment was written, and on which grid."""
+    click.echo(
+        f"{image_path} -> {aligned.file_name}: {aligned.x_size}x{aligned.y_size} px of "
+        f"{aligned.x_res:.6g} x {abs(aligned.y_res):.6g}"
+    )
 
 
 def _target_srs_option(image: GdalRasterImage) -> str:
