@@ -455,13 +455,14 @@ def align(
     """\b
     Align MONITORED_IMAGE to REFERENCE_IMAGE by estimating a 2D homography
     with SIFT feature matching + RANSAC, then refining with ECC on Sobel
-    gradient magnitudes. The warped mon is rendered over its footprint in
-    ref, on a grid nested in ref's and fine enough to keep mon's resolution,
-    georeferenced in ref's CRS.
+    gradient magnitudes. The warped mon keeps its CRS and grid, over its
+    corrected footprint. Without georeferencing on both images, it is rendered
+    over its footprint in ref instead, on a grid nested in ref's and fine
+    enough to keep mon's resolution, georeferenced in ref's CRS.
 
     \b
     Output written to OUT:
-      <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
+      <mon_stem>_global_aligned<ext>       — mon aligned on ref
     """
     configure_logging(debug, not no_log_file, log_file_path)
     logger.info("Start align")
@@ -490,20 +491,24 @@ def align(
         click.echo("\nHomography (mon → ref):")
         for row in m:
             click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
+        crs = aligned_mon.spatial_ref.GetName() if aligned_mon.spatial_ref else "no CRS"
         click.echo(
             f"\nOutput grid: {aligned_mon.x_size}x{aligned_mon.y_size} px of "
-            f"{aligned_mon.x_res:.3f} x {abs(aligned_mon.y_res):.3f} "
-            f"(reference pixel {reference.x_res:.3f} x {abs(reference.y_res):.3f})"
+            f"{aligned_mon.x_res:.6g} x {abs(aligned_mon.y_res):.6g} in {crs} "
+            f"(reference pixel {reference.x_res:.6g} x {abs(reference.y_res):.6g})"
         )
         click.echo(f"\nOutput: {aligned_mon.file_name}")
-        # karios process needs both images on one grid
+        # karios process needs both images on one grid, geotransforms equal to
+        # the last bit: -ts would have gdalwarp divide the extent into a pixel
+        # size a few ulps off, as it does for the degrees of a WGS 84 grid
         extent = (
             f"{aligned_mon.x_min!r} {aligned_mon.y_max + aligned_mon.y_size * aligned_mon.y_res!r} "
             f"{aligned_mon.x_min + aligned_mon.x_size * aligned_mon.x_res!r} {aligned_mon.y_max!r}"
         )
         click.echo(
             "\nTo compare it with karios process, resample the reference onto its grid:\n"
-            f"  gdalwarp -r cubic -te {extent} -ts {aligned_mon.x_size} {aligned_mon.y_size} "
+            f"  gdalwarp -r cubic{_target_srs_option(aligned_mon)} -te {extent} "
+            f"-tr {aligned_mon.x_res!r} {abs(aligned_mon.y_res)!r} "
             f"{shlex.quote(str(reference_image))} <reference_on_grid>.tif"
         )
 
@@ -512,6 +517,16 @@ def align(
     except Exception as e:
         logger.error("Error during align: %s", str(e), exc_info=debug)
         sys.exit(1)
+
+
+def _target_srs_option(image: GdalRasterImage) -> str:
+    """gdalwarp's -t_srs option for `image`'s CRS, by its authority code when it has one."""
+    srs = image.spatial_ref
+    if srs is None:
+        return ""
+    name, code = srs.GetAuthorityName(None), srs.GetAuthorityCode(None)
+    definition = f"{name}:{code}" if name and code else srs.ExportToWkt()
+    return f" -t_srs {shlex.quote(definition)}"
 
 
 def _validate_configuration(

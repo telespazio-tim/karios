@@ -365,7 +365,7 @@ def _geotiff(path, array, x_min, y_max, res, nodata=None):
 
 def _on_grid(texture, image, ref_res, x_min=500000.0, y_max=5000000.0):
     """`texture`, a ref at `ref_res` from (x_min, y_max), resampled onto `image`'s grid."""
-    factor = round(ref_res / image.x_res)
+    factor = ref_res / image.x_res
     col, row = (image.x_min - x_min) / ref_res, (y_max - image.y_max) / ref_res
     offset = np.array([[1.0, 0.0, -col], [0.0, 1.0, -row], [0.0, 0.0, 1.0]])
     to_grid = global_align._pixel_scale(factor, factor) @ offset
@@ -373,8 +373,8 @@ def _on_grid(texture, image, ref_res, x_min=500000.0, y_max=5000000.0):
     return cv2.warpPerspective(texture.astype(np.float32), to_grid, size, flags=cv2.INTER_CUBIC)
 
 
-def test_aligned_output_keeps_the_monitored_resolution(tmp_path):
-    """mon 4x finer than ref comes out at its own 5 m over its footprint, on ref's pixel edges."""
+def test_aligned_output_keeps_the_monitored_grid(tmp_path):
+    """mon 4x finer than ref comes out on its own 5 m grid, moved to where ref sees it."""
     rng = np.random.default_rng(6)
     texture = cv2.GaussianBlur(rng.uniform(0, 255, (600, 600)).astype(np.float32), (0, 0), 3)
     texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
@@ -388,11 +388,13 @@ def test_aligned_output_keeps_the_monitored_resolution(tmp_path):
 
     aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
 
+    assert aligned.spatial_ref.IsSame(mon.spatial_ref)
     assert (aligned.x_res, aligned.y_res) == (5.0, -5.0)
-    # On ref's pixel edges, within mon's footprint and a pixel of margin
-    assert (aligned.x_min - 500000.0) % 20 == 0 and (5000000.0 - aligned.y_max) % 20 == 0
-    assert 500000.0 + 179 * 20 <= aligned.x_min <= 500000.0 + 180 * 20
-    assert aligned.x_size <= 808 and aligned.y_size <= 808
+    # On mon's pixel edges, at its true place within a pixel of margin
+    assert (aligned.x_min - mon_x) % 5 == 0 and (mon_y - aligned.y_max) % 5 == 0
+    assert 503600.0 - 5 <= aligned.x_min <= 503600.0
+    assert 4997000.0 <= aligned.y_max <= 4997000.0 + 5
+    assert aligned.x_size <= 802 and aligned.y_size <= 802
     # Same content as ref on that grid, 5 m detail kept
     inner = (slice(40, -40), slice(40, -40))
     expected = _on_grid(texture, aligned, 20.0)[inner]
@@ -401,8 +403,8 @@ def test_aligned_output_keeps_the_monitored_resolution(tmp_path):
     assert [p.name for p in out.iterdir()] == ["mon_global_aligned.tif"]
 
 
-def test_coarser_monitored_gets_the_reference_pixel_size(tmp_path):
-    """A mon coarser than ref is rendered at ref's pixel size, on ref's own grid."""
+def test_coarser_monitored_keeps_its_pixel_size(tmp_path):
+    """A mon coarser than ref keeps its own 20 m pixels, on its own grid."""
     rng = np.random.default_rng(7)
     texture = cv2.GaussianBlur(rng.uniform(0, 255, (400, 400)).astype(np.float32), (0, 0), 4)
     texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
@@ -414,11 +416,55 @@ def test_coarser_monitored_gets_the_reference_pixel_size(tmp_path):
 
     aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
 
-    assert (aligned.x_res, aligned.y_res) == (10.0, -10.0)
-    assert (aligned.x_min - 500000.0) % 10 == 0 and (5000000.0 - aligned.y_max) % 10 == 0
-    inner = (slice(10, -10), slice(10, -10))
-    expected = _on_grid(texture, aligned, 10.0)[inner]
-    assert np.corrcoef(aligned.array[inner].ravel(), expected.ravel())[0, 1] > 0.95
+    assert aligned.spatial_ref.IsSame(mon.spatial_ref)
+    assert (aligned.x_res, aligned.y_res) == (20.0, -20.0)
+    assert (aligned.x_min - mon.x_min) % 20 == 0 and (mon.y_max - aligned.y_max) % 20 == 0
+    inner = (slice(5, -5), slice(5, -5))
+    expected = _on_grid(cv2.GaussianBlur(texture.astype(np.float32), (0, 0), 1), aligned, 10.0)
+    assert np.corrcoef(aligned.array[inner].ravel(), expected[inner].ravel())[0, 1] > 0.95
+
+
+def test_whole_pixel_correction_moves_the_georeferencing_only(tmp_path, monkeypatch):
+    """Ref seeing mon 2 ref px east and 1 north of its georeferencing: same pixels, moved grid."""
+    rng = np.random.default_rng(8)
+    mon_array = rng.integers(1, 4000, (120, 100), dtype=np.uint16)
+    mon = _geotiff(tmp_path / "mon.tif", mon_array, 500000.0, 5000000.0, 10.0)
+    ref = _geotiff(tmp_path / "ref.tif", np.ones((200, 200), np.uint16), 499000.0, 5001000.0, 20.0)
+    georefs = global_align._prior_from_georefs(mon, ref)
+    shift = np.array([[1.0, 0.0, 2.0], [0.0, 1.0, -1.0], [0.0, 0.0, 1.0]])
+    alignment = global_align.GlobalAlignment(matrix=shift @ georefs, n_inliers=4, n_matches=4)
+    monkeypatch.setattr(global_align, "detect_global_alignment", lambda *args, **kwargs: alignment)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
+
+    assert aligned.geo_transform == (500040.0, 10.0, 0.0, 5000020.0, 0.0, -10.0)
+    assert np.array_equal(aligned.array, mon_array)
+
+
+def test_monitored_without_crs_is_written_in_the_reference_crs(tmp_path, monkeypatch):
+    """No CRS to keep: the output is nested in ref's grid, in ref's CRS, as before."""
+    rng = np.random.default_rng(9)
+    texture = cv2.GaussianBlur(rng.uniform(0, 255, (300, 300)).astype(np.float32), (0, 0), 3)
+    texture = cv2.normalize(texture, None, 100, 4000, cv2.NORM_MINMAX).astype(np.uint16)
+    ref = _geotiff(tmp_path / "ref.tif", texture, 500000.0, 5000000.0, 20.0)
+    path = tmp_path / "mon.tif"
+    dataset = gdal.GetDriverByName("GTiff").Create(str(path), 400, 400, 1, gdal.GDT_UInt16)
+    dataset.GetRasterBand(1).WriteArray(
+        cv2.resize(texture[50:150, 60:160], (400, 400), interpolation=cv2.INTER_CUBIC)
+    )
+    dataset = None
+    mon = GdalRasterImage(str(path))
+    alignment = global_align.GlobalAlignment(matrix=_truth(60, 50, 4), n_inliers=4, n_matches=4)
+    monkeypatch.setattr(global_align, "detect_global_alignment", lambda *args, **kwargs: alignment)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, out)
+
+    assert aligned.spatial_ref.IsSame(ref.spatial_ref)
+    assert aligned.geo_transform == (501200.0, 5.0, 0.0, 4999000.0, 0.0, -5.0)
 
 
 def test_flann_matching_recovers_the_shift(shifted_pair, monkeypatch, caplog):
@@ -628,10 +674,47 @@ def test_rotated_mirrored_wgs84_mon_aligns_on_utm_ref(wgs84_pair):
     assert _center_error(alignment.matrix, truth, size=500) < 0.6
 
 
+def test_rotated_mirrored_wgs84_mon_stays_in_wgs84(wgs84_pair, tmp_path, monkeypatch):
+    """The aligned output keeps mon's WGS 84, north-up at its pixel area, and overlays ref."""
+    mon, ref, truth = wgs84_pair
+    alignment = global_align.GlobalAlignment(matrix=truth, n_inliers=4, n_matches=4)
+    monkeypatch.setattr(global_align, "detect_global_alignment", lambda *args, **kwargs: alignment)
+
+    aligned, _, _ = global_align.apply_global_alignment(mon, ref, None, tmp_path)
+
+    assert aligned.spatial_ref.IsSame(mon.spatial_ref)
+    assert aligned.geo_transform[2] == aligned.geo_transform[4] == 0
+    assert (aligned.x_res, aligned.y_res) == pytest.approx((4.5e-5, -4.5e-5))
+    # ref resampled onto the output grid matches it best there, not a quarter pixel aside
+    valid = cv2.erode((aligned.array > 0).astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
+
+    def error(dx, dy):
+        x, y = dx * aligned.x_res, dy * aligned.y_res
+        bounds = (aligned.x_min + x, aligned.y_min + y, aligned.x_max + x, aligned.y_max + y)
+        on_grid = gdal.Warp(
+            "",
+            ref.filepath,
+            format="MEM",
+            dstSRS=aligned.projection,
+            outputBounds=bounds,
+            width=aligned.x_size,
+            height=aligned.y_size,
+            resampleAlg="cubic",
+        ).ReadAsArray()
+        return np.median(np.abs(aligned.array.astype(float) - on_grid)[valid])
+
+    aside = [error(dx, dy) for dx, dy in [(0.25, 0), (-0.25, 0), (0, 0.25), (0, -0.25)]]
+    assert error(0, 0) < min(aside)
+
+
 def test_cli_quotes_the_reference_in_the_printed_gdalwarp(tmp_path, monkeypatch):
     """A reference named like a shell substitution is quoted in the command to paste."""
     grid = {"x_size": 10, "y_size": 10, "x_res": 5.0, "y_res": -5.0, "x_min": 0.0, "y_max": 50.0}
-    aligned = type("Aligned", (), {**grid, "file_name": "mon_global_aligned.tif"})()
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(32631)
+    aligned = type(
+        "Aligned", (), {**grid, "file_name": "mon_global_aligned.tif", "spatial_ref": srs}
+    )()
     reference = type("Ref", (), {"x_res": 10.0, "y_res": -10.0})()
     alignment = global_align.GlobalAlignment(matrix=np.eye(3), n_inliers=4, n_matches=4)
     monkeypatch.setattr(commands, "GdalRasterImage", lambda path: reference)
@@ -649,6 +732,9 @@ def test_cli_quotes_the_reference_in_the_printed_gdalwarp(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
     command = next(line for line in result.output.splitlines() if "gdalwarp" in line)
     assert f"'{ref}'" in command
+    # The reference is resampled into the output's CRS, at its exact pixel size
+    assert "-t_srs EPSG:32631 " in command
+    assert "-tr 5.0 5.0 " in command
 
 
 def test_raster_windows_read_only_the_requested_window(tmp_path):
@@ -779,4 +865,6 @@ def test_aligned_output_has_no_rounding_bias(tmp_path, monkeypatch):
     exact = cv2.warpPerspective(
         texture.astype(np.float32), shift, (300, 300), flags=cv2.INTER_LINEAR
     )
-    assert abs(aligned.array[inner].mean() - exact[inner].mean()) < 0.05
+    # On mon's grid from its origin, one column and row more for the shifted edge
+    assert (aligned.x_min, aligned.y_max) == (mon.x_min, mon.y_max)
+    assert abs(aligned.array[:300, :300][inner].mean() - exact[inner].mean()) < 0.05

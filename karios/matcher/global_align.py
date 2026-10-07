@@ -43,8 +43,10 @@ Pipeline:
        correlation, computed on the pixels all of them cover so the scores
        compare.
     9. Apply the resulting 3x3 homography to mon (and mask) via
-       cv2.warpPerspective, rendered over mon's footprint in ref at a whole
-       fraction of ref's pixel size, fine enough to keep mon's resolution.
+       cv2.warpPerspective, rendered on mon's own grid, in mon's CRS, over its
+       corrected footprint. Without a prior, rendered over mon's footprint in
+       ref at a whole fraction of ref's pixel size, fine enough to keep mon's
+       resolution.
 """
 
 import logging
@@ -1058,8 +1060,74 @@ def _write_geotiff(
 
 
 @dataclass
+class OutputFrame:
+    """North-up grid the aligned outputs are written on, and the warp of mon onto it."""
+
+    projection: str
+    x_min: float
+    y_max: float
+    x_res: float
+    y_res: float
+    width: int
+    height: int
+    from_mon: np.ndarray  # 3x3 map from mon pixels to output pixels
+
+
+def _geo_matrix(geo_transform: tuple) -> np.ndarray:
+    """3x3 map of a GDAL geotransform, from pixel corner coordinates to the CRS."""
+    g = geo_transform
+    return np.array([[g[1], g[2], g[0]], [g[4], g[5], g[3]], [0.0, 0.0, 1.0]])
+
+
+def _frame_in_mon_crs(
+    matrix: np.ndarray, georefs: np.ndarray, mon_valid: np.ndarray, monitored: GdalRasterImage
+) -> OutputFrame:
+    """Grid over mon's corrected valid footprint on mon's own grid, in mon's CRS.
+
+    `matrix` maps mon pixels to ref pixels where they truly are, `georefs`
+    where the georeferencing puts them. A point of mon's CRS lands in ref
+    through `georefs`, then on the mon pixel imaging it through the inverse
+    of `matrix`.
+
+    A north-up mon keeps its grid: same pixel size and edges, shifted by whole
+    pixels to cover the corrected footprint, so a correction of whole pixels
+    moves the georeferencing and leaves the pixels untouched. A rotated or
+    mirrored mon gets a north-up grid from its origin, at its pixel area.
+    """
+    geo = monitored.geo_transform
+    if geo[1] > 0 and geo[2] == 0 and geo[4] == 0 and geo[5] < 0:
+        x_res, y_res = geo[1], geo[5]
+    else:
+        side = float(np.sqrt(abs(geo[1] * geo[5] - geo[2] * geo[4])))
+        x_res, y_res = side, -side
+    # mon pixels → pixels of the north-up grid from mon's origin, in OpenCV's
+    # center coordinates: geotransforms map corners, half a pixel out
+    grid = (geo[0], x_res, 0.0, geo[3], 0.0, y_res)
+    to_grid = np.linalg.inv(_geo_matrix(grid)) @ _geo_matrix(geo)
+    half = np.array([[1.0, 0.0, 0.5], [0.0, 1.0, 0.5], [0.0, 0.0, 1.0]])
+    corrected = np.linalg.inv(half) @ to_grid @ half @ np.linalg.inv(georefs) @ matrix
+
+    edges = _footprint_points(corrected, _valid_outline(mon_valid) - 0.5) + 0.5
+    if not np.isfinite(edges).all():
+        raise RuntimeError("The aligned monitored image footprint is not finite")
+    x0, y0 = np.floor(edges.min(axis=0)).astype(int)
+    x1, y1 = np.ceil(edges.max(axis=0)).astype(int)
+    offset = np.array([[1.0, 0.0, -x0], [0.0, 1.0, -y0], [0.0, 0.0, 1.0]])
+    return OutputFrame(
+        monitored.projection,
+        geo[0] + x0 * x_res,
+        geo[3] + y0 * y_res,
+        x_res,
+        y_res,
+        int(x1 - x0),
+        int(y1 - y0),
+        offset @ corrected,
+    )
+
+
+@dataclass
 class OutputGrid:
-    """Pixel grid the aligned outputs are written on, nested in ref's grid.
+    """Pixel grid nested in ref's grid, for the aligned outputs without georeferencing prior.
 
     `factor` output pixels span one ref pixel on each axis; the grid covers
     ref pixels [x0, x0 + width / factor) x [y0, y0 + height / factor).
@@ -1131,6 +1199,23 @@ def _output_grid(
     return OutputGrid(factor, x0, y0, (x1 - x0) * factor, (y1 - y0) * factor)
 
 
+def _frame_in_ref(
+    matrix: np.ndarray, mon_valid: np.ndarray, reference: GdalRasterImage
+) -> OutputFrame:
+    """The grid of _output_grid(), georeferenced in ref's CRS."""
+    grid = _output_grid(matrix, mon_valid, (reference.y_size, reference.x_size))
+    return OutputFrame(
+        reference.projection,
+        reference.x_min + grid.x0 * reference.x_res,
+        reference.y_max + grid.y0 * reference.y_res,
+        reference.x_res / grid.factor,
+        reference.y_res / grid.factor,
+        grid.width,
+        grid.height,
+        grid.from_ref @ matrix,
+    )
+
+
 def _to_dtype(values: np.ndarray, dtype) -> np.ndarray:
     """Interpolated `values` back to the image's `dtype`, rounded and clipped for integers.
 
@@ -1149,11 +1234,14 @@ def apply_global_alignment(
     out_dir: Path,
     sift_nfeatures: int = SIFT_NFEATURES,
 ) -> tuple[GdalRasterImage, Optional[GdalRasterImage], GlobalAlignment]:
-    """Detect the homography, apply to monitored (and mask), render over mon's footprint in ref.
+    """Detect the homography, apply to monitored (and mask), render on mon's grid in mon's CRS.
 
-    The outputs are rendered on a grid nested in ref's, covering mon's valid
-    footprint at a whole fraction of ref's pixel size that keeps mon's
-    resolution, see _output_grid(), and georeferenced in ref's CRS.
+    The outputs keep mon's CRS and grid, over its corrected valid footprint,
+    see _frame_in_mon_crs(). Without a georeferencing prior, an image without
+    CRS or a failed reprojection, they are rendered on a grid nested in ref's
+    instead, covering mon's valid footprint at a whole fraction of ref's pixel
+    size that keeps mon's resolution, see _output_grid(), and georeferenced in
+    ref's CRS.
 
     Returns (aligned_mon, aligned_mask, alignment_info), the rasters written
     to `out_dir`. `sift_nfeatures` limits the SIFT keypoints kept per image,
@@ -1177,29 +1265,26 @@ def apply_global_alignment(
     )
 
     # The homography maps mon pixel coords → ref pixel coords. The outputs are
-    # rendered on a grid over mon's footprint nested in ref's, fine enough to
-    # keep mon's resolution, so they overlay ref without losing detail.
+    # rendered on mon's own grid in its CRS, or, without georeferencing to
+    # bring ref pixels back to mon's CRS, on a grid nested in ref's.
     mon_valid = _valid_pixels(mon_arr)
     if monitored.no_data_value is not None:
         mon_valid &= mon_arr != monitored.no_data_value
-    grid = _output_grid(alignment.matrix, mon_valid, ref_arr.shape)
-    out_size = (grid.width, grid.height)
-    warp_m = grid.from_ref @ alignment.matrix
-    x_min = reference.x_min + grid.x0 * reference.x_res
-    y_max = reference.y_max + grid.y0 * reference.y_res
-    x_res = reference.x_res / grid.factor
-    y_res = reference.y_res / grid.factor
+    if prior is not None:
+        frame = _frame_in_mon_crs(alignment.matrix, prior, mon_valid, monitored)
+    else:
+        logger.warning("Output georeferenced in ref's CRS: no georeferencing to keep mon's")
+        frame = _frame_in_ref(alignment.matrix, mon_valid, reference)
+    out_size = (frame.width, frame.height)
+    warp_m = frame.from_mon
     logger.info(
-        "Output grid: %dx%d px of %.3f x %.3f, %d per ref pixel, over ref pixels x=%d-%d y=%d-%d",
-        grid.width,
-        grid.height,
-        x_res,
-        abs(y_res),
-        grid.factor,
-        grid.x0,
-        grid.x0 + grid.width // grid.factor,
-        grid.y0,
-        grid.y0 + grid.height // grid.factor,
+        "Output grid: %dx%d px of %.6g x %.6g from (%.6f, %.6f)",
+        frame.width,
+        frame.height,
+        frame.x_res,
+        abs(frame.y_res),
+        frame.x_min,
+        frame.y_max,
     )
 
     border_mon = float(monitored.no_data_value) if monitored.no_data_value is not None else 0.0
@@ -1221,11 +1306,11 @@ def apply_global_alignment(
     _write_geotiff(
         mon_out,
         aligned_mon,
-        x_min,
-        y_max,
-        x_res,
-        y_res,
-        reference.projection,
+        frame.x_min,
+        frame.y_max,
+        frame.x_res,
+        frame.y_res,
+        frame.projection,
         monitored.no_data_value,
     )
     aligned_mask = None
@@ -1243,11 +1328,11 @@ def apply_global_alignment(
         _write_geotiff(
             mask_out,
             warped_mask,
-            x_min,
-            y_max,
-            x_res,
-            y_res,
-            reference.projection,
+            frame.x_min,
+            frame.y_max,
+            frame.x_res,
+            frame.y_res,
+            frame.projection,
             None,
             gdal_dtype=gdal.GDT_Byte,
         )

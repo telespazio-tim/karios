@@ -57,6 +57,15 @@
   that image only: the reference and the alternative ECC candidates are no longer written, and
   the command prints the `gdalwarp` call that resamples the reference onto the output grid for
   `karios process`.
+- **`karios align` keeps the monitored image's CRS**: the aligned monitored image was written in
+  the reference's CRS, so a WGS 84 scene aligned on a Sentinel-2 tile came out in UTM. It now
+  keeps its own CRS and grid: same pixel size and pixel edges, over its corrected footprint, so a
+  correction of whole pixels only moves the georeferencing. A rotated or mirrored grid becomes
+  north-up in the same CRS, at the same pixel area. Without georeferencing on both images, there
+  is no CRS to bring the correction back to, and the output stays on a grid nested in the
+  reference's, in its CRS. The printed `gdalwarp` call now gives the target CRS (`-t_srs`) and
+  the exact pixel size (`-tr` instead of `-ts`): from a size, gdalwarp divided the extent into a
+  pixel size a few ulps off in degrees, and `karios process` refused the two grids.
 - **`karios align` handles 10 m references**: OpenCV's brute-force matcher refuses more than
   262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
   compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
@@ -122,7 +131,7 @@
   or replicated content does not move consistently between the two images, so a window
   overlapping it scores worse than a truncated one.
 
-- **`karios align` subcommand**: standalone command that warps the monitored image into the reference frame, keeping its resolution, and writes it georeferenced in the reference's CRS.
+- **`karios align` subcommand**: standalone command that aligns the monitored image on the reference and writes it in its own CRS and grid, keeping its resolution.
 - **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `10000` by default, `0` = unlimited): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
 
 ### Improvements
