@@ -40,6 +40,16 @@
   a reference. A band on the aligned band's grid comes out on the same output grid, pixel for
   pixel; a band on another grid, like a 20 m band of a 10 m product, is placed on the aligned
   band by their georeferencing and keeps its own grid and CRS.
+- **Matching confidence in `karios process`**: KLT returns key points even between unrelated
+  images, and the statistics computed on them looked like a measurement (a 60 px CE90 on two
+  areas of a Sentinel-2 tile). The run now rates its confidence from the median ZNCC of the
+  confident key points, the share moving like their neighbours and the share of detected corners
+  KLT keeps, which separate related from unrelated pairs by an order of magnitude (0.85 / 0.97 /
+  0.39 against 0.04 / 0.06 / 0.033 on the test pair), and gives a verdict: reliable, doubtful
+  or unreliable. It is printed in the console summary, shown on the HTML report's summary page,
+  and written with the statistics to a new `summary.json`; the exit status is unchanged. Without
+  any key point above the confidence threshold, the statistics are now undefined instead of
+  failing the run on an empty CE90 computation.
 
 ### Fix
 

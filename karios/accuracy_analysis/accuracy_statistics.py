@@ -227,6 +227,9 @@ class GeometricStat:
 
         # Computation CE90 2D :
         v_s = np.sort(np.sqrt(x * x + y * y))
+        if v_s.shape[0] == 0:
+            # No key point above the confidence threshold: nothing to measure
+            return float("nan")
 
         p = percent * v_s.shape[0]
         perc = int(p)

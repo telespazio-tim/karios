@@ -335,6 +335,8 @@ class KLT:
         self._coarse_to_fine = coarse_to_fine
         self._auto_selected_ksizes: list[tuple[int, int]] = []
         self._selected_polarities: list[str] = []
+        # Corners detected in the reference by the last match(), for its tracking ratio
+        self.detected_points = 0
 
     def match(
         self,
@@ -356,6 +358,7 @@ class KLT:
 
         logger.info("KLT...")
         logger.info("%s %s", mon_img.x_size, mon_img.y_size)
+        self.detected_points = 0
         self._log_polarity_setting()
 
         # iterate over N*N boxes : aim is to limit memory consumption.
@@ -503,6 +506,7 @@ class KLT:
         points["x0"] = points["x0"] - pad_x + x_off
         points["y0"] = points["y0"] - pad_y + y_off
 
+        self.detected_points += initial_nb_points
         logger.info("NbPoints(init/final): %s / %s", initial_nb_points, len(points.dx))
         logger.info("DX/DY(KLT) MEAN: %s / %s", points.dx.mean(), points.dy.mean())
         logger.info("DX/DY(KLT) STD: %s / %s", points.dx.std(), points.dy.std())

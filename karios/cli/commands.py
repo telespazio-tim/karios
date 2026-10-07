@@ -658,7 +658,23 @@ def _print_summary(match_result, accuracy, reports) -> None:
     click.echo(f"  CE90: {accuracy.ce90:.3f}")
     click.echo(f"  CE95: {accuracy.ce95:.3f}")
 
+    quality = accuracy.quality
+    if quality is not None:
+
+        def value(number, digits=2):
+            return "n/a" if number is None else f"{number:.{digits}f}"
+
+        click.echo(f"\nMatching confidence: {quality.verdict.upper()} ({quality.confidence:.2f})")
+        click.echo(f"  Median ZNCC: {value(quality.median_zncc)}")
+        click.echo(f"  Coherent key points: {value(quality.coherent_fraction)}")
+        click.echo(f"  Tracking ratio: {value(quality.tracking_ratio, 3)}")
+        click.echo(f"  Confident key points: {quality.confident_points}")
+        for reason in quality.reasons:
+            click.echo(f"  - {reason}")
+
     click.echo("\nGenerated outputs:")
+    if accuracy.summary_file:
+        click.echo(f"  Summary: {accuracy.summary_file}")
     click.echo(f"  Overview plot: {reports.overview_plot}")
     click.echo(f"  DX plot: {reports.dx_plot}")
     click.echo(f"  DY plot: {reports.dy_plot}")
