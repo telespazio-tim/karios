@@ -53,6 +53,11 @@
 
 ### Fix
 
+- **`karios align` writes the original pixel values**: the aligned image was resampled by
+  bilinear interpolation, which blends neighbouring pixels into values the sensor never measured.
+  It is now resampled by nearest neighbour. The images warped for the estimation keep bilinear
+  interpolation: nearest neighbour there rounds the starting estimate to whole pixels, and ECC
+  refining a start 0.7 px off landed 0.4 px from the truth instead of 0.03 px.
 - **`karios align` recovers large georeferencing errors between images of different
   resolutions**: SIFT ran on both whole images at native resolution, so a monitored image 7x
   finer than the reference had keypoints of details the reference cannot show, and its small

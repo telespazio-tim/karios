@@ -677,7 +677,10 @@ def test_rotated_mirrored_wgs84_mon_aligns_on_utm_ref(wgs84_pair):
 
 
 def test_rotated_mirrored_wgs84_mon_stays_in_wgs84(wgs84_pair, tmp_path, monkeypatch):
-    """The aligned output keeps mon's WGS 84, north-up at its pixel area, and overlays ref."""
+    """The aligned output keeps mon's WGS 84, north-up at its pixel area, and overlays ref.
+
+    Resampled by nearest neighbour, it holds mon's own pixel values only.
+    """
     mon, ref, truth = wgs84_pair
     alignment = global_align.GlobalAlignment(matrix=truth, n_inliers=4, n_matches=4)
     monkeypatch.setattr(global_align, "detect_global_alignment", lambda *args, **kwargs: alignment)
@@ -687,7 +690,9 @@ def test_rotated_mirrored_wgs84_mon_stays_in_wgs84(wgs84_pair, tmp_path, monkeyp
     assert aligned.spatial_ref.IsSame(mon.spatial_ref)
     assert aligned.geo_transform[2] == aligned.geo_transform[4] == 0
     assert (aligned.x_res, aligned.y_res) == pytest.approx((4.5e-5, -4.5e-5))
-    # ref resampled onto the output grid matches it best there, not a quarter pixel aside
+    assert np.isin(aligned.array, np.append(mon.array, 0)).all()
+    # ref resampled onto the output grid matches it best there, not a quarter pixel aside:
+    # on average, nearest neighbour moving each pixel by up to half a pixel
     valid = cv2.erode((aligned.array > 0).astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
 
     def error(dx, dy):
@@ -703,7 +708,7 @@ def test_rotated_mirrored_wgs84_mon_stays_in_wgs84(wgs84_pair, tmp_path, monkeyp
             height=aligned.y_size,
             resampleAlg="cubic",
         ).ReadAsArray()
-        return np.median(np.abs(aligned.array.astype(float) - on_grid)[valid])
+        return np.mean(np.abs(aligned.array.astype(float) - on_grid)[valid])
 
     aside = [error(dx, dy) for dx, dy in [(0.25, 0), (-0.25, 0), (0, 0.25), (0, -0.25)]]
     assert error(0, 0) < min(aside)

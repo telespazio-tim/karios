@@ -43,7 +43,8 @@ Pipeline:
        correlation, computed on the pixels all of them cover so the scores
        compare.
     9. Apply the resulting 3x3 homography to mon (and mask) via
-       cv2.warpPerspective, rendered on mon's own grid, in mon's CRS, over its
+       cv2.warpPerspective with nearest neighbour, which keeps the original
+       pixel values, rendered on mon's own grid, in mon's CRS, over its
        corrected footprint. Without a prior, rendered over mon's footprint in
        ref at a whole fraction of ref's pixel size, fine enough to keep mon's
        resolution.
@@ -1262,12 +1263,13 @@ def _write_aligned(
     )
 
     border = float(image.no_data_value) if image.no_data_value is not None else 0.0
+    # Nearest neighbour: the aligned image keeps the original pixel values
     aligned = _to_dtype(
         cv2.warpPerspective(
             arr.astype(np.float32),
             warp_m,
             out_size,
-            flags=cv2.INTER_LINEAR,
+            flags=cv2.INTER_NEAREST,
             borderValue=border,
         ),
         arr.dtype,
