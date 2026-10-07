@@ -43,10 +43,17 @@ Pipeline:
        correlation, computed on the pixels all of them cover so the scores
        compare.
     9. Apply the resulting 3x3 homography to mon (and mask) via
-       cv2.warpPerspective, rendered over mon's footprint in ref at a whole
-       fraction of ref's pixel size, fine enough to keep mon's resolution.
+       cv2.warpPerspective, rendered on mon's own grid, in mon's CRS, over its
+       corrected footprint. Without a prior, rendered over mon's footprint in
+       ref at a whole fraction of ref's pixel size, fine enough to keep mon's
+       resolution.
+
+The alignment can be saved, see AlignmentTransform, and applied to the other
+bands of mon's product without estimating it again: their own estimates would
+differ slightly, and the bands would no longer overlay.
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +65,7 @@ from osgeo import gdal, osr
 
 from karios.core.image import GdalRasterImage
 from karios.core.radiometry import to_uint8
+from karios.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -1058,8 +1066,74 @@ def _write_geotiff(
 
 
 @dataclass
+class OutputFrame:
+    """North-up grid the aligned outputs are written on, and the warp of mon onto it."""
+
+    projection: str
+    x_min: float
+    y_max: float
+    x_res: float
+    y_res: float
+    width: int
+    height: int
+    from_mon: np.ndarray  # 3x3 map from mon pixels to output pixels
+
+
+def _geo_matrix(geo_transform: tuple) -> np.ndarray:
+    """3x3 map of a GDAL geotransform, from pixel corner coordinates to the CRS."""
+    g = geo_transform
+    return np.array([[g[1], g[2], g[0]], [g[4], g[5], g[3]], [0.0, 0.0, 1.0]])
+
+
+def _frame_in_mon_crs(
+    matrix: np.ndarray, georefs: np.ndarray, mon_valid: np.ndarray, monitored: GdalRasterImage
+) -> OutputFrame:
+    """Grid over mon's corrected valid footprint on mon's own grid, in mon's CRS.
+
+    `matrix` maps mon pixels to ref pixels where they truly are, `georefs`
+    where the georeferencing puts them. A point of mon's CRS lands in ref
+    through `georefs`, then on the mon pixel imaging it through the inverse
+    of `matrix`.
+
+    A north-up mon keeps its grid: same pixel size and edges, shifted by whole
+    pixels to cover the corrected footprint, so a correction of whole pixels
+    moves the georeferencing and leaves the pixels untouched. A rotated or
+    mirrored mon gets a north-up grid from its origin, at its pixel area.
+    """
+    geo = monitored.geo_transform
+    if geo[1] > 0 and geo[2] == 0 and geo[4] == 0 and geo[5] < 0:
+        x_res, y_res = geo[1], geo[5]
+    else:
+        side = float(np.sqrt(abs(geo[1] * geo[5] - geo[2] * geo[4])))
+        x_res, y_res = side, -side
+    # mon pixels → pixels of the north-up grid from mon's origin, in OpenCV's
+    # center coordinates: geotransforms map corners, half a pixel out
+    grid = (geo[0], x_res, 0.0, geo[3], 0.0, y_res)
+    to_grid = np.linalg.inv(_geo_matrix(grid)) @ _geo_matrix(geo)
+    half = np.array([[1.0, 0.0, 0.5], [0.0, 1.0, 0.5], [0.0, 0.0, 1.0]])
+    corrected = np.linalg.inv(half) @ to_grid @ half @ np.linalg.inv(georefs) @ matrix
+
+    edges = _footprint_points(corrected, _valid_outline(mon_valid) - 0.5) + 0.5
+    if not np.isfinite(edges).all():
+        raise RuntimeError("The aligned monitored image footprint is not finite")
+    x0, y0 = np.floor(edges.min(axis=0)).astype(int)
+    x1, y1 = np.ceil(edges.max(axis=0)).astype(int)
+    offset = np.array([[1.0, 0.0, -x0], [0.0, 1.0, -y0], [0.0, 0.0, 1.0]])
+    return OutputFrame(
+        monitored.projection,
+        geo[0] + x0 * x_res,
+        geo[3] + y0 * y_res,
+        x_res,
+        y_res,
+        int(x1 - x0),
+        int(y1 - y0),
+        offset @ corrected,
+    )
+
+
+@dataclass
 class OutputGrid:
-    """Pixel grid the aligned outputs are written on, nested in ref's grid.
+    """Pixel grid nested in ref's grid, for the aligned outputs without georeferencing prior.
 
     `factor` output pixels span one ref pixel on each axis; the grid covers
     ref pixels [x0, x0 + width / factor) x [y0, y0 + height / factor).
@@ -1131,6 +1205,23 @@ def _output_grid(
     return OutputGrid(factor, x0, y0, (x1 - x0) * factor, (y1 - y0) * factor)
 
 
+def _frame_in_ref(
+    matrix: np.ndarray, mon_valid: np.ndarray, reference: GdalRasterImage
+) -> OutputFrame:
+    """The grid of _output_grid(), georeferenced in ref's CRS."""
+    grid = _output_grid(matrix, mon_valid, (reference.y_size, reference.x_size))
+    return OutputFrame(
+        reference.projection,
+        reference.x_min + grid.x0 * reference.x_res,
+        reference.y_max + grid.y0 * reference.y_res,
+        reference.x_res / grid.factor,
+        reference.y_res / grid.factor,
+        grid.width,
+        grid.height,
+        grid.from_ref @ matrix,
+    )
+
+
 def _to_dtype(values: np.ndarray, dtype) -> np.ndarray:
     """Interpolated `values` back to the image's `dtype`, rounded and clipped for integers.
 
@@ -1142,22 +1233,273 @@ def _to_dtype(values: np.ndarray, dtype) -> np.ndarray:
     return values.astype(dtype)
 
 
+def _valid_data(image: GdalRasterImage, arr: np.ndarray) -> np.ndarray:
+    """Pixels of `image` holding data: non-zero, finite and not its no-data value."""
+    valid = _valid_pixels(arr)
+    if image.no_data_value is not None:
+        valid &= arr != image.no_data_value
+    return valid
+
+
+def _write_aligned(
+    image: GdalRasterImage,
+    arr: np.ndarray,
+    mask: Optional[GdalRasterImage],
+    frame: OutputFrame,
+    out_dir: Path,
+) -> tuple[GdalRasterImage, Optional[GdalRasterImage]]:
+    """Warp `image` (pixels `arr`) and `mask` onto `frame`, written as <stem>_global_aligned."""
+    out_size = (frame.width, frame.height)
+    warp_m = frame.from_mon
+    logger.info(
+        "Output grid: %dx%d px of %.6g x %.6g from (%.6f, %.6f)",
+        frame.width,
+        frame.height,
+        frame.x_res,
+        abs(frame.y_res),
+        frame.x_min,
+        frame.y_max,
+    )
+
+    border = float(image.no_data_value) if image.no_data_value is not None else 0.0
+    aligned = _to_dtype(
+        cv2.warpPerspective(
+            arr.astype(np.float32),
+            warp_m,
+            out_size,
+            flags=cv2.INTER_LINEAR,
+            borderValue=border,
+        ),
+        arr.dtype,
+    )
+
+    stem = Path(image.file_name).stem
+    suffix = Path(image.file_name).suffix or ".tif"
+    image_out = out_dir / f"{stem}_global_aligned{suffix}"
+
+    _write_geotiff(
+        image_out,
+        aligned,
+        frame.x_min,
+        frame.y_max,
+        frame.x_res,
+        frame.y_res,
+        frame.projection,
+        image.no_data_value,
+    )
+    aligned_mask = None
+    if mask is not None:
+        warped_mask = cv2.warpPerspective(
+            mask.array.astype(np.uint8),
+            warp_m,
+            out_size,
+            flags=cv2.INTER_NEAREST,
+            borderValue=0,
+        )
+        mask_stem = Path(mask.file_name).stem
+        mask_suffix = Path(mask.file_name).suffix or ".tif"
+        mask_out = out_dir / f"{mask_stem}_global_aligned{mask_suffix}"
+        _write_geotiff(
+            mask_out,
+            warped_mask,
+            frame.x_min,
+            frame.y_max,
+            frame.x_res,
+            frame.y_res,
+            frame.projection,
+            None,
+            gdal_dtype=gdal.GDT_Byte,
+        )
+        aligned_mask = GdalRasterImage(str(mask_out))
+
+    return GdalRasterImage(str(image_out)), aligned_mask
+
+
+@dataclass(frozen=True)
+class RasterGrid:
+    """Size and georeferencing of a raster, all an alignment needs of an image it does not read."""
+
+    geo_transform: tuple
+    x_size: int
+    y_size: int
+    projection: str  # WKT, empty without CRS
+    file_name: str = ""
+
+    @classmethod
+    def of(cls, image: GdalRasterImage) -> "RasterGrid":
+        """The grid of `image`."""
+        return cls(
+            tuple(image.geo_transform),
+            image.x_size,
+            image.y_size,
+            image.projection or "",
+            image.file_name,
+        )
+
+    @property
+    def x_res(self) -> float:
+        return self.geo_transform[1]
+
+    @property
+    def y_res(self) -> float:
+        return self.geo_transform[5]
+
+    @property
+    def x_min(self) -> float:
+        return self.geo_transform[0]
+
+    @property
+    def y_max(self) -> float:
+        return self.geo_transform[3]
+
+    @property
+    def spatial_ref(self) -> Optional[osr.SpatialReference]:
+        """The CRS, with x first like a GDAL dataset's; None without CRS."""
+        if not self.projection:
+            return None
+        srs = osr.SpatialReference(wkt=self.projection)
+        srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        return srs
+
+    def to_dict(self) -> dict:
+        return {
+            "file_name": self.file_name,
+            "x_size": self.x_size,
+            "y_size": self.y_size,
+            "geo_transform": list(self.geo_transform),
+            "projection": self.projection,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RasterGrid":
+        return cls(
+            tuple(float(v) for v in data["geo_transform"]),
+            int(data["x_size"]),
+            int(data["y_size"]),
+            data["projection"],
+            data.get("file_name", ""),
+        )
+
+
+def _same_grid(a, b) -> bool:
+    """Whether rasters or RasterGrids `a` and `b` have the same pixels in the same CRS."""
+    if (a.x_size, a.y_size) != (b.x_size, b.y_size):
+        return False
+    if tuple(a.geo_transform) != tuple(b.geo_transform):
+        return False
+    if not a.projection or not b.projection:
+        return not a.projection and not b.projection
+    return bool(a.spatial_ref.IsSame(b.spatial_ref))
+
+
+TRANSFORM_FORMAT = "karios-alignment"
+TRANSFORM_VERSION = 1
+
+
+def _matrix(values) -> np.ndarray:
+    matrix = np.array(values, dtype=np.float64)
+    if matrix.shape != (3, 3) or not np.isfinite(matrix).all():
+        raise ValueError(f"Expected a finite 3x3 matrix, got {values!r}")
+    return matrix
+
+
+@dataclass
+class AlignmentTransform:
+    """The alignment of a monitored image, saved to apply to the other bands of its product.
+
+    The bands of one product share its georeferencing error, so the
+    correction estimated on one band holds for them all. Estimated again on
+    each band, it differs by a fraction of a pixel from one to the next and the
+    aligned bands no longer overlay. See apply_alignment_transform().
+
+    Matrices map OpenCV pixel centers, like GlobalAlignment's.
+    """
+
+    monitored: RasterGrid  # grid of the image the alignment was estimated on
+    reference: RasterGrid
+    matrix: np.ndarray  # 3x3, monitored pixels -> where ref sees them, in ref pixels
+    prior: Optional[np.ndarray]  # 3x3, monitored pixels -> ref pixels by the georeferencing
+    output: OutputFrame  # grid of the aligned monitored image
+
+    def save(self, path: Path) -> None:
+        """Write the transform to `path` as JSON, floats kept to the last bit."""
+        output = self.output
+        data = {
+            "format": TRANSFORM_FORMAT,
+            "version": TRANSFORM_VERSION,
+            "karios_version": __version__,
+            "monitored": self.monitored.to_dict(),
+            "reference": self.reference.to_dict(),
+            "homography": self.matrix.tolist(),
+            "georeferencing_prior": None if self.prior is None else self.prior.tolist(),
+            "output": {
+                "x_size": output.width,
+                "y_size": output.height,
+                "geo_transform": [output.x_min, output.x_res, 0.0, output.y_max, 0.0, output.y_res],
+                "projection": output.projection,
+                "from_monitored": output.from_mon.tolist(),
+            },
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    @classmethod
+    def load(cls, path: Path) -> "AlignmentTransform":
+        """Read a transform written by save(). Raises ValueError when it is not one."""
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or data.get("format") != TRANSFORM_FORMAT:
+            raise ValueError(f"{path} is not an alignment transform written by karios align")
+        if data.get("version") != TRANSFORM_VERSION:
+            raise ValueError(
+                f"{path} is an alignment transform of version {data.get('version')}, "
+                f"this karios reads version {TRANSFORM_VERSION}"
+            )
+        try:
+            out = data["output"]
+            geo = [float(v) for v in out["geo_transform"]]
+            prior = data["georeferencing_prior"]
+            return cls(
+                monitored=RasterGrid.from_dict(data["monitored"]),
+                reference=RasterGrid.from_dict(data["reference"]),
+                matrix=_matrix(data["homography"]),
+                prior=None if prior is None else _matrix(prior),
+                output=OutputFrame(
+                    out["projection"],
+                    geo[0],
+                    geo[3],
+                    geo[1],
+                    geo[5],
+                    int(out["x_size"]),
+                    int(out["y_size"]),
+                    _matrix(out["from_monitored"]),
+                ),
+            )
+        except (KeyError, TypeError, IndexError) as e:
+            raise ValueError(f"{path} is an incomplete alignment transform: {e!r}") from e
+
+
 def apply_global_alignment(
     monitored: GdalRasterImage,
     reference: GdalRasterImage,
     mask: Optional[GdalRasterImage],
     out_dir: Path,
     sift_nfeatures: int = SIFT_NFEATURES,
+    transform_path: Optional[Path] = None,
 ) -> tuple[GdalRasterImage, Optional[GdalRasterImage], GlobalAlignment]:
-    """Detect the homography, apply to monitored (and mask), render over mon's footprint in ref.
+    """Detect the homography, apply to monitored (and mask), render on mon's grid in mon's CRS.
 
-    The outputs are rendered on a grid nested in ref's, covering mon's valid
-    footprint at a whole fraction of ref's pixel size that keeps mon's
-    resolution, see _output_grid(), and georeferenced in ref's CRS.
+    The outputs keep mon's CRS and grid, over its corrected valid footprint,
+    see _frame_in_mon_crs(). Without a georeferencing prior, an image without
+    CRS or a failed reprojection, they are rendered on a grid nested in ref's
+    instead, covering mon's valid footprint at a whole fraction of ref's pixel
+    size that keeps mon's resolution, see _output_grid(), and georeferenced in
+    ref's CRS.
 
     Returns (aligned_mon, aligned_mask, alignment_info), the rasters written
     to `out_dir`. `sift_nfeatures` limits the SIFT keypoints kept per image,
-    see detect_global_alignment().
+    see detect_global_alignment(). With `transform_path`, the alignment is also
+    saved there, to apply to other bands, see AlignmentTransform.
     """
     mon_arr = monitored.array
     # Read window by window: with a prior only the search window is ever read
@@ -1177,80 +1519,60 @@ def apply_global_alignment(
     )
 
     # The homography maps mon pixel coords → ref pixel coords. The outputs are
-    # rendered on a grid over mon's footprint nested in ref's, fine enough to
-    # keep mon's resolution, so they overlay ref without losing detail.
-    mon_valid = _valid_pixels(mon_arr)
-    if monitored.no_data_value is not None:
-        mon_valid &= mon_arr != monitored.no_data_value
-    grid = _output_grid(alignment.matrix, mon_valid, ref_arr.shape)
-    out_size = (grid.width, grid.height)
-    warp_m = grid.from_ref @ alignment.matrix
-    x_min = reference.x_min + grid.x0 * reference.x_res
-    y_max = reference.y_max + grid.y0 * reference.y_res
-    x_res = reference.x_res / grid.factor
-    y_res = reference.y_res / grid.factor
-    logger.info(
-        "Output grid: %dx%d px of %.3f x %.3f, %d per ref pixel, over ref pixels x=%d-%d y=%d-%d",
-        grid.width,
-        grid.height,
-        x_res,
-        abs(y_res),
-        grid.factor,
-        grid.x0,
-        grid.x0 + grid.width // grid.factor,
-        grid.y0,
-        grid.y0 + grid.height // grid.factor,
-    )
+    # rendered on mon's own grid in its CRS, or, without georeferencing to
+    # bring ref pixels back to mon's CRS, on a grid nested in ref's.
+    mon_valid = _valid_data(monitored, mon_arr)
+    if prior is not None:
+        frame = _frame_in_mon_crs(alignment.matrix, prior, mon_valid, monitored)
+    else:
+        logger.warning("Output georeferenced in ref's CRS: no georeferencing to keep mon's")
+        frame = _frame_in_ref(alignment.matrix, mon_valid, reference)
 
-    border_mon = float(monitored.no_data_value) if monitored.no_data_value is not None else 0.0
-    aligned_mon = _to_dtype(
-        cv2.warpPerspective(
-            mon_arr.astype(np.float32),
-            warp_m,
-            out_size,
-            flags=cv2.INTER_LINEAR,
-            borderValue=border_mon,
-        ),
-        mon_arr.dtype,
-    )
-
-    mon_stem = Path(monitored.file_name).stem
-    mon_suffix = Path(monitored.file_name).suffix or ".tif"
-    mon_out = out_dir / f"{mon_stem}_global_aligned{mon_suffix}"
-
-    _write_geotiff(
-        mon_out,
-        aligned_mon,
-        x_min,
-        y_max,
-        x_res,
-        y_res,
-        reference.projection,
-        monitored.no_data_value,
-    )
-    aligned_mask = None
-    if mask is not None:
-        warped_mask = cv2.warpPerspective(
-            mask.array.astype(np.uint8),
-            warp_m,
-            out_size,
-            flags=cv2.INTER_NEAREST,
-            borderValue=0,
+    aligned_mon, aligned_mask = _write_aligned(monitored, mon_arr, mask, frame, out_dir)
+    if transform_path is not None:
+        transform = AlignmentTransform(
+            RasterGrid.of(monitored), RasterGrid.of(reference), alignment.matrix, prior, frame
         )
-        mask_stem = Path(mask.file_name).stem
-        mask_suffix = Path(mask.file_name).suffix or ".tif"
-        mask_out = out_dir / f"{mask_stem}_global_aligned{mask_suffix}"
-        _write_geotiff(
-            mask_out,
-            warped_mask,
-            x_min,
-            y_max,
-            x_res,
-            y_res,
-            reference.projection,
-            None,
-            gdal_dtype=gdal.GDT_Byte,
-        )
-        aligned_mask = GdalRasterImage(str(mask_out))
+        transform.save(transform_path)
+        logger.info("Alignment transform saved to %s", transform_path)
+    return aligned_mon, aligned_mask, alignment
 
-    return GdalRasterImage(str(mon_out)), aligned_mask, alignment
+
+def apply_alignment_transform(
+    image: GdalRasterImage, transform: AlignmentTransform, out_dir: Path
+) -> GdalRasterImage:
+    """Warp another band of the monitored image's product by its saved alignment.
+
+    A band on the monitored image's grid comes out on the aligned monitored
+    image's grid, pixel for pixel, whatever data it holds. A band on another
+    grid, a 20 m band of a 10 m one say, is placed by the georeferencing on
+    the monitored image, corrected like it, and written on its own grid in its
+    own CRS over its corrected footprint, as `karios align` writes it. That
+    needs the monitored image and the band georeferenced. Returns the image
+    written to `out_dir`, <stem>_global_aligned<ext>.
+
+    Raises ValueError when the band cannot be placed on the monitored image.
+    """
+    arr = image.array
+    if _same_grid(image, transform.monitored):
+        logger.info("%s on the monitored image's grid: same output grid", image.file_name)
+        frame = transform.output
+    elif transform.prior is None:
+        raise ValueError(
+            f"{image.file_name} is not on the monitored image's grid: aligned without "
+            "georeferencing, the alignment only applies to images on that grid"
+        )
+    else:
+        # The band's pixels in the monitored image's, by their common georeferencing
+        to_mon = _prior_from_georefs(image, transform.monitored)
+        if to_mon is None:
+            raise ValueError(
+                f"{image.file_name} is neither on the monitored image's grid nor georeferenced "
+                "in a CRS reprojectable to its own"
+            )
+        logger.info("%s on its own grid, placed on the monitored image's", image.file_name)
+        frame = _frame_in_mon_crs(
+            transform.matrix @ to_mon, transform.prior @ to_mon, _valid_data(image, arr), image
+        )
+    aligned, _ = _write_aligned(image, arr, None, frame, out_dir)
+    return aligned

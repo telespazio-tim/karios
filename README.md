@@ -787,7 +787,7 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 ### Global Alignment (`karios align`)
 
-`karios align` estimates and applies a global 2D homography to bring the monitored image into the reference's frame, without losing its resolution. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
+`karios align` estimates and applies a global 2D homography to align the monitored image on the reference, keeping its CRS, grid and resolution. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
 
 ```bash
 karios align monitored.tif reference.tif --out ./aligned
@@ -795,7 +795,7 @@ karios align monitored.tif reference.tif --out ./aligned
 karios align monitored.tif reference.tif --out ./aligned --sift-nfeatures 20000
 # karios process needs both images on one grid: resample the reference onto the
 # aligned image's, with the gdalwarp command `karios align` prints, e.g.
-gdalwarp -r cubic -te 637530 4805820 659670 4829340 -ts 5904 6272 reference.tif ./aligned/reference_on_grid.tif
+gdalwarp -r cubic -t_srs EPSG:32631 -te 637530.0 4805820.0 659670.0 4829340.0 -tr 3.75 3.75 reference.tif ./aligned/reference_on_grid.tif
 karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_on_grid.tif
 ```
 
@@ -809,9 +809,9 @@ The pipeline:
 6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
 7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant): a 25-iteration probe from every starting point (the RANSAC fit, the prior and the translation search), then up to 200 iterations from the probe that correlates best only.
 8. **Select**: with a prior, estimates too far from it to be a georeferencing correction are rejected (a reflection, a scale change beyond ×1.5, an anisotropy beyond 1.3, a rotation beyond 30°, or a move beyond the search window), and the gradient correlation of the others, computed on the pixels they all cover, picks the result. Without a prior, the RANSAC fit refined by ECC is kept.
-9. **Warp** the monitored image with `cv2.warpPerspective` onto a grid covering its valid footprint in the reference, nested in the reference's grid: its pixel is the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels). The output is georeferenced in the reference's CRS, so it overlays the reference directly in QGIS.
+9. **Warp** the monitored image with `cv2.warpPerspective` onto its own grid, in its own CRS: same pixel size and pixel edges, extended or cropped by whole pixels to its corrected valid footprint, so a correction of whole pixels moves the georeferencing and leaves the pixels untouched. A rotated or mirrored grid becomes north-up in the same CRS, at the same pixel area. The output overlays the reference in QGIS, which reprojects on the fly. Without georeferencing on both images there is no CRS to bring the correction back to: the output then covers the monitored footprint in the reference on a grid nested in the reference's, its pixel the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels), georeferenced in the reference's CRS.
 
-The command writes `<mon_stem>_global_aligned.tiff`, the monitored image warped into the reference frame.
+The command writes `<mon_stem>_global_aligned.tiff`, the monitored image aligned on the reference, and `<mon_stem>_global_alignment.json`, the alignment itself.
 
 The final 3×3 homography, an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio), the output grid and the `gdalwarp` command resampling the reference onto it are printed to stdout.
 
@@ -820,6 +820,20 @@ The final 3×3 homography, an approximate decomposition (rotation, scale-x/y, tr
 - Cross-sensor pairs with significant rotation, scale, or perspective differences
 - Inputs with inaccurate geotransforms (one or both products mis-registered)
 - Removing systematic geometric error before fine KLT matching
+
+#### Applying one alignment to the other bands of a product
+
+The homography estimated on each band of one product differs slightly from band to band, so bands aligned separately no longer overlay. Align one band and apply its alignment to the others with `--apply-to`, repeated for each band, or later from the saved alignment with `--load-transform`, which takes no reference image:
+
+```bash
+karios align B04.tif reference.tif --out ./aligned --apply-to B02.tif --apply-to B03.tif
+# Later, without estimating it again
+karios align B08.tif --load-transform ./aligned/B04_global_alignment.json --out ./aligned
+```
+
+Each image is written as `<stem>_global_aligned<ext>`. A band on the aligned band's grid (same size, geotransform and CRS) comes out on its output grid, pixel for pixel, so the aligned bands stack. A band on another grid, like a 20 m band of a 10 m product, is placed on the aligned band by their georeferencing, corrected the same way, and keeps its own grid and CRS over its corrected footprint. Without georeferencing on the aligned band or the reference, the alignment only applies to images on the aligned band's grid.
+
+The JSON file holds the 3×3 homography from the monitored pixels to the reference pixels and the one the georeferencing implies (OpenCV pixel-center coordinates), the size, geotransform and CRS of both images, and the output grid.
 
 ### Resume Functionality
 
