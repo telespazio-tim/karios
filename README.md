@@ -344,6 +344,7 @@ match_result, accuracy, reports = api.process(
 print(f"CE90: {accuracy.ce90:.3f}")
 print(f"Mean shift X: {accuracy.mean_x:.3f} pixels")
 print(f"Generated reports: {reports.overview_plot}")
+print(f"Matching confidence: {accuracy.quality.verdict} ({accuracy.quality.confidence:.2f})")
 ```
 
 ### Batch Processing Example
@@ -491,6 +492,7 @@ KARIOS generates several types of outputs:
 
 - **CSV file**: Key points with dx/dy deviations and confidence scores (see [CSV Output section](#csv-output))
 - **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
+- **summary.json**: Statistics (mean, standard deviation, CE90, CE95, valid pixels) and the matching confidence, machine readable (see [Matching Confidence section](#matching-confidence))
 
 #### Visualizations
 
@@ -513,7 +515,65 @@ KARIOS generates several types of outputs:
 
 - Copy of the processing configuration used
 
+### Matching Confidence
+
+KLT returns key points even between two unrelated images, and the statistics computed on them then look like a measurement. `karios process` therefore rates its confidence that the key points measure a real misregistration, from three indicators computed on the key points above the confidence threshold:
+
+| Indicator | Meaning | Related images | Unrelated images |
+|---|---|---|---|
+| Median ZNCC | Correlation of the key points' 57×57 patches in both images | 0.85-0.88 | 0.03-0.06 |
+| Coherent key points | Share of key points whose shift is within 1 px of the median of their 8 nearest neighbours: a misregistration is smooth, false matches are random | 0.97 | 0.05-0.06 |
+| Tracking ratio | Share of the corners detected in the reference that pass KLT's forward-backward check | 0.36-0.39 | 0.033-0.035 |
+
+(Measured on 2000 and 3000 px crops of the Landsat-9 / Sentinel-2 test pair, against the same monitored crop on another area, offset, or flipped.)
+
+Each indicator is mapped linearly to [0, 1] between its unrelated level and its related one (0.1 to 0.5 for the ZNCC, 0.2 to 0.7 for the coherence, 0.05 to 0.2 for the tracking ratio), and the confidence is their mean. The ZNCC is not available when a large shift was applied, nor the tracking ratio with `--resume`: the confidence then comes from the others. The verdict is:
+
+- **reliable**: confidence of 0.7 or more
+- **doubtful**: confidence between 0.3 and 0.7
+- **unreliable**: confidence below 0.3, or fewer than 30 key points above the confidence threshold
+
+An unreliable result means the images are unrelated, or misregistered beyond the matching range: the statistics are then meaningless. The verdict, the indicators and the reasons for a confidence below 1 are printed in the console summary, shown on the summary page of the HTML report, and written to `summary.json`. The exit status is not affected.
+
+A scene only partly related to the reference, half of it say, can still be rated reliable: key points rarely survive on the unrelated part, so the statistics come from the related one.
+
 ## Output File Formats
+
+### summary.json
+
+Written next to `correl_res.txt`, with the statistics of the console summary (mean and standard deviation in pixels, CE90 and CE95 in the image CRS unit when it has a pixel size, in pixels otherwise) and the [matching confidence](#matching-confidence):
+
+```json
+{
+  "monitored_image": "mon.tif",
+  "reference_image": "ref.tif",
+  "matched_points": 7813,
+  "valid_pixels": 8963138,
+  "total_pixels": 9000000,
+  "confidence_threshold": 0.4,
+  "statistics": {
+    "mean_x": -0.0587,
+    "mean_y": 0.1195,
+    "std_x": 0.3005,
+    "std_y": 0.3976,
+    "ce90": 5.7159,
+    "ce95": 8.5424
+  },
+  "quality": {
+    "confidence": 1.0,
+    "verdict": "reliable",
+    "detected_points": 20000,
+    "tracked_points": 7813,
+    "confident_points": 5329,
+    "tracking_ratio": 0.39065,
+    "median_zncc": 0.851,
+    "coherent_fraction": 0.973,
+    "reasons": []
+  }
+}
+```
+
+Undefined values, the statistics without any key point above the confidence threshold or an indicator that is not available, are `null`.
 
 ### CSV Output
 
@@ -753,6 +813,14 @@ KariosException: Mask geo info not compatible with monitored image
 
 **Solution**: Ensure mask has the same geometry as monitored image
 
+#### Unreliable Matching Confidence
+
+```
+Matching confidence: UNRELIABLE (0.00)
+```
+
+The key points do not measure a misregistration (see [Matching Confidence](#matching-confidence)). **Solution**: check that both images cover the same scene; if they do, the misregistration may exceed the matching range: try `--enable-large-shift-detection`, a larger `matching_winsize` or `maxLevel`, or align the images first with `karios align`.
+
 ### Performance Optimization
 
 #### For Large Images
@@ -809,7 +877,7 @@ The pipeline:
 6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
 7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant): a 25-iteration probe from every starting point (the RANSAC fit, the prior and the translation search), then up to 200 iterations from the probe that correlates best only.
 8. **Select**: with a prior, estimates too far from it to be a georeferencing correction are rejected (a reflection, a scale change beyond ×1.5, an anisotropy beyond 1.3, a rotation beyond 30°, or a move beyond the search window), and the gradient correlation of the others, computed on the pixels they all cover, picks the result. Without a prior, the RANSAC fit refined by ECC is kept.
-9. **Warp** the monitored image with `cv2.warpPerspective` onto its own grid, in its own CRS: same pixel size and pixel edges, extended or cropped by whole pixels to its corrected valid footprint, so a correction of whole pixels moves the georeferencing and leaves the pixels untouched. A rotated or mirrored grid becomes north-up in the same CRS, at the same pixel area. The output overlays the reference in QGIS, which reprojects on the fly. Without georeferencing on both images there is no CRS to bring the correction back to: the output then covers the monitored footprint in the reference on a grid nested in the reference's, its pixel the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels), georeferenced in the reference's CRS.
+9. **Warp** the monitored image with `cv2.warpPerspective` by nearest neighbour, which keeps its original pixel values, onto its own grid, in its own CRS: same pixel size and pixel edges, extended or cropped by whole pixels to its corrected valid footprint, so a correction of whole pixels moves the georeferencing and leaves the pixels untouched. A rotated or mirrored grid becomes north-up in the same CRS, at the same pixel area. The output overlays the reference in QGIS, which reprojects on the fly. Without georeferencing on both images there is no CRS to bring the correction back to: the output then covers the monitored footprint in the reference on a grid nested in the reference's, its pixel the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels), georeferenced in the reference's CRS.
 
 The command writes `<mon_stem>_global_aligned.tiff`, the monitored image aligned on the reference, and `<mon_stem>_global_alignment.json`, the alignment itself.
 

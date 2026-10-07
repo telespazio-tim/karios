@@ -22,6 +22,7 @@ Provides the main entry point for the KARIOS API functionality.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass
@@ -33,6 +34,12 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from karios.accuracy_analysis.accuracy_statistics import GeometricStat
+from karios.accuracy_analysis.quality_control import (
+    DOUBTFUL,
+    UNRELIABLE,
+    QualityControl,
+    assess_quality,
+)
 from karios.api.config import RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.errors import KariosException
@@ -61,6 +68,8 @@ class MatchResult:
     reference_image: GdalRasterImage
     monitored_image: GdalRasterImage
     mask: Optional[GdalRasterImage] = None
+    detected_points: Optional[int] = None
+    """Corners KLT tracked, None when the key points were reloaded from the CSV"""
 
 
 @dataclass
@@ -88,6 +97,10 @@ class AccuracyAnalysis:
     ce95: float
     valid_pixels: int
     total_pixels: int
+    quality: Optional[QualityControl] = None
+    """Confidence that the key points measure a real misregistration"""
+    summary_file: Optional[str] = None
+    """summary.json, the statistics and the confidence, machine readable"""
 
 
 @dataclass
@@ -156,6 +169,8 @@ class KariosAPI:
 
         #
         self._large_shift_applied = False
+        # Corners KLT detected for the key points, None when reloaded from the CSV
+        self._detected_points: Optional[int] = None
 
         # Prepare output dir
         self._check_output_dir()
@@ -271,6 +286,7 @@ class KariosAPI:
             reference_image=reference_image,
             monitored_image=monitored_image,
             mask=mask,
+            detected_points=self._detected_points,
         )
 
     def analyze_accuracy(self, match_result: MatchResult) -> AccuracyAnalysis:
@@ -329,17 +345,65 @@ class KariosAPI:
         ce90 = stats.compute_percentile(0.9, img_res)
         ce95 = stats.compute_percentile(0.95, img_res)
 
-        return AccuracyAnalysis(
+        quality = assess_quality(
+            match_result.points, acc_config.confidence_threshold, match_result.detected_points
+        )
+        log = {UNRELIABLE: logger.error, DOUBTFUL: logger.warning}.get(quality.verdict, logger.info)
+        log(
+            "Matching confidence: %s (%.2f)%s",
+            quality.verdict,
+            quality.confidence,
+            "".join(f"\n  - {reason}" for reason in quality.reasons),
+        )
+
+        # Without any confident point, the statistics are left undefined
+        nan = float("nan")
+        accuracy = AccuracyAnalysis(
             statistics=stats,
-            mean_x=stats.mean_x,
-            mean_y=stats.mean_y,
-            std_x=stats.std_x,
-            std_y=stats.std_y,
+            mean_x=stats.mean_x if stats.valid else nan,
+            mean_y=stats.mean_y if stats.valid else nan,
+            std_x=stats.std_x if stats.valid else nan,
+            std_y=stats.std_y if stats.valid else nan,
             ce90=ce90,
             ce95=ce95,
             valid_pixels=nb_valid_pixel,
             total_pixels=total_pixels,
+            quality=quality,
         )
+        accuracy.summary_file = str(
+            Path(self._runtime_configuration.output_directory) / "summary.json"
+        )
+        self._write_summary(match_result, accuracy, acc_config.confidence_threshold)
+        return accuracy
+
+    def _write_summary(
+        self, match_result: MatchResult, accuracy: AccuracyAnalysis, confidence_threshold: float
+    ) -> None:
+        """Write the statistics and the matching confidence to accuracy.summary_file as JSON."""
+
+        def number(value):
+            value = float(value)
+            return value if math.isfinite(value) else None
+
+        summary = {
+            "monitored_image": match_result.monitored_image.file_name,
+            "reference_image": match_result.reference_image.file_name,
+            "matched_points": len(match_result.points),
+            "valid_pixels": int(accuracy.valid_pixels),
+            "total_pixels": int(accuracy.total_pixels),
+            "confidence_threshold": confidence_threshold,
+            "statistics": {
+                "mean_x": number(accuracy.mean_x),
+                "mean_y": number(accuracy.mean_y),
+                "std_x": number(accuracy.std_x),
+                "std_y": number(accuracy.std_y),
+                "ce90": number(accuracy.ce90),
+                "ce95": number(accuracy.ce95),
+            },
+            "quality": accuracy.quality.to_dict(),
+        }
+        with open(accuracy.summary_file, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
 
     def generate_reports(
         self,
@@ -863,6 +927,7 @@ class KariosAPI:
 
         filename = f"KLT_matcher_{get_filename(monitored_image.filepath)}_{get_filename(reference_image.filepath)}"
         csv_file = Path(self._runtime_configuration.output_directory) / f"{filename}.csv"
+        self._detected_points = None
 
         if not resume:
             # Run matcher if not resuming
@@ -870,10 +935,12 @@ class KariosAPI:
                 logger.warning("CSV file exists, will overwrite it: %s", str(csv_file))
                 csv_file.unlink()
             points = self._compute_matches(monitored_image, reference_image, mask, csv_file, dem)
+            self._detected_points = self._klt.detected_points
         elif not csv_file.exists():
             # Run matcher if resuming but CSV doesn't exist
             logger.warning("Cannot resume, CSV file missing, create it : %s", str(csv_file))
             points = self._compute_matches(monitored_image, reference_image, mask, csv_file, dem)
+            self._detected_points = self._klt.detected_points
         else:
             # Load from CSV if resuming and CSV exists
             logger.info("Load CSV : %s", str(csv_file))

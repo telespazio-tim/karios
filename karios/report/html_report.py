@@ -190,6 +190,22 @@ CSS_STYLES = """
             border-radius: 6px;
             border-left: 5px solid #2c3e50;
         }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #fff;
+            background: #6c757d;
+        }
+        .badge-reliable { background: #2e7d32; }
+        .badge-doubtful { background: #b26a00; }
+        .badge-unreliable { background: #c62828; }
+        .quality-reasons {
+            margin: 0;
+            padding-left: 20px;
+        }
         .footer {
             text-align: center;
             font-size: 0.9em;
@@ -382,6 +398,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <tr><th>CE95</th><td>{ce95}</td></tr>
                 </table>
             </div>
+            {quality_card_html}
         </div>
     </div>
 
@@ -637,6 +654,34 @@ class HtmlReportGenerator:
         if isinstance(value, dict):
             return ", ".join(f"{k}={v}" for k, v in value.items())
         return str(value)
+
+    def _build_quality_card_html(self) -> str:
+        """Card with the matching confidence verdict, its indicators and why it is not full."""
+        quality = getattr(self.accuracy_analysis, "quality", None)
+        if quality is None:
+            return (
+                '<div class="stats-card"><h3>Matching Confidence</h3>'
+                '<span class="badge">not assessed</span></div>'
+            )
+
+        def value(number, digits=2):
+            return "n/a" if number is None else f"{number:.{digits}f}"
+
+        detected = "n/a" if quality.detected_points is None else str(quality.detected_points)
+        reasons = "".join(f"<li>{_text(reason)}</li>" for reason in quality.reasons)
+        return f"""<div class="stats-card">
+                <h3>Matching Confidence</h3>
+                <p><span class="badge badge-{_text(quality.verdict)}">{_text(quality.verdict)}</span>
+                   confidence {quality.confidence:.2f}</p>
+                <table>
+                    <tr><th>Median ZNCC</th><td>{value(quality.median_zncc)}</td></tr>
+                    <tr><th>Coherent key points</th><td>{value(quality.coherent_fraction)}</td></tr>
+                    <tr><th>Tracking ratio</th><td>{value(quality.tracking_ratio, 3)}
+                        ({quality.tracked_points} / {detected})</td></tr>
+                    <tr><th>Confident key points</th><td>{quality.confident_points}</td></tr>
+                </table>
+                {f'<ul class="quality-reasons">{reasons}</ul>' if reasons else ""}
+            </div>"""
 
     def _build_config_rows_html(self) -> str:
         """Build the full set of <tr> rows for the collapsible Configuration table.
@@ -919,6 +964,7 @@ class HtmlReportGenerator:
             std_y=f"{self.accuracy_analysis.std_y:.3f}",
             ce90=f"{self.accuracy_analysis.ce90:.3f}",
             ce95=f"{self.accuracy_analysis.ce95:.3f}",
+            quality_card_html=self._build_quality_card_html(),
             overview_plot=Path(self.report_paths.overview_plot).name,
             dx_plot=Path(self.report_paths.dx_plot).name,
             dy_plot=Path(self.report_paths.dy_plot).name,

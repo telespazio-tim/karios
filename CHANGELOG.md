@@ -40,9 +40,24 @@
   a reference. A band on the aligned band's grid comes out on the same output grid, pixel for
   pixel; a band on another grid, like a 20 m band of a 10 m product, is placed on the aligned
   band by their georeferencing and keeps its own grid and CRS.
+- **Matching confidence in `karios process`**: KLT returns key points even between unrelated
+  images, and the statistics computed on them looked like a measurement (a 60 px CE90 on two
+  areas of a Sentinel-2 tile). The run now rates its confidence from the median ZNCC of the
+  confident key points, the share moving like their neighbours and the share of detected corners
+  KLT keeps, which separate related from unrelated pairs by an order of magnitude (0.85 / 0.97 /
+  0.39 against 0.04 / 0.06 / 0.033 on the test pair), and gives a verdict: reliable, doubtful
+  or unreliable. It is printed in the console summary, shown on the HTML report's summary page,
+  and written with the statistics to a new `summary.json`; the exit status is unchanged. Without
+  any key point above the confidence threshold, the statistics are now undefined instead of
+  failing the run on an empty CE90 computation.
 
 ### Fix
 
+- **`karios align` writes the original pixel values**: the aligned image was resampled by
+  bilinear interpolation, which blends neighbouring pixels into values the sensor never measured.
+  It is now resampled by nearest neighbour. The images warped for the estimation keep bilinear
+  interpolation: nearest neighbour there rounds the starting estimate to whole pixels, and ECC
+  refining a start 0.7 px off landed 0.4 px from the truth instead of 0.03 px.
 - **`karios align` recovers large georeferencing errors between images of different
   resolutions**: SIFT ran on both whole images at native resolution, so a monitored image 7x
   finer than the reference had keypoints of details the reference cannot show, and its small

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from karios.accuracy_analysis.quality_control import QualityControl
 from karios.report import html_report
 from karios.report.html_report import (
     _BANNER_ASSET,
@@ -90,6 +91,9 @@ def generator_fixture(tmp_path):
     accuracy_analysis.std_y = 0.02
     accuracy_analysis.ce90 = 0.5
     accuracy_analysis.ce95 = 0.6
+    accuracy_analysis.quality = QualityControl(
+        0.04, "unreliable", 20000, 700, 250, 0.035, 0.03, 0.05, ["median ZNCC 0.03 <low>"]
+    )
 
     report_paths = MagicMock()
     report_paths.overview_plot = "overview.png"
@@ -265,3 +269,22 @@ def test_chip_links_follow_directories_of_same_named_images(generator, tmp_path)
     chips = (tmp_path / "chips.html").read_text(encoding="utf-8")
     assert 'href="chips/B04.jp2_monitored/monitored_chips.vrt"' in chips
     assert 'href="chips/B04.jp2_reference/reference_chips.vrt"' in chips
+
+
+def test_summary_shows_the_matching_confidence(generator, tmp_path):
+    """The verdict badge, its indicators and its escaped reasons are on the summary page."""
+    generator.generate()
+
+    page = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert '<span class="badge badge-unreliable">unreliable</span>' in page
+    assert "confidence 0.04" in page
+    assert "<li>median ZNCC 0.03 &lt;low&gt;</li>" in page
+    assert "(700 / 20000)" in page
+
+
+def test_summary_without_assessment_says_so(generator, tmp_path):
+    generator.accuracy_analysis.quality = None
+
+    generator.generate()
+
+    assert "not assessed" in (tmp_path / "report.html").read_text(encoding="utf-8")
