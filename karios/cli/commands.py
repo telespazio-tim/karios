@@ -33,6 +33,7 @@ import numpy as np
 import rich_click as click
 from osgeo import gdal
 
+from karios.accuracy_analysis.quality_control import percent
 from karios.api import KariosAPI, RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.image import GdalRasterImage
@@ -660,15 +661,22 @@ def _print_summary(match_result, accuracy, reports) -> None:
 
     quality = accuracy.quality
     if quality is not None:
+        zncc = "n/a" if quality.median_zncc is None else f"{quality.median_zncc:.2f}"
+        detected = "n/a" if quality.detected_points is None else quality.detected_points
 
-        def value(number, digits=2):
-            return "n/a" if number is None else f"{number:.{digits}f}"
-
-        click.echo(f"\nMatching confidence: {quality.verdict.upper()} ({quality.confidence:.2f})")
-        click.echo(f"  Median ZNCC: {value(quality.median_zncc)}")
-        click.echo(f"  Coherent key points: {value(quality.coherent_fraction)}")
-        click.echo(f"  Tracking ratio: {value(quality.tracking_ratio, 3)}")
-        click.echo(f"  Confident key points: {quality.confident_points}")
+        click.echo(
+            f"\nMatching confidence: {quality.verdict.upper()} ({percent(quality.confidence)})"
+        )
+        click.echo(f"  Median ZNCC: {zncc}")
+        click.echo(
+            f"  Coherent key points: {percent(quality.coherent_fraction)}"
+            " (within 1 px of neighbours)"
+        )
+        click.echo(
+            f"  Tracking ratio: {percent(quality.tracking_ratio, 1)}"
+            f" ({quality.tracked_points} / {detected} corners)"
+        )
+        click.echo(f"  Confident key points: {quality.confident_points} points")
         for reason in quality.reasons:
             click.echo(f"  - {reason}")
 

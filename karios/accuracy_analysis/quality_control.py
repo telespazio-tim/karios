@@ -94,6 +94,15 @@ class QualityControl:
         }
 
 
+def percent(value: Optional[float], digits: int = 0) -> str:
+    """`value`, a share in [0, 1], as a percentage, or n/a when undefined."""
+    return "n/a" if value is None else f"{100 * value:.{digits}f} %"
+
+
+def _correlation(value: float) -> str:
+    return f"{value:.2f}"
+
+
 def _ramp(value: float, ends: tuple[float, float]) -> float:
     low, high = ends
     return float(np.clip((value - low) / (high - low), 0.0, 1.0))
@@ -151,27 +160,29 @@ def assess_quality(
     coherent_fraction = _coherent_fraction(confident)
 
     indicators = [
-        ("median ZNCC", median_zncc, ZNCC_RAMP, "unrelated images give about 0"),
+        ("median ZNCC", median_zncc, ZNCC_RAMP, _correlation, "unrelated images give about 0"),
         (
             "coherent key points",
             coherent_fraction,
             COHERENCE_RAMP,
-            "share moving within 1 px of their neighbours, unrelated images give about 0.05",
+            percent,
+            "share moving within 1 px of their neighbours, unrelated images give about 5 %",
         ),
         (
             "tracking ratio",
             tracking_ratio,
             TRACKING_RAMP,
-            "share of detected corners kept, unrelated images give about 0.035",
+            lambda share: percent(share, 1),
+            "share of detected corners kept, unrelated images give about 3.5 %",
         ),
     ]
     scores, reasons = [], []
-    for name, value, ends, meaning in indicators:
+    for name, value, ends, show, meaning in indicators:
         if value is None:
             continue
         scores.append(_ramp(value, ends))
         if value < ends[1]:
-            reasons.append(f"{name} {value:.2f} below {ends[1]} ({meaning})")
+            reasons.append(f"{name} {show(value)} below {show(ends[1])} ({meaning})")
     confidence = float(np.mean(scores))
 
     if confidence >= RELIABLE_CONFIDENCE:

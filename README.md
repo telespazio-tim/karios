@@ -344,7 +344,7 @@ match_result, accuracy, reports = api.process(
 print(f"CE90: {accuracy.ce90:.3f}")
 print(f"Mean shift X: {accuracy.mean_x:.3f} pixels")
 print(f"Generated reports: {reports.overview_plot}")
-print(f"Matching confidence: {accuracy.quality.verdict} ({accuracy.quality.confidence:.2f})")
+print(f"Matching confidence: {accuracy.quality.verdict} ({accuracy.quality.confidence:.0%})")
 ```
 
 ### Batch Processing Example
@@ -521,17 +521,17 @@ KLT returns key points even between two unrelated images, and the statistics com
 
 | Indicator | Meaning | Related images | Unrelated images |
 |---|---|---|---|
-| Median ZNCC | Correlation of the key points' 57×57 patches in both images | 0.85-0.88 | 0.03-0.06 |
-| Coherent key points | Share of key points whose shift is within 1 px of the median of their 8 nearest neighbours: a misregistration is smooth, false matches are random | 0.97 | 0.05-0.06 |
-| Tracking ratio | Share of the corners detected in the reference that pass KLT's forward-backward check | 0.36-0.39 | 0.033-0.035 |
+| Median ZNCC | Correlation of the key points' 57×57 patches in both images, from -1 to 1 | 0.85-0.88 | 0.03-0.06 |
+| Coherent key points | Share of key points whose shift is within 1 px of the median of their 8 nearest neighbours: a misregistration is smooth, false matches are random | 97 % | 5-6 % |
+| Tracking ratio | Share of the corners detected in the reference that pass KLT's forward-backward check | 36-39 % | 3.3-3.5 % |
 
 (Measured on 2000 and 3000 px crops of the Landsat-9 / Sentinel-2 test pair, against the same monitored crop on another area, offset, or flipped.)
 
-Each indicator is mapped linearly to [0, 1] between its unrelated level and its related one (0.1 to 0.5 for the ZNCC, 0.2 to 0.7 for the coherence, 0.05 to 0.2 for the tracking ratio), and the confidence is their mean. The ZNCC is not available when a large shift was applied, nor the tracking ratio with `--resume`: the confidence then comes from the others. The verdict is:
+Each indicator is mapped linearly to [0, 1] between its unrelated level and its related one (0.1 to 0.5 for the ZNCC, 20 % to 70 % for the coherence, 5 % to 20 % for the tracking ratio), and the confidence, from 0 to 100 %, is their mean. The ZNCC is not available when a large shift was applied, nor the tracking ratio with `--resume`: the confidence then comes from the others. The verdict is:
 
-- **reliable**: confidence of 0.7 or more
-- **doubtful**: confidence between 0.3 and 0.7
-- **unreliable**: confidence below 0.3, or fewer than 30 key points above the confidence threshold
+- **reliable**: confidence of 70 % or more
+- **doubtful**: confidence between 30 % and 70 %
+- **unreliable**: confidence below 30 %, or fewer than 30 key points above the confidence threshold
 
 An unreliable result means the images are unrelated, or misregistered beyond the matching range: the statistics are then meaningless. The verdict, the indicators and the reasons for a confidence below 1 are printed in the console summary, shown on the summary page of the HTML report, and written to `summary.json`. The exit status is not affected.
 
@@ -573,7 +573,7 @@ Written next to `correl_res.txt`, with the statistics of the console summary (me
 }
 ```
 
-Undefined values, the statistics without any key point above the confidence threshold or an indicator that is not available, are `null`.
+The confidence, the tracking ratio and the coherent fraction are fractions from 0 to 1 there, not percentages. Undefined values, the statistics without any key point above the confidence threshold or an indicator that is not available, are `null`.
 
 ### CSV Output
 
@@ -816,7 +816,7 @@ KariosException: Mask geo info not compatible with monitored image
 #### Unreliable Matching Confidence
 
 ```
-Matching confidence: UNRELIABLE (0.00)
+Matching confidence: UNRELIABLE (0 %)
 ```
 
 The key points do not measure a misregistration (see [Matching Confidence](#matching-confidence)). **Solution**: check that both images cover the same scene; if they do, the misregistration may exceed the matching range: try `--enable-large-shift-detection`, a larger `matching_winsize` or `maxLevel`, or align the images first with `karios align`.
