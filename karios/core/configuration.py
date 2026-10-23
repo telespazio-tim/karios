@@ -112,6 +112,17 @@ class ShiftConfiguration:
     bias_correction_min_threshold: int
 
 
+@dataclass
+class ImageDownsamplingConfiguration:
+    """Image downsampling configuration.
+
+    When `ratio` > 1, monitored, reference and mask rasters are reduced by
+    integer block_reduce(np.mean) before matching. ratio=1 disables it.
+    """
+
+    ratio: int = 1
+
+
 class ProcessingConfiguration:
     """Application configuration."""
 
@@ -120,6 +131,7 @@ class ProcessingConfiguration:
         self.klt_configuration: Optional[KLTConfiguration] = None
         self.shift_image_processing_configuration: Optional[ShiftConfiguration] = None
         self.accuracy_analysis_configuration: Optional[AccuracyAnalysisConfiguration] = None
+        self.image_downsampling_configuration: Optional[ImageDownsamplingConfiguration] = None
         self.overview_plot_configuration: Optional[OverviewPlotConfiguration] = None
         self.shift_plot_configuration: Optional[ShiftPlotConfiguration] = None
         self.dem_plot_configuration: Optional[DemPlotConfiguration] = None
@@ -178,6 +190,12 @@ class ProcessingConfiguration:
         )
         self.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
             **config_dict["processing_configuration"]["accuracy_analysis"]
+        )
+        downsampling_dict = config_dict["processing_configuration"].get(
+            "image_downsampling", {}
+        )
+        self.image_downsampling_configuration = ImageDownsamplingConfiguration(
+            **downsampling_dict
         )
         self.overview_plot_configuration = OverviewPlotConfiguration(
             **config_dict["plot_configuration"]["overview"]
