@@ -34,6 +34,7 @@ from karios.accuracy_analysis.quality_control import (
     RELIABLE,
     UNRELIABLE,
     assess_quality,
+    percent,
 )
 from karios.api.config import RuntimeConfiguration
 from karios.api.core import KariosAPI
@@ -80,7 +81,16 @@ def test_random_uncorrelated_points_are_unreliable():
     assert quality.confidence < 0.1
     assert quality.coherent_fraction < 0.3
     assert len(quality.reasons) == 4
+    assert quality.reasons[0].startswith("median ZNCC 0.03 below 0.50")
+    assert " below 70 % (" in quality.reasons[1]
+    assert quality.reasons[2].startswith("tracking ratio 2.0 % below 20.0 %")
     assert "unrelated" in quality.reasons[-1]
+
+
+def test_percent_formats_shares_and_undefined_values():
+    assert percent(0.391, 1) == "39.1 %"
+    assert percent(1.0) == "100 %"
+    assert percent(None) == "n/a"
 
 
 def test_middling_indicators_are_doubtful():

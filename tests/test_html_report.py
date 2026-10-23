@@ -277,9 +277,10 @@ def test_summary_shows_the_matching_confidence(generator, tmp_path):
 
     page = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert '<span class="badge badge-unreliable">unreliable</span>' in page
-    assert "confidence 0.04" in page
+    assert "confidence 4 %" in page
     assert "<li>median ZNCC 0.03 &lt;low&gt;</li>" in page
-    assert "(700 / 20000)" in page
+    assert "3.5 %" in page
+    assert "(700 / 20000 corners)" in page
 
 
 def test_summary_without_assessment_says_so(generator, tmp_path):

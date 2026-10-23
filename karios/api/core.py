@@ -39,6 +39,7 @@ from karios.accuracy_analysis.quality_control import (
     UNRELIABLE,
     QualityControl,
     assess_quality,
+    percent,
 )
 from karios.api.config import RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
@@ -350,9 +351,9 @@ class KariosAPI:
         )
         log = {UNRELIABLE: logger.error, DOUBTFUL: logger.warning}.get(quality.verdict, logger.info)
         log(
-            "Matching confidence: %s (%.2f)%s",
+            "Matching confidence: %s (%s)%s",
             quality.verdict,
-            quality.confidence,
+            percent(quality.confidence),
             "".join(f"\n  - {reason}" for reason in quality.reasons),
         )
 

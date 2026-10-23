@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import quote
 
+from karios.accuracy_analysis.quality_control import percent
 from karios.report.chip_service import chip_dir_names
 
 if TYPE_CHECKING:
@@ -664,21 +665,20 @@ class HtmlReportGenerator:
                 '<span class="badge">not assessed</span></div>'
             )
 
-        def value(number, digits=2):
-            return "n/a" if number is None else f"{number:.{digits}f}"
-
+        zncc = "n/a" if quality.median_zncc is None else f"{quality.median_zncc:.2f}"
         detected = "n/a" if quality.detected_points is None else str(quality.detected_points)
         reasons = "".join(f"<li>{_text(reason)}</li>" for reason in quality.reasons)
         return f"""<div class="stats-card">
                 <h3>Matching Confidence</h3>
                 <p><span class="badge badge-{_text(quality.verdict)}">{_text(quality.verdict)}</span>
-                   confidence {quality.confidence:.2f}</p>
+                   confidence {percent(quality.confidence)}</p>
                 <table>
-                    <tr><th>Median ZNCC</th><td>{value(quality.median_zncc)}</td></tr>
-                    <tr><th>Coherent key points</th><td>{value(quality.coherent_fraction)}</td></tr>
-                    <tr><th>Tracking ratio</th><td>{value(quality.tracking_ratio, 3)}
-                        ({quality.tracked_points} / {detected})</td></tr>
-                    <tr><th>Confident key points</th><td>{quality.confident_points}</td></tr>
+                    <tr><th>Median ZNCC</th><td>{zncc}</td></tr>
+                    <tr><th>Coherent key points</th><td>{percent(quality.coherent_fraction)}
+                        (within 1 px of neighbours)</td></tr>
+                    <tr><th>Tracking ratio</th><td>{percent(quality.tracking_ratio, 1)}
+                        ({quality.tracked_points} / {detected} corners)</td></tr>
+                    <tr><th>Confident key points</th><td>{quality.confident_points} points</td></tr>
                 </table>
                 {f'<ul class="quality-reasons">{reasons}</ul>' if reasons else ""}
             </div>"""
