@@ -390,12 +390,23 @@ class ChipService:
     Chips size id 57x57 px.
     """
 
+    SPRITE_FILENAME = "sprite.png"
+
     def __init__(self):
         self._ouput_dir_name: str = "chips"
         self._laplacian_output_dir_name: str = "chips_laplacian"
         self._chip_size = 57
         # to avoid recompute it for each KP
         self._chip_margin = int((self._chip_size - 1) / 2)
+        # Accumulators for the per-kind sprite PNGs. Reset at the start of
+        # each generate_chips() call. Each list collects 57x57 uint8 chips
+        # in the same order as filtered_points iteration.
+        self._ref_chips: list[np.ndarray] = []
+        self._mon_chips: list[np.ndarray] = []
+        self._ref_lap_chips: list[np.ndarray] = []
+        self._mon_lap_chips: list[np.ndarray] = []
+        # Per-row sprite slot index, -1 for chips skipped due to out-of-bounds.
+        self._sprite_indices: list[int] = []
 
     def generate_chips(
         self,
@@ -421,6 +432,12 @@ class ChipService:
             output_dir (str | Path): directory into which chips directory should be created
         """
         logger.info("Generate chips")
+        # Reset sprite accumulators between runs.
+        self._ref_chips = []
+        self._mon_chips = []
+        self._ref_lap_chips = []
+        self._mon_lap_chips = []
+        self._sprite_indices = []
         # first filtering
         filtered_points = points[points["score"] >= confident_threshold]
         if len(filtered_points) == 0:
@@ -486,6 +503,26 @@ class ChipService:
 
         logger.info("Chips generated in %s", chips_dir_path)
 
+        # Pack the per-kind chips into single sprite PNGs.
+        self._write_sprite(
+            chips_dir_path / ref_dir / self.SPRITE_FILENAME, self._ref_chips
+        )
+        self._write_sprite(
+            chips_dir_path / mon_dir / self.SPRITE_FILENAME, self._mon_chips
+        )
+        if laplacian_dir_path is not None:
+            self._write_sprite(
+                laplacian_dir_path / ref_dir / self.SPRITE_FILENAME,
+                self._ref_lap_chips,
+            )
+            self._write_sprite(
+                laplacian_dir_path / mon_dir / self.SPRITE_FILENAME,
+                self._mon_lap_chips,
+            )
+
+        # Persist the sprite slot for each row so the HTML report can look it up.
+        filtered_points = filtered_points.copy()
+        filtered_points["sprite_idx"] = self._sprite_indices
         filtered_points.to_csv(chips_dir_path / "chips.csv", sep=";", index=False)
 
         self._create_vrt(chips_dir_path / mon_dir, "monitored_chips.vrt")
@@ -594,6 +631,7 @@ class ChipService:
         )
         if ref_out_of_bounds or mon_out_of_bounds:
             logger.warning("Chip to close to image boundaries, skip it")
+            self._sprite_indices.append(-1)
             return
 
         ref_chip_path = out_dir / reference_filename / f"REF_{x0}_{y0}.TIFF"
@@ -605,8 +643,6 @@ class ChipService:
         dataset.FlushCache()
         ref_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
-        if ref_data is not None:
-            cv2.imwrite(str(ref_chip_path.with_suffix(".png")), to_uint8(ref_data))
 
         mon_chip_path = out_dir / monitored_filename / f"MON_{x0}_{y0}.TIFF"
         options = gdal.TranslateOptions(
@@ -617,8 +653,14 @@ class ChipService:
         dataset.FlushCache()
         mon_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
-        if mon_data is not None:
-            cv2.imwrite(str(mon_chip_path.with_suffix(".png")), to_uint8(mon_data))
+
+        if ref_data is None or mon_data is None:
+            self._sprite_indices.append(-1)
+            return
+
+        sprite_idx = len(self._ref_chips)
+        self._ref_chips.append(to_uint8(ref_data))
+        self._mon_chips.append(to_uint8(mon_data))
 
         if laplacian_ksize is not None and out_dir_laplacian is not None:
             ref_ksize = laplacian_ksize.get("ref", laplacian_ksize.get("mon", 1))
@@ -629,6 +671,7 @@ class ChipService:
                 y0_offset,
                 ref_ksize,
                 out_dir_laplacian / reference_filename / f"REF_{x0}_{y0}.TIFF",
+                self._ref_lap_chips,
             )
             self._write_laplacian_chip(
                 monitored,
@@ -636,7 +679,10 @@ class ChipService:
                 y1_offset,
                 mon_ksize,
                 out_dir_laplacian / monitored_filename / f"MON_{x0}_{y0}.TIFF",
+                self._mon_lap_chips,
             )
+
+        self._sprite_indices.append(sprite_idx)
 
     def _write_laplacian_chip(
         self,
@@ -645,6 +691,7 @@ class ChipService:
         yoff: int,
         ksize: int,
         out_path: Path,
+        sprite_accumulator: list[np.ndarray],
     ):
         data = dataset.GetRasterBand(1).ReadAsArray(xoff, yoff, self._chip_size, self._chip_size)
         if data is None:
@@ -661,4 +708,17 @@ class ChipService:
         ds.GetRasterBand(1).WriteArray(lap)
         ds.FlushCache()
         ds = None
-        cv2.imwrite(str(out_path.with_suffix(".png")), lap)
+        sprite_accumulator.append(lap)
+
+    def _write_sprite(self, sprite_path: Path, chips: list[np.ndarray]) -> None:
+        """Pack 57x57 uint8 chips into a single horizontal strip PNG.
+
+        The HTML report renders each chip as a CSS sprite: one container per
+        chip with background-image pointing at this file and background-position
+        offset by chip index * chip_size.
+        """
+        if not chips:
+            return
+        sprite = np.hstack(chips)
+        cv2.imwrite(str(sprite_path), sprite)
+        logger.info("Sprite written: %s (%d chips)", sprite_path, len(chips))

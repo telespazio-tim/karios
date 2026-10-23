@@ -25,7 +25,7 @@ def test_laplacian_chips_are_georeferenced_like_image_chips(tmp_path):
     source = _source(tmp_path / "source.tif", geo)
     chip = tmp_path / "REF_100_80.TIFF"
 
-    ChipService()._write_laplacian_chip(source, 72, 52, 3, chip)
+    ChipService()._write_laplacian_chip(source, 72, 52, 3, chip, [])
 
     written = gdal.Open(str(chip))
     x_origin, y_origin = gdal.ApplyGeoTransform(geo, 72, 52)
