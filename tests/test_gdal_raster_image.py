@@ -453,3 +453,44 @@ def test_ogr_vrt_vector_mask_is_refused(tmp_path):
 
     with pytest.raises(GdalError, match="OGR_VRT dataset"):
         rasterize_vector_mask(str(vrt), reference, str(tmp_path / "out.tif"))
+
+
+def _images_with_crs(first_crs, second_crs):
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = "EPSG:4326"
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image1 = GdalRasterImage("/fake/path/image1.tif")
+        image2 = GdalRasterImage("/fake/path/image2.tif")
+    image1.spatial_ref, image2.spatial_ref = first_crs, second_crs
+    return image1, image2
+
+
+def _crs(is_same, code):
+    crs = Mock()
+    crs.IsSame.return_value = is_same
+    crs.GetAuthorityCode.return_value = code
+    return crs
+
+
+def test_is_compatible_with_same_epsg_code_despite_different_wkt():
+    """IsSame rejects the same CRS written with different WKT details."""
+    image1, image2 = _images_with_crs(_crs(False, "32631"), _crs(False, "32631"))
+    assert image1.is_compatible_with(image2) is True
+
+
+def test_is_compatible_with_different_epsg_codes():
+    image1, image2 = _images_with_crs(_crs(False, "32631"), _crs(False, "32632"))
+    assert image1.is_compatible_with(image2) is False
+
+
+def test_is_compatible_with_no_epsg_code_is_not_a_match():
+    """Two references without any code must not compare equal (None == None)."""
+    image1, image2 = _images_with_crs(_crs(False, None), _crs(False, None))
+    assert image1.is_compatible_with(image2) is False

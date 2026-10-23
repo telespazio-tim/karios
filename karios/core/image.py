@@ -475,6 +475,19 @@ class GdalRasterImage:
         dataset.FlushCache()
         dataset = None
 
+    @staticmethod
+    def _same_crs(first, second) -> bool:
+        """Whether two spatial references are the same CRS.
+
+        IsSame compares the WKT definitions and reports a mismatch for the same
+        CRS written differently (e.g. an extra AUTHORITY tag), so equal EPSG
+        codes are accepted too. Two references without any code are not.
+        """
+        if first.IsSame(second):
+            return True
+        code = first.GetAuthorityCode(None)
+        return code is not None and code == second.GetAuthorityCode(None)
+
     def is_compatible_with(self, image: GdalRasterImage) -> bool:
         """Check that images have same geometric and geographic specifications
 
@@ -490,7 +503,7 @@ class GdalRasterImage:
         if self.spatial_ref is None or image.spatial_ref is None:
             return False
         return (
-            self.spatial_ref.IsSame(image.spatial_ref)
+            self._same_crs(self.spatial_ref, image.spatial_ref)
             and (self._geo == image._geo)
             and (self.x_size == image.x_size)
             and (self.y_size == image.y_size)
