@@ -8,6 +8,7 @@ pydocstyle==6.3.0
 pylint==3.0.3
 pyment==0.3.3
 pytest-cov==4.1.0
+vermin==1.8.0
 setuptools>=77.0
 # doc/sphinx
 sphinx>=7.3.7

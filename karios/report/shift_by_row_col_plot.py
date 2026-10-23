@@ -17,6 +17,8 @@
 # limitations under the License.
 """row col plot module"""
 
+from __future__ import annotations
+
 import math
 
 import matplotlib.pyplot as plt

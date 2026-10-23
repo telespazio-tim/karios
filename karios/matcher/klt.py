@@ -18,6 +18,8 @@
 
 """KTL module."""
 
+from __future__ import annotations
+
 import itertools
 import logging
 import os
@@ -33,7 +35,7 @@ from pandas import DataFrame
 from karios.core.configuration import KLTConfiguration
 from karios.core.errors import ConfigurationError
 from karios.core.image import GdalRasterImage
-from karios.core.radiometry import to_uint8
+from karios.core.radiometry import laplacian_to_uint8, to_uint8
 from karios.matcher.coarse_to_fine import coarse_to_fine_tracker
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,18 @@ def _stretch(arr: np.ndarray) -> np.ndarray:
         return to_uint8(arr)
 
     return _to_uint8_legacy_minmax(arr)
+
+
+def _laplacian(arr: np.ndarray, ksize: int, power: float = 1.0) -> np.ndarray:
+    """Laplacian of `arr`, rescaled to uint8 without CV_8U's clipping/saturation.
+
+    Computed at CV_32F so the convolution itself never saturates, then
+    rescaled by `radiometry.laplacian_to_uint8`. `power` is forwarded as-is:
+    0 keeps the rescaled value as-is, 1 (the default) saturates it to a
+    near-binary response, matching the historical CV_8U behaviour's known
+    cross-sensor robustness.
+    """
+    return laplacian_to_uint8(cv2.Laplacian(arr, cv2.CV_32F, ksize=ksize), power=power)
 
 
 def _tracking_margin(matching_winsize: int, max_level: int) -> int:
@@ -304,6 +318,7 @@ class KLT:
         out_dir: str | None = None,
         no_values: list[float] | None = None,
         coarse_to_fine: bool = False,
+        laplacian_power: float = 1.0,
     ):
         """Constructor
 
@@ -316,6 +331,11 @@ class KLT:
                 declared no-data. Defaults to None.
             coarse_to_fine (bool, optional): descend the pyramid explicitly rather
                 than letting OpenCV recurse its own. Defaults to False.
+            laplacian_power (float, optional): shape of the Laplacian rescale,
+                forwarded to `radiometry.laplacian_to_uint8`: 0 keeps the
+                percentile-normalized value as-is, 1 saturates it to a
+                near-binary response (the historical CV_8U behaviour's
+                robustness, made explicit). Defaults to 1.
 
         Raises:
             ConfigurationError: if coarse_to_fine is combined with an "auto"
@@ -333,6 +353,7 @@ class KLT:
         self._out_dir = out_dir
         self._no_values = no_values
         self._coarse_to_fine = coarse_to_fine
+        self._laplacian_power = laplacian_power
         self._auto_selected_ksizes: list[tuple[int, int]] = []
         self._selected_polarities: list[str] = []
         # Corners detected in the reference by the last match(), for its tracking ratio
@@ -522,8 +543,8 @@ class KLT:
         return Counter(self._auto_selected_ksizes).most_common(1)[0][0]
 
     def _apply_laplacian_and_track(self, img_box, ref_box, mask_box, mon_ksize, ref_ksize):
-        lap_img = cv2.Laplacian(_stretch(img_box), cv2.CV_8U, ksize=mon_ksize)
-        lap_ref = cv2.Laplacian(_stretch(ref_box), cv2.CV_8U, ksize=ref_ksize)
+        lap_img = _laplacian(_stretch(img_box), mon_ksize, self._laplacian_power)
+        lap_ref = _laplacian(_stretch(ref_box), ref_ksize, self._laplacian_power)
         return klt_tracker(lap_ref, lap_img, mask_box, self._conf)
 
     def _log_polarity_setting(self) -> None:
@@ -598,12 +619,18 @@ class KLT:
 
         mon_ksize = ksize.get("mon", ksize.get("ref", 1)) if isinstance(ksize, dict) else ksize
         ref_ksize = ksize.get("ref", ksize.get("mon", 1)) if isinstance(ksize, dict) else ksize
-        img_lap = cv2.Laplacian(_stretch(img_for_lap), cv2.CV_8U, ksize=mon_ksize)
-        ref_lap = cv2.Laplacian(_stretch(ref_box), cv2.CV_8U, ksize=ref_ksize)
+        img_lap = _laplacian(_stretch(img_for_lap), mon_ksize, self._laplacian_power)
+        ref_lap = _laplacian(_stretch(ref_box), ref_ksize, self._laplacian_power)
         if self._coarse_to_fine:
             # takes the raw boxes: each level is downsampled before filtering
             result = coarse_to_fine_tracker(
-                ref_box, img_for_lap, mask_box, self._conf, mon_ksize, ref_ksize
+                ref_box,
+                img_for_lap,
+                mask_box,
+                self._conf,
+                mon_ksize,
+                ref_ksize,
+                laplacian_power=self._laplacian_power,
             )
         else:
             result = klt_tracker(ref_lap, img_lap, mask_box, self._conf)
@@ -652,10 +679,10 @@ class KLT:
 
         # Pre-compute Laplacians for each candidate kernel size
         mon_laplacians = {
-            k: cv2.Laplacian(img_uint8, cv2.CV_8U, ksize=k) for k in LAPLACIAN_AUTO_CANDIDATES
+            k: _laplacian(img_uint8, k, self._laplacian_power) for k in LAPLACIAN_AUTO_CANDIDATES
         }
         ref_laplacians = {
-            k: cv2.Laplacian(ref_uint8, cv2.CV_8U, ksize=k) for k in LAPLACIAN_AUTO_CANDIDATES
+            k: _laplacian(ref_uint8, k, self._laplacian_power) for k in LAPLACIAN_AUTO_CANDIDATES
         }
 
         # Pre-compute features to track for each reference Laplacian

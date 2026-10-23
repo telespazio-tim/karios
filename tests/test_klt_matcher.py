@@ -517,8 +517,8 @@ def test_match_tile_auto_ksize_selects_best_inlier_ratio():
         p0.idx = getattr(lap, "ksize_idx", -1)
         return p0
 
-    # Mock cv2.Laplacian to return tagged MagicMocks
-    def mock_laplacian(src, ddepth, ksize):
+    # Mock _laplacian (Laplacian + rescale, as one step) to return tagged MagicMocks
+    def mock_laplacian(arr, ksize, power=1.0):
         lap = MagicMock(spec=np.ndarray)
         lap.ksize_idx = LAPLACIAN_AUTO_CANDIDATES.index(ksize)
         # Mock shape and dtype which might be used
@@ -529,7 +529,7 @@ def test_match_tile_auto_ksize_selects_best_inlier_ratio():
     with (
         patch("karios.matcher.klt.klt_tracker", side_effect=mock_tracker),
         patch("karios.matcher.klt.cv2.goodFeaturesToTrack", side_effect=mock_gftt),
-        patch("karios.matcher.klt.cv2.Laplacian", side_effect=mock_laplacian),
+        patch("karios.matcher.klt._laplacian", side_effect=mock_laplacian),
     ):
         best_result, scores, selected_ksize, _ = klt._match_tile_auto_ksize(
             tile, tile, np.ones((50, 50), dtype=np.uint8)
@@ -626,6 +626,43 @@ def test_match_tile_dict_kernel_size(mock_cv2, mock_klt_tracker):
     assert len(calls) == 2
     assert calls[0].kwargs["ksize"] == 3  # mon
     assert calls[1].kwargs["ksize"] == 5  # ref
+
+
+@patch("karios.matcher.klt.klt_tracker")
+@patch("karios.matcher.klt.cv2")
+def test_match_tile_passes_configured_laplacian_power(mock_cv2, mock_klt_tracker):
+    """_match_tile must forward the configured laplacian_power to every
+    laplacian_to_uint8 call, not silently use the function's own default."""
+    conf = KLTConfiguration(
+        minDistance=10,
+        blocksize=15,
+        maxCorners=20000,
+        matching_winsize=25,
+        qualityLevel=0.01,
+        xStart=0,
+        tile_size=1000,
+        laplacian_kernel_size=3,
+        outliers_filtering=False,
+    )
+    klt = KLT(conf, laplacian_power=0.25)
+
+    tile = np.ones((100, 100), dtype=np.uint8) * 128
+    mon_img = Mock(spec=GdalRasterImage)
+    ref_img = Mock(spec=GdalRasterImage)
+    mon_img.x_size = 100
+    mon_img.y_size = 100
+    mon_img.read.return_value = tile
+    ref_img.read.return_value = tile
+
+    mock_cv2.Laplacian.return_value = tile
+    mock_klt_tracker.return_value = None
+
+    with patch("karios.matcher.klt.laplacian_to_uint8", return_value=tile) as mock_rescale:
+        klt._match_tile(0, 0, mon_img, ref_img, None)
+
+    assert mock_rescale.call_count == 2
+    for call in mock_rescale.call_args_list:
+        assert call.kwargs["power"] == 0.25
 
 
 if __name__ == "__main__":

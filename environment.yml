@@ -10,3 +10,8 @@ dependencies:
   - python=3.12
   - scikit-image=0.24.*
   - rich-click=1.8.*
+  # Pinned below 8.2: newer click releases require Python >=3.10, which
+  # would silently make this environment unreproducible on the >=3.9 this
+  # project otherwise supports (see requires-python in pyproject.toml).
+  # rich-click itself only requires click>=7.
+  - click=8.1.*

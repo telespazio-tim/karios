@@ -34,7 +34,7 @@ jobs:
         pip install -e .
         pip install -r requirements_dev.txt
         # Install tools needed for pre-commit checks
-        pip install black isort bandit pydocstyle pre-commit
+        pip install black isort bandit pydocstyle pre-commit vermin
 
     - name: Run license headers check
       run: |
@@ -54,3 +54,14 @@ jobs:
     - name: Run security check (bandit)
       run: |
         bandit .
+
+    - name: Check Python 3.9+ syntax compatibility (vermin)
+      run: |
+        # --eval-annotations actually inspects type-hint syntax (PEP 585
+        # builtin generics, PEP 604 unions) instead of vermin's lenient
+        # default, which would otherwise pass without noticing them. Matches
+        # requires-python in pyproject.toml: every annotation is deferred via
+        # `from __future__ import annotations`, so this is the floor set by
+        # dependencies (pandas/numpy/scikit-image/matplotlib all require
+        # >=3.9 at the versions pinned in environment.yml), not by syntax.
+        vermin --eval-annotations --target=3.9 --violations --no-tips karios/

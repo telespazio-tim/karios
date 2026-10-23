@@ -17,6 +17,8 @@
 # limitations under the License.
 """plot by alt profile module"""
 
+from __future__ import annotations
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes

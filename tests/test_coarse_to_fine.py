@@ -9,7 +9,7 @@ import pytest
 from karios.core.configuration import KLTConfiguration
 from karios.core.errors import ConfigurationError
 from karios.matcher.coarse_to_fine import coarse_to_fine_tracker
-from karios.matcher.klt import KLT, klt_tracker
+from karios.matcher.klt import KLT, _laplacian, klt_tracker
 
 
 def _conf(**overrides):
@@ -83,8 +83,10 @@ def test_coarse_to_fine_recovers_border_points_lost_by_klt():
     mask = np.ones((size, size), np.uint8)
     conf = _conf()
 
-    ref_lap = cv2.Laplacian(ref, cv2.CV_8U, ksize=7)
-    mon_lap = cv2.Laplacian(mon, cv2.CV_8U, ksize=7)
+    # Same Laplacian rescale coarse_to_fine_tracker uses internally, so this
+    # isolates the pyramid/tiling difference the test is actually about.
+    ref_lap = _laplacian(ref, 7)
+    mon_lap = _laplacian(mon, 7)
     klt_points, _ = klt_tracker(ref_lap, mon_lap, mask, conf)
     ctf_points, _ = coarse_to_fine_tracker(ref, mon, mask, conf, mon_ksize=7, ref_ksize=7)
 

@@ -19,6 +19,8 @@
 Products are (geo) raster or vector files created from KP and their properties (dx, dy, etc ...)
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os

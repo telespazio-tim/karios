@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from karios.core.configuration import KLTConfiguration
-from karios.matcher.klt import _stretch, klt_tracker
+from karios.matcher.klt import _laplacian, _stretch, klt_tracker
 
 
 def _conf():
@@ -43,8 +43,8 @@ def _match(ref, mon):
     """Run the real KLT chain, returning the number of key points kept."""
     conf = _conf()
     mask = np.ones(ref.shape, np.uint8)
-    ref_lap = cv2.Laplacian(_stretch(ref), cv2.CV_8U, ksize=7)
-    mon_lap = cv2.Laplacian(_stretch(mon), cv2.CV_8U, ksize=7)
+    ref_lap = _laplacian(_stretch(ref), 7)
+    mon_lap = _laplacian(_stretch(mon), 7)
     result = klt_tracker(ref_lap, mon_lap, mask, conf)
     return 0 if result is None else len(result[0])
 

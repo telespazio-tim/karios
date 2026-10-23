@@ -54,6 +54,8 @@ bands of mon's product without estimating it again: their own estimates would
 differ slightly, and the bands would no longer overlay.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass, field
