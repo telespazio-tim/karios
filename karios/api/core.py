@@ -102,6 +102,11 @@ class AccuracyAnalysis:
     std_y: float
     ce90: float
     ce95: float
+    rmse: float
+    min_error: float
+    max_error: float
+    std_dev: float
+    num_points: int
     valid_pixels: int
     total_pixels: int
     quality: Optional[QualityControl] = None
@@ -359,6 +364,15 @@ class KariosAPI:
         ce90 = stats.compute_percentile(0.9, img_res)
         ce95 = stats.compute_percentile(0.95, img_res)
 
+        # Combined (x, y) error figures, for the QGIS plugin (undefined without any confident point)
+        if stats.valid:
+            rmse = np.sqrt(stats.mean_x**2 + stats.mean_y**2 + stats.std_x**2 + stats.std_y**2)
+            min_error = np.sqrt(stats.min_x**2 + stats.min_y**2)
+            max_error = np.sqrt(stats.max_x**2 + stats.max_y**2)
+            std_dev = np.sqrt(stats.std_x**2 + stats.std_y**2)
+        else:
+            rmse = min_error = max_error = std_dev = float("nan")
+
         quality = assess_quality(
             match_result.points, acc_config.confidence_threshold, match_result.detected_points
         )
@@ -380,6 +394,11 @@ class KariosAPI:
             std_y=stats.std_y if stats.valid else nan,
             ce90=ce90,
             ce95=ce95,
+            rmse=rmse,
+            min_error=min_error,
+            max_error=max_error,
+            std_dev=std_dev,
+            num_points=stats.sample_pixel if stats.valid else 0,
             valid_pixels=nb_valid_pixel,
             total_pixels=total_pixels,
             quality=quality,

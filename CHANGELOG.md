@@ -1,6 +1,18 @@
 # KARIOS CHANGELOG
 
-## Unreleased
+## 3.0.0 [unreleased]
+
+### breaking changes
+
+- `AccuracyAnalysis` (API) gets the fields `rmse`, `min_error`, `max_error`, `std_dev` and
+  `num_points`, required by the constructor; code building it by hand must pass them. They are
+  NaN (`num_points` 0) when no point is confident. Used by the QGIS plugin.
+
+### Fix
+
+- `is_compatible_with` accepts the same CRS written with different WKT.
+- The report forces the Agg matplotlib backend; the CI declares rasterio as a conda dependency for the rasterio e2e test.
+
 
 ### New features
 

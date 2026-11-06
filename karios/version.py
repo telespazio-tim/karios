@@ -19,4 +19,4 @@
 
 """version info module."""
 
-__version__ = "2.2.0-dev"
+__version__ = "3.0.0"
