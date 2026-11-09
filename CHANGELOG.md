@@ -7,10 +7,32 @@
 - `AccuracyAnalysis` (API) gets the fields `rmse`, `min_error`, `max_error`, `std_dev` and
   `num_points`, required by the constructor; code building it by hand must pass them. They are
   NaN (`num_points` 0) when no point is confident. Used by the QGIS plugin.
+- `karios process` and `karios align` exit with status 1 on error; they always exited with 0.
+- Inputs that read other data are refused: network paths (`/vsicurl`, `/vsis3`, `http://`...), VRT
+  and web-service rasters, and OGR VRT, WFS, database and GPSBabel vector masks. Convert them to a
+  plain file first.
+- `get_filename` sanitizes the names it returns: path traversal sequences are removed, characters
+  other than letters, digits, `_`, `.` and `-` become `_`, Windows reserved names get a `safe_`
+  prefix. The output folders of inputs with spaces or special characters are named differently.
+- Images in a geographic CRS or on a rotated grid are measured in pixels, unless
+  `--input-pixel-size` is given (see Fix).
+
+### Security
+
+- **HTML report escapes user values**: file names, title prefix, configuration values and product
+  names went unescaped into text and `href`/`src` attributes, so an image named
+  `<svg onload=...>.tif` ran script when `report.html` or `chips.html` was opened. Paths in links
+  are now percent-encoded segment by segment, which also fixes names with spaces, `#` or `?`.
+- **Dangerous inputs are refused before opening**: a `.tif` that was really a VRT could map any
+  local file into pixels, or make network requests. See breaking changes.
+- **`karios align` quotes the printed `gdalwarp` command** (`shlex.quote`), so a reference named
+  like `$(touch pwned).tif` cannot run in the shell it is pasted into.
+- **File name sanitization** in `get_filename` (see breaking changes).
 
 ### Fix
 
-- `is_compatible_with` accepts the same CRS written with different WKT.
+- `is_compatible_with` accepts the same CRS written with different WKT, and no longer crashes on a
+  missing spatial reference.
 - The report forces the Agg matplotlib backend; the CI declares rasterio as a conda dependency for the rasterio e2e test.
 
 
@@ -25,9 +47,32 @@
   with `laplacian_kernel_size: "auto"`, which is rejected when the matcher is built, nor with
   `--enable-large-shift-detection`: both remove a coarse displacement, so combining them would
   correct it twice.
-- **Configurable pyramid depth** (`klt_matching.maxLevel`, default `3`): previously a source
+- **Configurable pyramid depth** (`klt_matching.maxLevel`, default `1`): previously a source
   constant. In the default matching mode this is the parameter that most affects results, since
   the lost edge band scales as `(matching_winsize / 2) * 2**maxLevel`.
+- **Laplacian options**: `laplacian_kernel_size: "auto"` picks the best kernel per image (the choice
+  is written back to the output configuration and shown in the report);
+  `laplacian_invert_polarity` (`false` / `true` / `"auto"`) inverts the monitored pixels so that
+  cross-sensor or signed-elevation pairs with opposite feature polarity can match, `"auto"` running
+  each tile both ways and keeping the better inlier ratio; `--laplacian-power` (0-1, default 1)
+  tunes the Laplacian binarization, 1 being near-binary, robust to gain and contrast differences
+  between sensors, and 0 a continuous signal.
+- **Vector mask, DN value filtering (`--no-value`) and no-data**: the no-data value declared by
+  each raster band is applied automatically, in the matching mask, the post-match DN filter and
+  the overview plot.
+- **Mutual information**: the normalized mutual information (NMI) is computed next to the ZNCC for
+  each key point; ZNCC and both mutual informations are computed in a single pass.
+- **Key point image chips** (`--generate-kp-chips`): raw and Laplacian chips of each selected key
+  point shown side by side in the *Chips* tab, with ZNCC and NMI, a sort bar and an XOR difference
+  on hover. Chips are georeferenced and packed into one `sprite.png` per folder (`sprite_idx`
+  column of `chips.csv`): about 4 PNGs instead of 400 for 100 key points.
+- **Optional downsampling of the inputs** (`image_downsampling.ratio`, default `1`, off): monitored
+  image, reference and mask are reduced by an integer factor with `block_reduce(np.nanmean)`,
+  no-data excluded from each block, before any other processing.
+- **`--debug` coverage plot** (`05_coverage.png`): key point density, empty cell ratio and
+  per-cell mean KLT score, ZNCC and NMI.
+- **New HTML report**: Summary / Products / Mosaic / Overlay / Chips tabs, the full processing
+  configuration in a collapsible block, inlined branding assets.
 - **DEM elevation in the CSV output**: when a DEM is given, the `KLT_matcher_*.csv` file gets an
   `alt` column with the DEM elevation at each key point. Resuming (`--resume`) from a CSV written
   without a DEM adds the column.
@@ -153,6 +198,15 @@
   measured in pixels, unless `--input-pixel-size` is given. Their EPSG code is read too (it only
   was for projected CRS), so the key point GeoJSON is written, and the raster products copy the
   reference's full geotransform instead of dropping its rotation terms.
+- **Laplacian output no longer clips to near-binary**: `cv2.Laplacian`'s 8 bit output was clipped,
+  and `laplacian_to_uint8` discarded sparse edges on flat tiles; one stray pixel could also break
+  the matching of float inputs. `--laplacian-power` restores the near-binary behaviour on request.
+- **Plots and report**: the overview plot no longer crashes on a perfect match, `$` in names is
+  drawn as text instead of mathtext, the mean dx/dy by column plot is corrected, `"auto"` pixel
+  size is displayed with its unit.
+- **`output_directory` is coerced to `Path`** in `RuntimeConfiguration`.
+- **Chips beyond the right or bottom image boundary are skipped**, and the boundary check of the
+  ZNCC/NMI chips is no longer off by one.
 - **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
   `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
   generating reports.
@@ -177,6 +231,16 @@
   - is far more robust on cross-sensor pairs thanks to CLAHE preprocessing, SIFT descriptors, Lowe ratio + mutual cross-check, and ECC refinement on Sobel gradient magnitudes (sensor-invariant);
   - drops the equal-size input constraint;
   - renders the warped monitored image onto the reference's pixel grid so both outputs share a geotransform.
+- **Python 3.9+ is genuinely supported**, and a CI job checks the syntax floor with `vermin`.
+- **Faster runs**: `scipy.stats` and `skimage` are imported where used (quicker CLI start), the key
+  point GeoJSON is built column by column, integer images are equalized by histogram once for the
+  mosaic and the overlay, and the report banner is re-encoded as WebP.
+- **Less log noise**: per-point and debug-leftover messages are gone.
+- **The processing configuration is copied to the output directory before the run**, so it is kept
+  when the run fails.
+- **Rasterized and combined masks are written with the outputs.**
+- **Overview plots use adaptive contrast**, and apply the mask and `--no-value`.
+- Codebase reformatted with black 26.3.1.
 
 ## 2.1.1 [20260218]
 
