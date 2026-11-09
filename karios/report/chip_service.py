@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -17,6 +17,8 @@
 # limitations under the License.
 """Module to generate KP chip images of monitored and reference images."""
 
+from __future__ import annotations
+
 import glob
 import logging
 import os
@@ -30,18 +32,21 @@ from osgeo import gdal
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage, open_gdal_dataset
+from karios.core.radiometry import laplacian_to_uint8, to_uint8
 
 logger = logging.getLogger(__name__)
 
 
-def _to_uint8(arr: np.ndarray) -> np.ndarray:
-    if arr.dtype == np.uint8:
-        return arr
-    arr_min, arr_max = float(np.nanmin(arr)), float(np.nanmax(arr))
-    if arr_max > arr_min:
-        return ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
-    return np.zeros_like(arr, dtype=np.uint8)
 
+def chip_dir_names(monitored_name: str, reference_name: str) -> tuple[str, str]:
+    """Directory names of the monitored and reference chips: their file names.
+
+    Images with the same file name in different folders get `_monitored` and
+    `_reference` suffixes, as both directories would otherwise be the same.
+    """
+    if monitored_name == reference_name:
+        return f"{monitored_name}_monitored", f"{reference_name}_reference"
+    return monitored_name, reference_name
 
 class CenterAndQuarterCellPointSelector:
     """
@@ -387,12 +392,23 @@ class ChipService:
     Chips size id 57x57 px.
     """
 
+    SPRITE_FILENAME = "sprite.png"
+
     def __init__(self):
         self._ouput_dir_name: str = "chips"
         self._laplacian_output_dir_name: str = "chips_laplacian"
         self._chip_size = 57
         # to avoid recompute it for each KP
         self._chip_margin = int((self._chip_size - 1) / 2)
+        # Accumulators for the per-kind sprite PNGs. Reset at the start of
+        # each generate_chips() call. Each list collects 57x57 uint8 chips
+        # in the same order as filtered_points iteration.
+        self._ref_chips: list[np.ndarray] = []
+        self._mon_chips: list[np.ndarray] = []
+        self._ref_lap_chips: list[np.ndarray] = []
+        self._mon_lap_chips: list[np.ndarray] = []
+        # Per-row sprite slot index, -1 for chips skipped due to out-of-bounds.
+        self._sprite_indices: list[int] = []
 
     def generate_chips(
         self,
@@ -402,6 +418,7 @@ class ChipService:
         confident_threshold: float,
         output_dir: str | Path,
         laplacian_ksize: dict[str, int] | None = None,
+        laplacian_power: float = 1.0,
     ):
         """
         This function generates a maximum of 100 chip images of KP for monitored and reference images.
@@ -418,6 +435,12 @@ class ChipService:
             output_dir (str | Path): directory into which chips directory should be created
         """
         logger.info("Generate chips")
+        # Reset sprite accumulators between runs.
+        self._ref_chips = []
+        self._mon_chips = []
+        self._ref_lap_chips = []
+        self._mon_lap_chips = []
+        self._sprite_indices = []
         # first filtering
         filtered_points = points[points["score"] >= confident_threshold]
         if len(filtered_points) == 0:
@@ -450,9 +473,10 @@ class ChipService:
             logger.warning("Chips output dir already exists, clean it")
             shutil.rmtree(chips_dir_path)
 
+        mon_dir, ref_dir = chip_dir_names(monitored.file_name, reference.file_name)
         os.mkdir(chips_dir_path)
-        os.mkdir(chips_dir_path / monitored.file_name)
-        os.mkdir(chips_dir_path / reference.file_name)
+        os.mkdir(chips_dir_path / mon_dir)
+        os.mkdir(chips_dir_path / ref_dir)
 
         laplacian_dir_path = None
         if laplacian_ksize is not None:
@@ -461,8 +485,8 @@ class ChipService:
                 logger.warning("Laplacian chips output dir already exists, clean it")
                 shutil.rmtree(laplacian_dir_path)
             os.mkdir(laplacian_dir_path)
-            os.mkdir(laplacian_dir_path / monitored.file_name)
-            os.mkdir(laplacian_dir_path / reference.file_name)
+            os.mkdir(laplacian_dir_path / mon_dir)
+            os.mkdir(laplacian_dir_path / ref_dir)
 
         # load only once mon and ref gdal dataset
         with open_gdal_dataset(monitored.filepath) as mon_dataset:
@@ -474,23 +498,44 @@ class ChipService:
                     monitored=mon_dataset,
                     reference=ref_dataset,
                     out_dir=chips_dir_path,
-                    monitored_filename=monitored.file_name,
-                    reference_filename=reference.file_name,
+                    monitored_filename=mon_dir,
+                    reference_filename=ref_dir,
                     laplacian_ksize=laplacian_ksize,
                     out_dir_laplacian=laplacian_dir_path,
+                    laplacian_power=laplacian_power,
                 )
 
         logger.info("Chips generated in %s", chips_dir_path)
 
+        # Pack the per-kind chips into single sprite PNGs.
+        self._write_sprite(
+            chips_dir_path / ref_dir / self.SPRITE_FILENAME, self._ref_chips
+        )
+        self._write_sprite(
+            chips_dir_path / mon_dir / self.SPRITE_FILENAME, self._mon_chips
+        )
+        if laplacian_dir_path is not None:
+            self._write_sprite(
+                laplacian_dir_path / ref_dir / self.SPRITE_FILENAME,
+                self._ref_lap_chips,
+            )
+            self._write_sprite(
+                laplacian_dir_path / mon_dir / self.SPRITE_FILENAME,
+                self._mon_lap_chips,
+            )
+
+        # Persist the sprite slot for each row so the HTML report can look it up.
+        filtered_points = filtered_points.copy()
+        filtered_points["sprite_idx"] = self._sprite_indices
         filtered_points.to_csv(chips_dir_path / "chips.csv", sep=";", index=False)
 
-        self._create_vrt(chips_dir_path / monitored.file_name, "monitored_chips.vrt")
-        self._create_vrt(chips_dir_path / reference.file_name, "reference_chips.vrt")
+        self._create_vrt(chips_dir_path / mon_dir, "monitored_chips.vrt")
+        self._create_vrt(chips_dir_path / ref_dir, "reference_chips.vrt")
 
         if laplacian_dir_path is not None:
             logger.info("Laplacian chips generated in %s", laplacian_dir_path)
-            self._create_vrt(laplacian_dir_path / monitored.file_name, "monitored_chips.vrt")
-            self._create_vrt(laplacian_dir_path / reference.file_name, "reference_chips.vrt")
+            self._create_vrt(laplacian_dir_path / mon_dir, "monitored_chips.vrt")
+            self._create_vrt(laplacian_dir_path / ref_dir, "reference_chips.vrt")
 
     def _create_vrt(self, directory_path: Path, output_vrt_name="chips.vrt"):
         """
@@ -510,7 +555,7 @@ class ChipService:
             tiff_files = glob.glob("*.TIFF")
 
             if not tiff_files:
-                print(f"No TIFF files found in {directory_path}")
+                logger.warning("No TIFF files found in %s", directory_path)
                 return
 
             # Sort files for consistent ordering
@@ -526,8 +571,15 @@ class ChipService:
                 VRTNodata=0,  # False for mosaic (single band)
             )
 
-            # Create the VRT
-            vrt_ds = gdal.BuildVRT(output_vrt_name, tiff_files, options=vrt_options)
+            # Create the VRT. Chips are plain pixel crops with no geotransform
+            # of their own, so GDAL warns "does not support ungeoreferenced
+            # image" once per file - expected here, not actionable, and would
+            # otherwise flood the log with one line per chip.
+            gdal.PushErrorHandler("CPLQuietErrorHandler")
+            try:
+                vrt_ds = gdal.BuildVRT(output_vrt_name, tiff_files, options=vrt_options)
+            finally:
+                gdal.PopErrorHandler()
 
             if vrt_ds is not None:
                 # Close the dataset
@@ -551,6 +603,7 @@ class ChipService:
         reference_filename: str,  # for out folder
         laplacian_ksize: dict[str, int] | None = None,
         out_dir_laplacian: Path | None = None,
+        laplacian_power: float = 1.0,
     ):
         """
         Generate KP chip using gdal translate for monitored and reference dataset in corresponding output dir.
@@ -590,6 +643,7 @@ class ChipService:
         )
         if ref_out_of_bounds or mon_out_of_bounds:
             logger.warning("Chip to close to image boundaries, skip it")
+            self._sprite_indices.append(-1)
             return
 
         ref_chip_path = out_dir / reference_filename / f"REF_{x0}_{y0}.TIFF"
@@ -601,8 +655,6 @@ class ChipService:
         dataset.FlushCache()
         ref_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
-        if ref_data is not None:
-            cv2.imwrite(str(ref_chip_path.with_suffix(".png")), _to_uint8(ref_data))
 
         mon_chip_path = out_dir / monitored_filename / f"MON_{x0}_{y0}.TIFF"
         options = gdal.TranslateOptions(
@@ -613,20 +665,38 @@ class ChipService:
         dataset.FlushCache()
         mon_data = dataset.GetRasterBand(1).ReadAsArray()
         dataset = None
-        if mon_data is not None:
-            cv2.imwrite(str(mon_chip_path.with_suffix(".png")), _to_uint8(mon_data))
+
+        if ref_data is None or mon_data is None:
+            self._sprite_indices.append(-1)
+            return
+
+        sprite_idx = len(self._ref_chips)
+        self._ref_chips.append(to_uint8(ref_data))
+        self._mon_chips.append(to_uint8(mon_data))
 
         if laplacian_ksize is not None and out_dir_laplacian is not None:
             ref_ksize = laplacian_ksize.get("ref", laplacian_ksize.get("mon", 1))
             mon_ksize = laplacian_ksize.get("mon", laplacian_ksize.get("ref", 1))
             self._write_laplacian_chip(
-                reference, x0_offset, y0_offset, ref_ksize,
+                reference,
+                x0_offset,
+                y0_offset,
+                ref_ksize,
                 out_dir_laplacian / reference_filename / f"REF_{x0}_{y0}.TIFF",
+                self._ref_lap_chips,
+                laplacian_power,
             )
             self._write_laplacian_chip(
-                monitored, x1_offset, y1_offset, mon_ksize,
+                monitored,
+                x1_offset,
+                y1_offset,
+                mon_ksize,
                 out_dir_laplacian / monitored_filename / f"MON_{x0}_{y0}.TIFF",
+                self._mon_lap_chips,
+                laplacian_power,
             )
+
+        self._sprite_indices.append(sprite_idx)
 
     def _write_laplacian_chip(
         self,
@@ -635,14 +705,37 @@ class ChipService:
         yoff: int,
         ksize: int,
         out_path: Path,
+        sprite_accumulator: list[np.ndarray],
+        power: float = 1.0,
     ):
         data = dataset.GetRasterBand(1).ReadAsArray(xoff, yoff, self._chip_size, self._chip_size)
         if data is None:
             return
-        lap = cv2.Laplacian(_to_uint8(data), cv2.CV_8U, ksize=ksize)
+        lap = laplacian_to_uint8(
+            cv2.Laplacian(to_uint8(data), cv2.CV_32F, ksize=ksize), power=power
+        )
         driver = gdal.GetDriverByName("GTiff")
         ds = driver.Create(str(out_path), self._chip_size, self._chip_size, 1, gdal.GDT_Byte)
+        # Georeferenced like the image chip, which gdal.Translate georeferences:
+        # without it gdalbuildvrt skipped every Laplacian chip and wrote empty VRTs
+        geo = dataset.GetGeoTransform()
+        x_origin, y_origin = gdal.ApplyGeoTransform(geo, xoff, yoff)
+        ds.SetGeoTransform((x_origin, geo[1], geo[2], y_origin, geo[4], geo[5]))
+        ds.SetProjection(dataset.GetProjection())
         ds.GetRasterBand(1).WriteArray(lap)
         ds.FlushCache()
         ds = None
-        cv2.imwrite(str(out_path.with_suffix(".png")), lap)
+        sprite_accumulator.append(lap)
+
+    def _write_sprite(self, sprite_path: Path, chips: list[np.ndarray]) -> None:
+        """Pack 57x57 uint8 chips into a single horizontal strip PNG.
+
+        The HTML report renders each chip as a CSS sprite: one container per
+        chip with background-image pointing at this file and background-position
+        offset by chip index * chip_size.
+        """
+        if not chips:
+            return
+        sprite = np.hstack(chips)
+        cv2.imwrite(str(sprite_path), sprite)
+        logger.info("Sprite written: %s (%d chips)", sprite_path, len(chips))

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -17,9 +17,19 @@
 # limitations under the License.
 """Modules for large offset matcher"""
 
-from skimage.registration import phase_cross_correlation
-
 from karios.core.image import GdalRasterImage
+
+
+def phase_cross_correlation(*args, **kwargs):
+    """skimage.registration.phase_cross_correlation, imported on first use.
+
+    skimage.registration costs 0.14 s at import and only the large shift
+    detection needs it.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from skimage.registration import phase_cross_correlation as correlate
+
+    return correlate(*args, **kwargs)
 
 
 class LargeOffsetMatcher:

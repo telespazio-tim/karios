@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -15,6 +15,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -71,6 +74,11 @@ def mean_profile(values: Series, positions: Series, bin_size: int = 20) -> MeanP
     return MeanProfile(groups_positions, mean_values, nb_pos, values_std, group["val"])
 
 
+# Plot texts carry file names, the title prefix and the DEM description: with
+# matplotlib's mathtext, a name holding an unbalanced "$" aborted the report
+_PLAIN_TEXT = {"text.parse_math": False}
+
+
 class AbstractPlot(ABC):
     """Abstract class for plot reports classes
     Concrete implementations should:
@@ -85,7 +93,8 @@ class AbstractPlot(ABC):
 
     def __init__(self, title_prefix: str | None, fig_size):
         self._title_prefix = title_prefix
-        self._figure = self._prepare_figure(fig_size)
+        with plt.rc_context(_PLAIN_TEXT):
+            self._figure = self._prepare_figure(fig_size)
 
     @property
     @abstractmethod
@@ -108,12 +117,13 @@ class AbstractPlot(ABC):
         Args:
             output_file (Path): destination file path
         """
-        self._plot()
-        self._figure.suptitle(
-            self._get_title(),
-            size="16",
-            ha="center",
-        )
+        with plt.rc_context(_PLAIN_TEXT):
+            self._plot()
+            self._figure.suptitle(
+                self._get_title(),
+                size="16",
+                ha="center",
+            )
 
-        plt.savefig(output_file)
+            plt.savefig(output_file)
         plt.close()

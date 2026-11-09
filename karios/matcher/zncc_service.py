@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -18,6 +18,7 @@
 """
 This module contains class service for ZNCC computation
 """
+
 import logging
 
 import numpy as np
@@ -25,6 +26,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage
+from karios.matcher.patch_scores import compute_patch_scores
 
 logger = logging.getLogger(__name__)
 
@@ -173,15 +175,7 @@ class ZNCCService:
             Series: zncc score series, with same index as the given dataframe, contains NaN at index not computed
         """
         logger.info("Compute ZNCC for %s points", len(df))
-
-        score = df.apply(self._compute_zncc, axis=1, monitored=monitored, reference=reference)
-
-        monitored.clear_cache()
-        reference.clear_cache()
-
-        logger.info("ZNCC computation finish")
-
-        return score
+        return compute_patch_scores(df, monitored, reference)["zncc_score"]
 
     def _compute_zncc(self, series: Series, monitored, reference):
 
@@ -204,14 +198,12 @@ class ZNCCService:
         x1_max = monitored.x_size - self._chip_margin
         y1_max = monitored.y_size - self._chip_margin
 
-        # verify top and left
+        # A point too close to either edge for a full chip is silently
+        # skipped (NaN) - normal for KP near the tile boundary, not worth a
+        # log line per point (see _compute_mi below, which does the same).
         if x0_offset < 0 or y0_offset < 0 or x1_offset < 0 or y1_offset < 0:
-            logger.warning("Point to close to image top or left boundaries, skip it")
             return np.nan
-
-        # verify bottom and right (need x + chip_margin + 1 <= x_size, i.e. x < x_max)
         if x0 >= x0_max or y0 >= y0_max or x1 >= x1_max or y1 >= y1_max:
-            logger.warning("Point to close to image bottom or right boundaries, skip it")
             return np.nan
 
         chip_ref = self._extract_chip(x0, y0, reference)
@@ -251,11 +243,7 @@ class ZNCCService:
             Series: NMI score series, same index as df, NaN where not computed
         """
         logger.info("Compute NMI for %s points", len(df))
-        score = df.apply(self._compute_mi, axis=1, monitored=monitored, reference=reference)
-        monitored.clear_cache()
-        reference.clear_cache()
-        logger.info("NMI computation finish")
-        return score
+        return compute_patch_scores(df, monitored, reference)["mi_score"]
 
     def _compute_mi(self, series: Series, monitored, reference):
         x0 = int(series["x0"])

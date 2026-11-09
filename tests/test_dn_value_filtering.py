@@ -34,7 +34,13 @@ class TestDNValueFiltering:
         """Test that no filtering occurs when no_values is None."""
         # Create test data
         points = pd.DataFrame(
-            {"x0": [1, 2, 3, 4, 5], "y0": [1, 2, 3, 4, 5], "dx": [0.1, 0.2, 0.3, 0.4, 0.5], "dy": [0.1, 0.2, 0.3, 0.4, 0.5], "score": [0.9, 0.8, 0.7, 0.6, 0.5]}
+            {
+                "x0": [1, 2, 3, 4, 5],
+                "y0": [1, 2, 3, 4, 5],
+                "dx": [0.1, 0.2, 0.3, 0.4, 0.5],
+                "dy": [0.1, 0.2, 0.3, 0.4, 0.5],
+                "score": [0.9, 0.8, 0.7, 0.6, 0.5],
+            }
         )
 
         # Create simple test images
@@ -85,7 +91,13 @@ class TestDNValueFiltering:
         """Test that no filtering occurs when no_values is empty list."""
         # Create test data
         points = pd.DataFrame(
-            {"x0": [1, 2, 3, 4, 5], "y0": [1, 2, 3, 4, 5], "dx": [0.1, 0.2, 0.3, 0.4, 0.5], "dy": [0.1, 0.2, 0.3, 0.4, 0.5], "score": [0.9, 0.8, 0.7, 0.6, 0.5]}
+            {
+                "x0": [1, 2, 3, 4, 5],
+                "y0": [1, 2, 3, 4, 5],
+                "dx": [0.1, 0.2, 0.3, 0.4, 0.5],
+                "dy": [0.1, 0.2, 0.3, 0.4, 0.5],
+                "score": [0.9, 0.8, 0.7, 0.6, 0.5],
+            }
         )
 
         # Create simple test images
@@ -148,9 +160,9 @@ class TestDNValueFiltering:
         # Create test images with some zero values
         ref_array = np.zeros((10, 10), dtype=np.uint8)
         ref_array[1, 1] = 100  # Non-zero
-        ref_array[2, 2] = 0    # Zero - should be filtered
+        ref_array[2, 2] = 0  # Zero - should be filtered
         ref_array[3, 3] = 150  # Non-zero
-        ref_array[4, 4] = 0    # Zero - should be filtered
+        ref_array[4, 4] = 0  # Zero - should be filtered
 
         mon_array = np.ones((10, 10), dtype=np.uint8) * 50  # All non-zero
 
@@ -210,11 +222,11 @@ class TestDNValueFiltering:
 
         # Create test images with different excluded values
         ref_array = np.ones((10, 10), dtype=np.uint8) * 50
-        ref_array[1, 1] = 0    # Should be filtered (no_value=0)
+        ref_array[1, 1] = 0  # Should be filtered (no_value=0)
         ref_array[2, 2] = 100  # Should be filtered (no_value=100)
         ref_array[3, 3] = 150  # Keep
         ref_array[4, 4] = 255  # Should be filtered (no_value=255)
-        ref_array[5, 5] = 75   # Keep
+        ref_array[5, 5] = 75  # Keep
 
         mon_array = np.ones((10, 10), dtype=np.uint8) * 50  # All same value
 
@@ -277,9 +289,9 @@ class TestDNValueFiltering:
 
         # Monitored image - some zeros
         mon_array = np.ones((10, 10), dtype=np.uint8) * 50
-        mon_array[1, 1] = 0   # Should be filtered
+        mon_array[1, 1] = 0  # Should be filtered
         mon_array[2, 2] = 50  # Keep
-        mon_array[3, 3] = 0   # Should be filtered
+        mon_array[3, 3] = 0  # Should be filtered
         mon_array[4, 4] = 50  # Keep
 
         ref_img_path = tmp_path / "ref.tif"
@@ -338,17 +350,17 @@ class TestDNValueFiltering:
 
         # Reference image - some zeros
         ref_array = np.ones((10, 10), dtype=np.uint8) * 100
-        ref_array[1, 1] = 0   # Should be filtered (ref=0)
-        ref_array[2, 2] = 100 # Keep
-        ref_array[3, 3] = 100 # Keep
-        ref_array[4, 4] = 100 # Keep
+        ref_array[1, 1] = 0  # Should be filtered (ref=0)
+        ref_array[2, 2] = 100  # Keep
+        ref_array[3, 3] = 100  # Keep
+        ref_array[4, 4] = 100  # Keep
 
         # Monitored image - some zeros at different positions
         mon_array = np.ones((10, 10), dtype=np.uint8) * 50
         mon_array[1, 1] = 50  # Keep (ref is 0, but we test combined)
-        mon_array[2, 2] = 0   # Should be filtered (mon=0)
+        mon_array[2, 2] = 0  # Should be filtered (mon=0)
         mon_array[3, 3] = 50  # Keep
-        mon_array[4, 4] = 0   # Should be filtered (mon=0)
+        mon_array[4, 4] = 0  # Should be filtered (mon=0)
 
         ref_img_path = tmp_path / "ref.tif"
         mon_img_path = tmp_path / "mon.tif"

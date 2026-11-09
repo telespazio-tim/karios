@@ -42,7 +42,9 @@ class TestVectorMaskRasterization:
         driver = gdal.GetDriverByName("GTiff")
         ref_ds = driver.Create(str(ref_path), 100, 100, 1, gdal.GDT_Byte)
         ref_ds.SetGeoTransform([0, 1, 0, 100, 0, -1])
-        ref_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        ref_ds.SetProjection(
+            'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        )
         ref_ds.GetRasterBand(1).WriteArray(ref_array)
         ref_ds = None
 
@@ -86,7 +88,9 @@ class TestVectorMaskRasterization:
         driver = gdal.GetDriverByName("GTiff")
         ref_ds = driver.Create(str(ref_path), 100, 100, 1, gdal.GDT_Byte)
         ref_ds.SetGeoTransform([0, 1, 0, 100, 0, -1])
-        ref_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        ref_ds.SetProjection(
+            'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        )
         ref_ds.GetRasterBand(1).WriteArray(ref_array)
         ref_ds = None
 
@@ -103,7 +107,7 @@ class TestVectorMaskRasterization:
         # Add a polygon feature
         feature_def = layer.GetLayerDefn()
         feature = ogr.Feature(feature_def)
-        
+
         # Create polygon in image coordinates
         ring = ogr.Geometry(ogr.wkbLinearRing)
         ring.AddPoint(25, 75)
@@ -111,7 +115,7 @@ class TestVectorMaskRasterization:
         ring.AddPoint(75, 25)
         ring.AddPoint(25, 25)
         ring.AddPoint(25, 75)
-        
+
         poly = ogr.Geometry(ogr.wkbPolygon)
         poly.AddGeometry(ring)
         feature.SetGeometry(poly)
@@ -138,7 +142,9 @@ class TestVectorMaskRasterization:
         driver = gdal.GetDriverByName("GTiff")
         ref_ds = driver.Create(str(ref_path), 10, 10, 1, gdal.GDT_Byte)
         ref_ds.SetGeoTransform([0, 1, 0, 10, 0, -1])
-        ref_ds.SetProjection('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
+        ref_ds.SetProjection(
+            'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
+        )
         ref_ds.GetRasterBand(1).WriteArray(ref_array)
         ref_ds = None
 
@@ -164,13 +170,17 @@ class TestVectorMaskIntegration:
         driver = gdal.GetDriverByName("GTiff")
         ref_ds = driver.Create(str(ref_path), 50, 50, 1, gdal.GDT_Byte)
         ref_ds.SetGeoTransform([0, 1, 0, 50, 0, -1])
-        ref_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        ref_ds.SetProjection(
+            'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        )
         ref_ds.GetRasterBand(1).WriteArray(ref_array)
         ref_ds = None
 
         mon_ds = driver.Create(str(mon_path), 50, 50, 1, gdal.GDT_Byte)
         mon_ds.SetGeoTransform([0, 1, 0, 50, 0, -1])
-        mon_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        mon_ds.SetProjection(
+            'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        )
         mon_ds.GetRasterBand(1).WriteArray(mon_array)
         mon_ds = None
 
@@ -220,6 +230,8 @@ class TestVectorMaskIntegration:
         assert mask.y_size == 50
         # Mask array should exist (rasterization may not produce features due to coordinate issues)
         assert mask.array is not None
+        # Written with the other outputs, not left in a temporary directory
+        assert mask.filepath == str(tmp_path / "results" / "vector_mask.tif")
 
     def test_api_without_vector_mask(self, tmp_path):
         """Test that API works normally without vector mask."""
@@ -233,13 +245,17 @@ class TestVectorMaskIntegration:
         driver = gdal.GetDriverByName("GTiff")
         ref_ds = driver.Create(str(ref_path), 50, 50, 1, gdal.GDT_Byte)
         ref_ds.SetGeoTransform([500000, 1, 0, 4600000, 0, -1])
-        ref_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        ref_ds.SetProjection(
+            'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        )
         ref_ds.GetRasterBand(1).WriteArray(ref_array)
         ref_ds = None
 
         mon_ds = driver.Create(str(mon_path), 50, 50, 1, gdal.GDT_Byte)
         mon_ds.SetGeoTransform([500000, 1, 0, 4600000, 0, -1])
-        mon_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        mon_ds.SetProjection(
+            'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        )
         mon_ds.GetRasterBand(1).WriteArray(mon_array)
         mon_ds = None
 
@@ -275,7 +291,8 @@ class TestVectorMaskIntegration:
         driver = gdal.GetDriverByName("GTiff")
         ref_ds = driver.Create(str(ref_path), 50, 50, 1, gdal.GDT_Byte)
         ref_ds.SetGeoTransform([500000, 1, 0, 4600000, 0, -1])
-        ref_ds.SetProjection('PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]')
+        ref_ds_projection = 'PROJCS["WGS 84 / UTM zone 31N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",3],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        ref_ds.SetProjection(ref_ds_projection)
         ref_ds.GetRasterBand(1).WriteArray(ref_array)
         ref_ds = None
 
@@ -284,12 +301,23 @@ class TestVectorMaskIntegration:
         # Create vector mask
         geojson_data = {
             "type": "FeatureCollection",
+            # these coordinates are UTM 31N, not lon/lat; without this the GeoJSON
+            # driver assumes EPSG:4326 and PROJ rejects the latitude
+            "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::32631"}},
             "features": [
                 {
                     "type": "Feature",
                     "geometry": {
                         "type": "Polygon",
-                        "coordinates": [[[500005, 4599995], [500045, 4599995], [500045, 4599955], [500005, 4599955], [500005, 4599995]]],
+                        "coordinates": [
+                            [
+                                [500005, 4599995],
+                                [500045, 4599995],
+                                [500045, 4599955],
+                                [500005, 4599955],
+                                [500005, 4599995],
+                            ]
+                        ],
                     },
                     "properties": {},
                 }
@@ -304,6 +332,8 @@ class TestVectorMaskIntegration:
         raster_mask_path = tmp_path / "mask.tif"
         mask_ds = driver.Create(str(raster_mask_path), 50, 50, 1, gdal.GDT_Byte)
         mask_ds.SetGeoTransform([500000, 1, 0, 4600000, 0, -1])
+        # the mask must carry a CRS, or the compatibility check has nothing to compare
+        mask_ds.SetProjection(ref_ds_projection)
         mask_ds.GetRasterBand(1).WriteArray(np.ones((50, 50), dtype=np.uint8))
         mask_ds = None
 
@@ -327,6 +357,7 @@ class TestVectorMaskIntegration:
 
         # Vector mask should be loaded (not the raster mask)
         assert mask is not None
+        assert mask.filepath == str(tmp_path / "results" / "combined_mask.tif")
 
 
 if __name__ == "__main__":

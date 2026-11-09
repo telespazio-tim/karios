@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -21,6 +21,9 @@ Represents the configuration of the application.
 
 Contains inputs, outputs and processings parameters.
 """
+
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -48,6 +51,13 @@ class KLTConfiguration:
     laplacian_kernel_size: Union[int, Dict[str, int], Literal["auto"]]
     outliers_filtering: bool
     laplacian_invert_polarity: Union[bool, Literal["auto"]] = False
+    maxLevel: int = 1
+    """Pyramid depth for `cv2.calcOpticalFlowPyrLK`. Deeper pyramids capture
+    larger shifts but erode matching inward from the image edges, because the
+    tracking window covers 2**maxLevel times more of the scene at the coarsest
+    level. Raise it only when the pair is measurably misregistered; for an
+    already-aligned pair a deeper pyramid only costs edge coverage. Prefer
+    `--enable-coarse-to-fine`, which gets the capture range without the erosion."""
 
 
 @dataclass
@@ -91,6 +101,16 @@ class CEPlotConfiguration:
 
 
 @dataclass
+class CoveragePlotConfiguration:
+    """Coverage Plot module configuration class"""
+
+    fig_size: int = 12
+    grid_size: int = 20
+    quality_colormap: str = "RdYlGn"
+    zncc_threshold: float = 0.8
+
+
+@dataclass
 class AccuracyAnalysisConfiguration:
     """Accuracy analysis module configuration class"""
 
@@ -104,6 +124,17 @@ class ShiftConfiguration:
     bias_correction_min_threshold: int
 
 
+@dataclass
+class ImageDownsamplingConfiguration:
+    """Image downsampling configuration.
+
+    When `ratio` > 1, monitored, reference and mask rasters are reduced by
+    integer block_reduce(np.mean) before matching. ratio=1 disables it.
+    """
+
+    ratio: int = 1
+
+
 class ProcessingConfiguration:
     """Application configuration."""
 
@@ -112,10 +143,12 @@ class ProcessingConfiguration:
         self.klt_configuration: Optional[KLTConfiguration] = None
         self.shift_image_processing_configuration: Optional[ShiftConfiguration] = None
         self.accuracy_analysis_configuration: Optional[AccuracyAnalysisConfiguration] = None
+        self.image_downsampling_configuration: Optional[ImageDownsamplingConfiguration] = None
         self.overview_plot_configuration: Optional[OverviewPlotConfiguration] = None
         self.shift_plot_configuration: Optional[ShiftPlotConfiguration] = None
         self.dem_plot_configuration: Optional[DemPlotConfiguration] = None
         self.ce_plot_configuration: Optional[CEPlotConfiguration] = None
+        self.coverage_plot_configuration: Optional[CoveragePlotConfiguration] = None
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> "ProcessingConfiguration":
@@ -171,6 +204,12 @@ class ProcessingConfiguration:
         self.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
             **config_dict["processing_configuration"]["accuracy_analysis"]
         )
+        downsampling_dict = config_dict["processing_configuration"].get(
+            "image_downsampling", {}
+        )
+        self.image_downsampling_configuration = ImageDownsamplingConfiguration(
+            **downsampling_dict
+        )
         self.overview_plot_configuration = OverviewPlotConfiguration(
             **config_dict["plot_configuration"]["overview"]
         )
@@ -181,6 +220,10 @@ class ProcessingConfiguration:
             **config_dict["plot_configuration"]["dem"]
         )
         self.ce_plot_configuration = CEPlotConfiguration(**config_dict["plot_configuration"]["ce"])
+        # Optional: absent from older configuration files, defaults apply.
+        self.coverage_plot_configuration = CoveragePlotConfiguration(
+            **config_dict["plot_configuration"].get("coverage", {})
+        )
 
     def _load_configuration_file(self, filepath: str) -> dict[str, Any]:
         """Check that the provided configuration file exists and is valid.

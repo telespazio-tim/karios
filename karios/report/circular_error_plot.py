@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -17,6 +17,8 @@
 # limitations under the License.
 """circular error plot module"""
 
+from __future__ import annotations
+
 import logging
 
 import numpy as np
@@ -24,7 +26,6 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy import stats as sp_stats
 from scipy.interpolate import interpn
 
 from karios.accuracy_analysis.accuracy_statistics import GeometricStat
@@ -183,8 +184,6 @@ class CircularErrorPlot(AbstractPlot):
         # pas = 0.1
 
         v_max = np.max([np.abs(np.max(vect)), np.abs(np.min(vect))])
-        logger.info("value %s", str(2 * v_max))
-        # number_of_bin = int(((2 * v + 1) / pas))
         logger.info(" pixel size                      : %s %s", self._img_res, self._short_unit)
         logger.info(
             " Bin range (%s)                   : [-%s , %s]",
@@ -200,7 +199,7 @@ class CircularErrorPlot(AbstractPlot):
         # and other programs for its speed and simplicity.
 
         # bins , return the bins edge, (length(hist)+1)
-        (hist, bins) = np.histogram(
+        hist, bins = np.histogram(
             vect * self._img_res,
             bins="sqrt",
             range=(-v_max * self._img_res, v_max * self._img_res),
@@ -213,7 +212,9 @@ class CircularErrorPlot(AbstractPlot):
         out_str_list.append(f"Total Pixels: {str(npixtotal)}")
         out_str_list.append(f"Nbr of bins : {str(len(hist))}")
 
-        # Normal Test :
+        # Normal Test, scipy.stats imported here: 0.6 s at startup otherwise
+        from scipy import stats as sp_stats  # pylint: disable=import-outside-toplevel
+
         k2, p = sp_stats.normaltest(hist)
         alpha = 1e-3
         if p < alpha:  # null hypothesis: hist comes from a normal distribution
@@ -303,7 +304,7 @@ class CircularErrorPlot(AbstractPlot):
         return scatter
 
     def _hist_vector(self, axes: Axes, vect, direction, orientation="vertical"):
-        (hist, bins) = self._compute_histogram(vect, direction)
+        hist, bins = self._compute_histogram(vect, direction)
 
         # starting from bin edge compute the center of each bin
         # center = (bins[:-1] + bins[1:]) / 2

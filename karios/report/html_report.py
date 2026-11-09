@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -17,11 +17,18 @@
 # limitations under the License.
 """Module to generate HTML reports for KARIOS results."""
 
+from __future__ import annotations
+
+import base64
 import datetime
+import html
 import logging
-import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
+from urllib.parse import quote
+
+from karios.accuracy_analysis.quality_control import percent
+from karios.report.chip_service import chip_dir_names
 
 if TYPE_CHECKING:
     from karios.api.config import RuntimeConfiguration
@@ -29,6 +36,83 @@ if TYPE_CHECKING:
     from karios.core.configuration import ProcessingConfiguration
 
 logger = logging.getLogger(__name__)
+
+
+def _text(value) -> str:
+    """`value` escaped for HTML text and quoted attributes.
+
+    File names, the title prefix and configuration values come from the user:
+    a file named `<svg onload=...>.tif` would otherwise run in the report.
+    """
+    return html.escape(str(value), quote=True)
+
+
+def _url(*segments) -> str:
+    """Relative URL of path `segments`, each percent-encoded, escaped for an attribute."""
+    return html.escape("/".join(quote(str(segment)) for segment in segments), quote=True)
+
+# Branding assets shipped alongside this module, inlined into the report pages
+# as data URIs so each page stands on its own without sidecar files.
+_ASSET_MIME_TYPES = {
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
+
+_BANNER_ASSET = "karios_index_banner.webp"
+_FOOTER_LOGO_ASSET = "footer_logo.svg"
+
+# Placeholder in CSS_STYLES, substituted with the footer logo data URI. CSS_STYLES
+# is passed as a format *value*, so it cannot itself carry a `{}` format field.
+_FOOTER_LOGO_URI_TOKEN = "__FOOTER_LOGO_URI__"
+_FOOTER_LOGO_CSS_DECLARATION = f"background-image: url('{_FOOTER_LOGO_URI_TOKEN}');\n"
+
+
+def _asset_data_uri(asset_name: str) -> str | None:
+    """Encode a branding asset shipped with this module as a base64 data URI.
+
+    Args:
+        asset_name: file name of the asset, relative to this module directory.
+
+    Returns:
+        str|None: the `data:` URI, None if the asset is missing or unsupported.
+            Never raises: a report is still worth generating without branding.
+    """
+    asset_path = Path(__file__).parent / asset_name
+
+    mime_type = _ASSET_MIME_TYPES.get(asset_path.suffix.lower())
+    if mime_type is None:
+        logger.warning("Cannot inline report asset of unknown type %s", asset_path)
+        return None
+
+    try:
+        asset_bytes = asset_path.read_bytes()
+    except OSError as error:
+        logger.warning("Report asset %s not available: %s", asset_path, error)
+        return None
+
+    return f"data:{mime_type};base64,{base64.b64encode(asset_bytes).decode('ascii')}"
+
+
+def _build_css_styles() -> str:
+    """Return the report CSS with the footer logo inlined as a data URI."""
+    footer_logo_uri = _asset_data_uri(_FOOTER_LOGO_ASSET)
+    if footer_logo_uri is None:
+        # Drop the declaration rather than emit an empty url(), which browsers
+        # resolve against the page itself.
+        return CSS_STYLES.replace(_FOOTER_LOGO_CSS_DECLARATION, "")
+
+    return CSS_STYLES.replace(_FOOTER_LOGO_URI_TOKEN, footer_logo_uri)
+
+
+def _build_header_banner_html() -> str:
+    """Return the header banner `img` tag, empty if the banner is unavailable."""
+    banner_uri = _asset_data_uri(_BANNER_ASSET)
+    if banner_uri is None:
+        return ""
+
+    return f'<img src="{banner_uri}" alt="KARIOS Banner" class="header-banner">'
+
 
 CSS_STYLES = """
         body {
@@ -109,6 +193,22 @@ CSS_STYLES = """
             border-radius: 6px;
             border-left: 5px solid #2c3e50;
         }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #fff;
+            background: #6c757d;
+        }
+        .badge-reliable { background: #2e7d32; }
+        .badge-doubtful { background: #b26a00; }
+        .badge-unreliable { background: #c62828; }
+        .quality-reasons {
+            margin: 0;
+            padding-left: 20px;
+        }
         .footer {
             text-align: center;
             font-size: 0.9em;
@@ -116,7 +216,7 @@ CSS_STYLES = """
             margin-top: 40px;
             padding: 80px 20px;
             border-top: 1px solid #ddd;
-            background-image: url('footer_logo.svg');
+            background-image: url('__FOOTER_LOGO_URI__');
             background-repeat: no-repeat;
             background-position: center;
             background-size: 200px;
@@ -206,6 +306,15 @@ CSS_STYLES = """
             display: block;
             border: 1px solid #ccc;
         }
+        .chip-sprite {
+            width: 114px;
+            height: 114px;
+            display: inline-block;
+            border: 1px solid #ccc;
+            background-repeat: no-repeat;
+            background-size: auto 114px;
+            image-rendering: pixelated;
+        }
         .sort-bar {
             display: flex;
             align-items: center;
@@ -260,13 +369,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
     <header>
-        <img src="karios_index_banner.webp" alt="KARIOS Banner" class="header-banner">
+        {header_banner_html}
     </header>
 
     <nav class="nav">
-        <a href="report.html" class="active">Summary</a>
-        {products_link}
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -303,6 +410,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <tr><th>CE95</th><td>{ce95}</td></tr>
                 </table>
             </div>
+            {quality_card_html}
         </div>
     </div>
 
@@ -327,6 +435,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <img src="{ce_plot}" alt="CE Plot">
         </div>
         {dem_plots_html}
+        {coverage_plot_html}
     </div>
 
     <div class="footer">
@@ -352,13 +461,11 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
     <header>
-        <img src="karios_index_banner.webp" alt="KARIOS Banner" class="header-banner">
+        {header_banner_html}
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        <a href="products.html" class="active">Products</a>
-        {chips_link}
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -389,6 +496,49 @@ PRODUCTS_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+# Page showing one comparison image of both inputs: the mosaic or the overlay
+IMAGE_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARIOS {page_title} - {title_prefix}</title>
+    <style>
+        {css_styles}
+    </style>
+</head>
+<body>
+    <header>
+        {header_banner_html}
+    </header>
+
+    <nav class="nav">
+        {nav_links}
+    </nav>
+
+    <div class="section">
+        <h1>{page_title}</h1>
+        <p>{description} Click the image to open it at native resolution.</p>
+        <table>
+            <tr><th>Monitored</th><td>{monitored_image}</td></tr>
+            <tr><th>Reference</th><td>{reference_image}</td></tr>
+        </table>
+        <div class="image-container">
+            <a href="{image}" target="_blank"><img src="{image}" alt="{page_title}"></a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>KARIOS - KLT-based Algorithm for Registration of Images from Observing Systems</p>
+        <div class="links">
+            <a href="https://telespazio-tim.github.io/karios" target="_blank">Website</a> |
+            <a href="https://github.com/telespazio-tim/karios" target="_blank">GitHub Repository</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
 CHIPS_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -401,13 +551,11 @@ CHIPS_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
     <header>
-        <img src="karios_index_banner.webp" alt="KARIOS Banner" class="header-banner">
+        {header_banner_html}
     </header>
 
     <nav class="nav">
-        <a href="report.html">Summary</a>
-        {products_link}
-        <a href="chips.html" class="active">Chips</a>
+        {nav_links}
     </nav>
 
     <div class="section">
@@ -520,13 +668,46 @@ class HtmlReportGenerator:
             return ", ".join(f"{k}={v}" for k, v in value.items())
         return str(value)
 
+    def _build_quality_card_html(self) -> str:
+        """Card with the matching confidence verdict, its indicators and why it is not full."""
+        quality = getattr(self.accuracy_analysis, "quality", None)
+        if quality is None:
+            return (
+                '<div class="stats-card"><h3>Matching Confidence</h3>'
+                '<span class="badge">not assessed</span></div>'
+            )
+
+        zncc = "n/a" if quality.median_zncc is None else f"{quality.median_zncc:.2f}"
+        detected = "n/a" if quality.detected_points is None else str(quality.detected_points)
+        reasons = "".join(f"<li>{_text(reason)}</li>" for reason in quality.reasons)
+        return f"""<div class="stats-card">
+                <h3>Matching Confidence</h3>
+                <p><span class="badge badge-{_text(quality.verdict)}">{_text(quality.verdict)}</span>
+                   confidence {percent(quality.confidence)}</p>
+                <table>
+                    <tr><th>Median ZNCC</th><td>{zncc}</td></tr>
+                    <tr><th>Coherent key points</th><td>{percent(quality.coherent_fraction)}
+                        (within 1 px of neighbours)</td></tr>
+                    <tr><th>Tracking ratio</th><td>{percent(quality.tracking_ratio, 1)}
+                        ({quality.tracked_points} / {detected} corners)</td></tr>
+                    <tr><th>Confident key points</th><td>{quality.confident_points} points</td></tr>
+                </table>
+                {f'<ul class="quality-reasons">{reasons}</ul>' if reasons else ""}
+            </div>"""
+    # Fields already shown, resolved, in the summary rows above (e.g. "auto"
+    # is replaced there by the kernel size/polarity actually selected) - the
+    # raw per-section dump below skips them so the same field doesn't appear
+    # twice under two different names with two different values.
+    _KLT_FIELDS_SHOWN_IN_SUMMARY = frozenset({"laplacian_kernel_size", "laplacian_invert_polarity"})
+
     def _build_config_rows_html(self) -> str:
         """Build the full set of <tr> rows for the collapsible Configuration table.
 
         The first rows are the high-level summary (pixel size, large-shift, the
         resolved Laplacian kernel size and polarity, title prefix). Below them,
-        every dataclass field from each section of processing_configuration is
-        emitted as its own row, grouped by section header.
+        every remaining dataclass field from each section of
+        processing_configuration is emitted as its own row, grouped by section
+        header - except the KLT fields already covered, resolved, above.
         """
         import dataclasses
 
@@ -534,22 +715,25 @@ class HtmlReportGenerator:
 
         # Runtime / resolved summary
         pixel_size_label = (
-            f"{self.runtime_config.pixel_size} m"
-            if self.runtime_config.pixel_size
-            else "Auto"
+            f"{self.runtime_config.pixel_size} m" if self.runtime_config.pixel_size else "Auto"
         )
         large_shift_label = (
             "Enabled" if self.runtime_config.enable_large_shift_detection else "Disabled"
         )
+        coarse_to_fine_label = (
+            "Enabled" if self.runtime_config.enable_coarse_to_fine else "Disabled"
+        )
         summary_rows = [
             ("Pixel Size", pixel_size_label),
             ("Large Shift Detection", large_shift_label),
+            ("Coarse-to-Fine Matching", coarse_to_fine_label),
             ("Laplacian Kernel Size", self.laplacian_ksize_label),
             ("Laplacian Polarity", self.laplacian_polarity_label),
+            ("Laplacian Power", f"{self.runtime_config.laplacian_power:.2f}"),
             ("Title Prefix", self.runtime_config.title_prefix or "None"),
         ]
         for label, value in summary_rows:
-            rows.append(f"<tr><th>{label}</th><td>{value}</td></tr>")
+            rows.append(f"<tr><th>{_text(label)}</th><td>{_text(value)}</td></tr>")
 
         if self.processing_config is None:
             return "\n".join(rows)
@@ -566,11 +750,13 @@ class HtmlReportGenerator:
             if section is None:
                 continue
             rows.append(
-                f'<tr class="config-section-header"><th colspan="2">{header}</th></tr>'
+                f'<tr class="config-section-header"><th colspan="2">{_text(header)}</th></tr>'
             )
             for field in dataclasses.fields(section):
+                if header == "KLT Matching" and field.name in self._KLT_FIELDS_SHOWN_IN_SUMMARY:
+                    continue
                 value = self._format_config_value(getattr(section, field.name))
-                rows.append(f"<tr><th>{field.name}</th><td>{value}</td></tr>")
+                rows.append(f"<tr><th>{_text(field.name)}</th><td>{_text(value)}</td></tr>")
 
         return "\n                        ".join(rows)
 
@@ -609,50 +795,65 @@ class HtmlReportGenerator:
         )
 
     def _build_combined_chips_html(self, ref_name: str, mon_name: str) -> str:
-        """Build chip grid: each card shows raw + laplacian rows with crosshairs and stats."""
+        """Build chip grid backed by sprite PNGs.
+
+        All raw chips for the reference image live in one sprite
+        (chips/<ref_name>/sprite.png) and likewise for the monitored image.
+        Each card here positions a fixed-size <div> over the right slice via
+        background-image / background-position. Crosshair SVGs sit on top.
+        """
         import math
 
-        ref_raw_dir = self.output_dir / "chips" / ref_name
-        if not ref_raw_dir.exists():
+        chips_dir = self.output_dir / "chips"
+        if not chips_dir.exists():
             return "<p>No chips found.</p>"
 
-        ref_pngs = sorted(ref_raw_dir.glob("REF_*.png"))
-        if not ref_pngs:
-            return "<p>No chip images found.</p>"
+        ref_sprite_path = chips_dir / ref_name / "sprite.png"
+        mon_sprite_path = chips_dir / mon_name / "sprite.png"
+        if not ref_sprite_path.exists() or not mon_sprite_path.exists():
+            return "<p>No chip sprites found.</p>"
 
-        chips_data = self._load_chips_data()
-        has_laplacian = (self.output_dir / "chips_laplacian").exists()
+        rows = list(self._load_chips_data().values())
+        rows = [r for r in rows if int(r.get("sprite_idx", -1)) >= 0]
+        if not rows:
+            return "<p>No chip images found.</p>"
+        rows.sort(key=lambda r: int(r["sprite_idx"]))
+
+        has_laplacian = (self.output_dir / "chips_laplacian" / ref_name / "sprite.png").exists()
 
         CHIP_DISPLAY = 114
         CHIP_SIZE = 57
         SCALE = CHIP_DISPLAY / CHIP_SIZE  # 2.0
 
-        def img_col(src: str | None, sublabel: str, ch_svg: str) -> str:
-            if src:
-                return (
-                    f'<div class="chip-col">'
-                    f'<div class="chip-sublabel">{sublabel}</div>'
-                    f'<div class="chip-img-wrap"><img src="{src}" alt="{sublabel}">{ch_svg}</div>'
-                    f"</div>"
-                )
+        ref_sprite_src = f"chips/{ref_name}/sprite.png"
+        mon_sprite_src = f"chips/{mon_name}/sprite.png"
+        ref_lap_sprite_src = f"chips_laplacian/{ref_name}/sprite.png"
+        mon_lap_sprite_src = f"chips_laplacian/{mon_name}/sprite.png"
+
+        def sprite_col(src: str, sprite_idx: int, sublabel: str, ch_svg: str) -> str:
+            offset = -sprite_idx * CHIP_DISPLAY
+            style = (
+                f"background-image:url({src});"
+                f"background-position:{offset}px 0px;"
+            )
             return (
                 f'<div class="chip-col">'
                 f'<div class="chip-sublabel">{sublabel}</div>'
-                f'<div style="width:114px;height:114px;border:1px solid #eee;display:inline-block;background:#f0f0f0;"></div>'
+                f'<div class="chip-img-wrap">'
+                f'<div class="chip-sprite" style="{style}"></div>'
+                f"{ch_svg}"
+                f"</div>"
                 f"</div>"
             )
 
         items = []
-        for i, ref_png in enumerate(ref_pngs):
-            parts = ref_png.stem.split("_")
-            if len(parts) < 3:
-                continue
-            x0, y0 = int(parts[1]), int(parts[2])
+        for i, row in enumerate(rows):
+            x0, y0 = int(row["x0"]), int(row["y0"])
+            sprite_idx = int(row["sprite_idx"])
+            dx = float(row.get("dx", 0.0) or 0.0)
+            dy = float(row.get("dy", 0.0) or 0.0)
 
-            chip_data = chips_data.get((x0, y0))
-            dx = float(chip_data["dx"]) if chip_data is not None else 0.0
-            dy = float(chip_data["dy"]) if chip_data is not None else 0.0
-            zncc_raw = chip_data.get("zncc_score") if chip_data is not None else None
+            zncc_raw = row.get("zncc_score")
             try:
                 zncc = float(zncc_raw)
                 zncc_str = f"{zncc:.3f}" if not math.isnan(zncc) else "N/A"
@@ -661,7 +862,7 @@ class HtmlReportGenerator:
                 zncc_str = "N/A"
                 score_val = "nan"
 
-            mi_raw = chip_data.get("mi_score") if chip_data is not None else None
+            mi_raw = row.get("mi_score")
             try:
                 mi = float(mi_raw)
                 mi_str = f"{mi:.3f}" if not math.isnan(mi) else "N/A"
@@ -672,7 +873,6 @@ class HtmlReportGenerator:
 
             dist = dx**2 + dy**2
 
-            # Crosshair positions in display coords
             ref_cx = CHIP_SIZE / 2 * SCALE  # 57.0
             ref_cy = CHIP_SIZE / 2 * SCALE  # 57.0
             mon_cx = max(2.0, min(CHIP_DISPLAY - 2.0, ref_cx - dx * SCALE))
@@ -681,47 +881,19 @@ class HtmlReportGenerator:
             ref_ch = self._make_crosshair_svg(ref_cx, ref_cy, CHIP_DISPLAY)
             mon_ch = self._make_crosshair_svg(mon_cx, mon_cy, CHIP_DISPLAY)
 
-            ref_raw_src = f"chips/{ref_name}/{ref_png.name}"
-            mon_raw_path = self.output_dir / "chips" / mon_name / f"MON_{x0}_{y0}.png"
-            mon_raw_src = (
-                f"chips/{mon_name}/MON_{x0}_{y0}.png" if mon_raw_path.exists() else None
-            )
-
             raw_row = (
                 f'<div class="chip-row">'
-                f"{img_col(ref_raw_src, 'Ref', ref_ch)}"
-                f"{img_col(mon_raw_src, 'Mon', mon_ch)}"
+                f"{sprite_col(ref_sprite_src, sprite_idx, 'Ref', ref_ch)}"
+                f"{sprite_col(mon_sprite_src, sprite_idx, 'Mon', mon_ch)}"
                 f"</div>"
             )
 
             lap_row = ""
             if has_laplacian:
-                ref_lap_path = (
-                    self.output_dir
-                    / "chips_laplacian"
-                    / ref_name
-                    / f"REF_{x0}_{y0}.png"
-                )
-                mon_lap_path = (
-                    self.output_dir
-                    / "chips_laplacian"
-                    / mon_name
-                    / f"MON_{x0}_{y0}.png"
-                )
-                ref_lap_src = (
-                    f"chips_laplacian/{ref_name}/REF_{x0}_{y0}.png"
-                    if ref_lap_path.exists()
-                    else None
-                )
-                mon_lap_src = (
-                    f"chips_laplacian/{mon_name}/MON_{x0}_{y0}.png"
-                    if mon_lap_path.exists()
-                    else None
-                )
                 lap_row = (
                     f'<div class="chip-row">'
-                    f"{img_col(ref_lap_src, 'Ref Laplacian', ref_ch)}"
-                    f"{img_col(mon_lap_src, 'Mon Laplacian', mon_ch)}"
+                    f"{sprite_col(ref_lap_sprite_src, sprite_idx, 'Ref Laplacian', ref_ch)}"
+                    f"{sprite_col(mon_lap_sprite_src, sprite_idx, 'Mon Laplacian', mon_ch)}"
                     f"</div>"
                 )
 
@@ -741,32 +913,37 @@ class HtmlReportGenerator:
         grid = f'<div class="chips-grid">{"".join(items)}</div>'
         return _SORT_BAR_HTML + grid + _SORT_SCRIPT
 
-    def _copy_assets(self):
-        """Copy required assets to output directory."""
-        banner_src = Path(__file__).parent / "karios_index_banner.webp"
-        if banner_src.exists():
-            shutil.copy(banner_src, self.output_dir / "karios_index_banner.webp")
-        else:
-            logger.warning("Banner image not found at %s", banner_src)
-
-        footer_logo_src = Path(__file__).parent / "footer_logo.svg"
-        if footer_logo_src.exists():
-            shutil.copy(footer_logo_src, self.output_dir / "footer_logo.svg")
-        else:
-            logger.warning("Footer logo image not found at %s", footer_logo_src)
-
     def generate(self) -> Path:
         """Generate the HTML report file(s)."""
         logger.info("Generating HTML report")
 
-        self._copy_assets()
+        css_styles = _build_css_styles()
+        header_banner_html = _build_header_banner_html()
 
         # Check for products and chips to build navigation
         has_products = len(self.report_paths.products) > 0
         has_chips = self.runtime_config.generate_kp_chips
+        has_mosaic = bool(self.report_paths.mosaic)
+        has_overlay = bool(self.report_paths.overlay)
 
-        products_link = '<a href="products.html">Products</a>' if has_products else ""
-        chips_link = '<a href="chips.html">Chips</a>' if has_chips else ""
+        # Tabs in display order, the pages without content left out
+        tabs = [("report.html", "Summary")]
+        if has_products:
+            tabs.append(("products.html", "Products"))
+        if has_mosaic:
+            tabs.append(("mosaic.html", "Mosaic"))
+        if has_overlay:
+            tabs.append(("overlay.html", "Overlay"))
+        if has_chips:
+            tabs.append(("chips.html", "Chips"))
+
+        def nav_links(active: str) -> str:
+            return "\n        ".join(
+                f'<a href="{page}" class="active">{label}</a>'
+                if page == active
+                else f'<a href="{page}">{label}</a>'
+                for page, label in tabs
+            )
 
         dem_plots_html = ""
         if self.report_paths.dem_plots:
@@ -775,30 +952,34 @@ class HtmlReportGenerator:
             for plot_path in self.report_paths.dem_plots:
                 relative_path = Path(plot_path).name
                 title = (
-                    relative_path.replace("dem_", "")
-                    .replace(".png", "")
-                    .replace("_", " ")
-                    .title()
+                    relative_path.replace("dem_", "").replace(".png", "").replace("_", " ").title()
                 )
                 dem_plots_html += f"""
                 <div class="image-container">
-                    <span class="image-title">DEM - {title}</span>
-                    <img src="{relative_path}" alt="{title} Plot">
+                    <span class="image-title">DEM - {_text(title)}</span>
+                    <img src="{_url(relative_path)}" alt="{_text(title)} Plot">
                 </div>"""
             dem_plots_html += "</div>"
 
+        coverage_plot_html = ""
+        if self.report_paths.coverage_plot:
+            coverage_plot_html = f"""
+                <h3>Key Point Coverage (Debug)</h3>
+                <div class="image-container">
+                    <span class="image-title">05 - Density &amp; Quality Coverage</span>
+                    <img src="{Path(self.report_paths.coverage_plot).name}" alt="Coverage Plot">
+                </div>"""
+
         # 1. Generate Summary Page (report.html)
         summary_content = HTML_TEMPLATE.format(
-            css_styles=CSS_STYLES,
-            products_link=products_link,
-            chips_link=chips_link,
+            css_styles=css_styles,
+            header_banner_html=header_banner_html,
+            nav_links=nav_links("report.html"),
             generation_date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            monitored_image=self.match_result.monitored_image.file_name,
-            reference_image=self.match_result.reference_image.file_name,
-            mask_file=self.match_result.mask.file_name
-            if self.match_result.mask
-            else "None",
-            dem_file=self.dem_file_path.name if self.dem_file_path else "None",
+            monitored_image=_text(self.match_result.monitored_image.file_name),
+            reference_image=_text(self.match_result.reference_image.file_name),
+            mask_file=_text(self.match_result.mask.file_name if self.match_result.mask else "None"),
+            dem_file=_text(self.dem_file_path.name if self.dem_file_path else "None"),
             config_rows_html=self._build_config_rows_html(),
             matched_points=len(self.match_result.points),
             valid_pixels=self.accuracy_analysis.valid_pixels,
@@ -810,11 +991,13 @@ class HtmlReportGenerator:
             std_y=f"{self.accuracy_analysis.std_y:.3f}",
             ce90=f"{self.accuracy_analysis.ce90:.3f}",
             ce95=f"{self.accuracy_analysis.ce95:.3f}",
+            quality_card_html=self._build_quality_card_html(),
             overview_plot=Path(self.report_paths.overview_plot).name,
             dx_plot=Path(self.report_paths.dx_plot).name,
             dy_plot=Path(self.report_paths.dy_plot).name,
             ce_plot=Path(self.report_paths.ce_plot).name,
             dem_plots_html=dem_plots_html,
+            coverage_plot_html=coverage_plot_html,
         )
 
         report_file = self.output_dir / "report.html"
@@ -827,37 +1010,74 @@ class HtmlReportGenerator:
             for p in self.report_paths.products:
                 p_path = Path(p)
                 p_name = p_path.name
-                p_type = (
-                    "Vector (GeoJSON)"
-                    if p_name.endswith(".json")
-                    else "Raster (GeoTIFF)"
-                )
+                p_type = "Vector (GeoJSON)" if p_name.endswith(".json") else "Raster (GeoTIFF)"
                 if "mask" in p_name:
                     p_type = "Mask (GeoTIFF)"
 
                 products_rows += f"""
                 <tr>
-                    <td>{p_type}</td>
-                    <td>{p_name}</td>
-                    <td><a href="{p_name}" download>Download</a></td>
+                    <td>{_text(p_type)}</td>
+                    <td>{_text(p_name)}</td>
+                    <td><a href="{_url(p_name)}" download>Download</a></td>
                 </tr>"""
 
             products_content = PRODUCTS_TEMPLATE.format(
-                css_styles=CSS_STYLES,
-                title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                chips_link=chips_link,
+                css_styles=css_styles,
+                header_banner_html=header_banner_html,
+                title_prefix=_text(self.runtime_config.title_prefix or "KARIOS"),
+                nav_links=nav_links("products.html"),
                 products_rows=products_rows,
             )
             with open(self.output_dir / "products.html", "w", encoding="utf-8") as f:
                 f.write(products_content)
 
-        # 3. Generate Chips Page if needed
-        if has_chips:
-            mon_name = self.match_result.monitored_image.file_name
-            ref_name = self.match_result.reference_image.file_name
+        # 3. Generate Mosaic and Overlay Pages if needed
+        image_pages = [
+            (
+                has_mosaic,
+                "mosaic.html",
+                "Mosaic",
+                self.report_paths.mosaic,
+                "Checkerboard of the reference (blue, top left tile) and monitored (red) "
+                "images, each histogram equalized. "
+                "Misregistration shows as features broken at the tile edges.",
+            ),
+            (
+                has_overlay,
+                "overlay.html",
+                "Overlay",
+                self.report_paths.overlay,
+                "Overlay of the monitored image, in red, and the reference image, in cyan, "
+                "each histogram equalized: aligned features are gray. "
+                "Misregistration shows as red and cyan fringes along the features.",
+            ),
+        ]
+        for enabled, page, page_title, image, description in image_pages:
+            if not enabled:
+                continue
+            page_content = IMAGE_PAGE_TEMPLATE.format(
+                css_styles=css_styles,
+                header_banner_html=header_banner_html,
+                title_prefix=_text(self.runtime_config.title_prefix or "KARIOS"),
+                nav_links=nav_links(page),
+                page_title=page_title,
+                monitored_image=_text(self.match_result.monitored_image.file_name),
+                reference_image=_text(self.match_result.reference_image.file_name),
+                image=_url(Path(image).name),
+                description=description,
+            )
+            with open(self.output_dir / page, "w", encoding="utf-8") as f:
+                f.write(page_content)
 
-            mon_vrt = f"chips/{mon_name}/monitored_chips.vrt"
-            ref_vrt = f"chips/{ref_name}/reference_chips.vrt"
+        # 4. Generate Chips Page if needed
+        if has_chips:
+            mon_name, ref_name = chip_dir_names(
+                self.match_result.monitored_image.file_name,
+                self.match_result.reference_image.file_name,
+            )
+
+            mon_vrt = _url("chips", mon_name, "monitored_chips.vrt")
+            ref_vrt = _url("chips", ref_name, "reference_chips.vrt")
             chips_vrt_links = f'<li><a href="{mon_vrt}">Monitored Chips VRT</a></li>'
             chips_vrt_links += f'<li><a href="{ref_vrt}">Reference Chips VRT</a></li>'
 
@@ -865,9 +1085,10 @@ class HtmlReportGenerator:
             chips_section_html = f'<div class="section">{chips_grid}</div>'
 
             chips_content = CHIPS_TEMPLATE.format(
-                css_styles=CSS_STYLES,
-                title_prefix=self.runtime_config.title_prefix or "KARIOS",
-                products_link=products_link,
+                css_styles=css_styles,
+                header_banner_html=header_banner_html,
+                title_prefix=_text(self.runtime_config.title_prefix or "KARIOS"),
+                nav_links=nav_links("chips.html"),
                 chips_vrt_links=chips_vrt_links,
                 chips_section_html=chips_section_html,
             )

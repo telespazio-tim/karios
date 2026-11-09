@@ -7,6 +7,7 @@ Tests different mask scenarios:
 - Vector mask (GeoJSON)
 - Both masks combined (raster + vector)
 """
+
 import os
 import shutil
 import unittest
@@ -199,7 +200,7 @@ class MaskE2ETest(unittest.TestCase):
         csv_path = csv_files[0]
         df = pd.read_csv(csv_path, sep=";")
         self.assertGreater(len(df), 0, "Should have keypoints after both masks")
-        
+
         # Verify AND logic: combined mask should have <= keypoints than either individual mask
         # (This is checked in test_mask_comparison)
         print(f"Both masks test: {len(df)} keypoints detected (raster AND vector)")
@@ -211,7 +212,12 @@ class MaskE2ETest(unittest.TestCase):
         results = {}
 
         # Clean up any previous comparison test directories first
-        for test_name in ["test_no_mask_comp", "test_raster_mask_comp", "test_vector_mask_comp", "test_both_masks_comp"]:
+        for test_name in [
+            "test_no_mask_comp",
+            "test_raster_mask_comp",
+            "test_vector_mask_comp",
+            "test_both_masks_comp",
+        ]:
             test_dir = Path(result_dir) / test_name
             if test_dir.exists():
                 shutil.rmtree(test_dir)
@@ -327,7 +333,12 @@ class MaskE2ETest(unittest.TestCase):
             print(f"  Note: Keypoint count depends on image content, not just mask area")
 
         # Clean up comparison test directories
-        for test_name in ["test_no_mask_comp", "test_raster_mask_comp", "test_vector_mask_comp", "test_both_masks_comp"]:
+        for test_name in [
+            "test_no_mask_comp",
+            "test_raster_mask_comp",
+            "test_vector_mask_comp",
+            "test_both_masks_comp",
+        ]:
             test_dir = Path(result_dir) / test_name
             if test_dir.exists():
                 shutil.rmtree(test_dir)

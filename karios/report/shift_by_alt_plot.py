@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -16,6 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """plot by alt profile module"""
+
+from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -155,7 +157,7 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
         for g in profile.grouped_values:
             arr.append(g[1].to_numpy())
 
-        axis_right.boxplot(
+        boxes = axis_right.boxplot(
             arr,
             positions=profile.groups_positions,
             showfliers=self._config.show_fliers,
@@ -167,8 +169,10 @@ class MeanShiftByAltitudeGroupPlot(AbstractPlot):
             # patch_artist=True,
             # boxprops={"alpha": 0.3, "color": "green", , "facecolor": "green"},
             boxprops={"alpha": 0.5, "color": "green"},
-            label=f"Median {dim} deviation",
         )
+        # boxplot only accepts `label` from matplotlib 3.9, so label a median line instead
+        if boxes["medians"]:
+            boxes["medians"][0].set_label(f"Median {dim} deviation")
 
         axis_right.plot(
             profile.groups_positions,

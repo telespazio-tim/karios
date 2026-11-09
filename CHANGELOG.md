@@ -1,10 +1,228 @@
 # KARIOS CHANGELOG
 
-## Unreleased
+## 3.0.0 [unreleased]
+
+### breaking changes
+
+- `AccuracyAnalysis` (API) gets the fields `rmse`, `min_error`, `max_error`, `std_dev` and
+  `num_points`, required by the constructor; code building it by hand must pass them. They are
+  NaN (`num_points` 0) when no point is confident. Used by the QGIS plugin.
+- `karios process` and `karios align` exit with status 1 on error; they always exited with 0.
+- Inputs that read other data are refused: network paths (`/vsicurl`, `/vsis3`, `http://`...), VRT
+  and web-service rasters, and OGR VRT, WFS, database and GPSBabel vector masks. Convert them to a
+  plain file first.
+- `get_filename` sanitizes the names it returns: path traversal sequences are removed, characters
+  other than letters, digits, `_`, `.` and `-` become `_`, Windows reserved names get a `safe_`
+  prefix. The output folders of inputs with spaces or special characters are named differently.
+- Images in a geographic CRS or on a rotated grid are measured in pixels, unless
+  `--input-pixel-size` is given (see Fix).
+
+### Security
+
+- **HTML report escapes user values**: file names, title prefix, configuration values and product
+  names went unescaped into text and `href`/`src` attributes, so an image named
+  `<svg onload=...>.tif` ran script when `report.html` or `chips.html` was opened. Paths in links
+  are now percent-encoded segment by segment, which also fixes names with spaces, `#` or `?`.
+- **Dangerous inputs are refused before opening**: a `.tif` that was really a VRT could map any
+  local file into pixels, or make network requests. See breaking changes.
+- **`karios align` quotes the printed `gdalwarp` command** (`shlex.quote`), so a reference named
+  like `$(touch pwned).tif` cannot run in the shell it is pasted into.
+- **File name sanitization** in `get_filename` (see breaking changes).
+
+### Fix
+
+- `is_compatible_with` accepts the same CRS written with different WKT, and no longer crashes on a
+  missing spatial reference.
+- The report forces the Agg matplotlib backend; the CI declares rasterio as a conda dependency for the rasterio e2e test.
+
 
 ### New features
 
-- **`karios align` subcommand**: standalone command that warps the monitored image onto the reference grid. Writes the primary aligned output plus one sibling per ECC-converged candidate for visual A/B comparison in QGIS.
+- **Coarse-to-fine matching** (`--enable-coarse-to-fine`, off by default): descends the image pyramid explicitly instead of letting OpenCV recurse its own.
+  Each level runs without internal recursion and passes down a displacement field fitted to
+  that level's reliable points, so key points near data edges inherit a usable starting guess
+  rather than a broken one. On four scenes (SPOT5, Landsat-8/Sentinel-2, MSS terrain,
+  Sentinel-2 10980²) it produced 20-100% more key points, far better coverage at data edges,
+  and lower dispersion, for 1.4-1.6x the matching time and no extra memory. Not compatible
+  with `laplacian_kernel_size: "auto"`, which is rejected when the matcher is built, nor with
+  `--enable-large-shift-detection`: both remove a coarse displacement, so combining them would
+  correct it twice.
+- **Configurable pyramid depth** (`klt_matching.maxLevel`, default `1`): previously a source
+  constant. In the default matching mode this is the parameter that most affects results, since
+  the lost edge band scales as `(matching_winsize / 2) * 2**maxLevel`.
+- **Laplacian options**: `laplacian_kernel_size: "auto"` picks the best kernel per image (the choice
+  is written back to the output configuration and shown in the report);
+  `laplacian_invert_polarity` (`false` / `true` / `"auto"`) inverts the monitored pixels so that
+  cross-sensor or signed-elevation pairs with opposite feature polarity can match, `"auto"` running
+  each tile both ways and keeping the better inlier ratio; `--laplacian-power` (0-1, default 1)
+  tunes the Laplacian binarization, 1 being near-binary, robust to gain and contrast differences
+  between sensors, and 0 a continuous signal.
+- **Vector mask, DN value filtering (`--no-value`) and no-data**: the no-data value declared by
+  each raster band is applied automatically, in the matching mask, the post-match DN filter and
+  the overview plot.
+- **Mutual information**: the normalized mutual information (NMI) is computed next to the ZNCC for
+  each key point; ZNCC and both mutual informations are computed in a single pass.
+- **Key point image chips** (`--generate-kp-chips`): raw and Laplacian chips of each selected key
+  point shown side by side in the *Chips* tab, with ZNCC and NMI, a sort bar and an XOR difference
+  on hover. Chips are georeferenced and packed into one `sprite.png` per folder (`sprite_idx`
+  column of `chips.csv`): about 4 PNGs instead of 400 for 100 key points.
+- **Optional downsampling of the inputs** (`image_downsampling.ratio`, default `1`, off): monitored
+  image, reference and mask are reduced by an integer factor with `block_reduce(np.nanmean)`,
+  no-data excluded from each block, before any other processing.
+- **`--debug` coverage plot** (`05_coverage.png`): key point density, empty cell ratio and
+  per-cell mean KLT score, ZNCC and NMI.
+- **New HTML report**: Summary / Products / Mosaic / Overlay / Chips tabs, the full processing
+  configuration in a collapsible block, inlined branding assets.
+- **DEM elevation in the CSV output**: when a DEM is given, the `KLT_matcher_*.csv` file gets an
+  `alt` column with the DEM elevation at each key point. Resuming (`--resume`) from a CSV written
+  without a DEM adds the column.
+
+- **Checkerboard mosaic** (`--mosaic-tile-size`, `0` by default, which disables it): mosaic
+  at native resolution alternating tiles of the given size in pixel from the reference image, in
+  blue, and the monitored image, in red, so misregistration shows as features broken at the tile
+  edges. Each image is histogram equalized to 8 bit on its own, which gives both the same
+  contrast whatever their sensor; zero fill and pixels hidden in the overview plot are black and
+  left out of the histogram. Written as `05_mosaic.avif`, or lossless `.png` when Pillow lacks
+  AVIF support, and displayed in a new *Mosaic* tab of the HTML report.
+- **Color overlay** (`--generate-overlay`): the monitored image in the red channel and the
+  reference in the green and blue ones, equalized like the mosaic, where aligned features are
+  gray and shifted ones fringed in red and cyan. Written as `06_overlay.avif` and displayed in a
+  new *Overlay* tab of the HTML report.
+- **`karios align` applies one alignment to the other bands of a product**: aligning each band
+  of one product separately gives slightly different homographies, so the aligned bands no
+  longer overlay. `karios align` now also writes `<mon_stem>_global_alignment.json`, the
+  homography with the georeferencing prior and the grids it relates. `--apply-to BAND`
+  (repeatable) warps other bands by the alignment estimated on the monitored image, and
+  `--load-transform JSON` warps an image by a saved alignment instead of estimating one, without
+  a reference. A band on the aligned band's grid comes out on the same output grid, pixel for
+  pixel; a band on another grid, like a 20 m band of a 10 m product, is placed on the aligned
+  band by their georeferencing and keeps its own grid and CRS.
+- **Matching confidence in `karios process`**: KLT returns key points even between unrelated
+  images, and the statistics computed on them looked like a measurement (a 60 px CE90 on two
+  areas of a Sentinel-2 tile). The run now rates its confidence from the median ZNCC of the
+  confident key points, the share moving like their neighbours and the share of detected corners
+  KLT keeps, which separate related from unrelated pairs by an order of magnitude (0.85 / 0.97 /
+  0.39 against 0.04 / 0.06 / 0.033 on the test pair), and gives a verdict: reliable, doubtful
+  or unreliable. It is printed in the console summary, shown on the HTML report's summary page,
+  and written with the statistics to a new `summary.json`; the exit status is unchanged. Without
+  any key point above the confidence threshold, the statistics are now undefined instead of
+  failing the run on an empty CE90 computation.
+
+### Fix
+
+- **`karios align` writes the original pixel values**: the aligned image was resampled by
+  bilinear interpolation, which blends neighbouring pixels into values the sensor never measured.
+  It is now resampled by nearest neighbour. The images warped for the estimation keep bilinear
+  interpolation: nearest neighbour there rounds the starting estimate to whole pixels, and ECC
+  refining a start 0.7 px off landed 0.4 px from the truth instead of 0.03 px.
+- **`karios align` recovers large georeferencing errors between images of different
+  resolutions**: SIFT ran on both whole images at native resolution, so a monitored image 7x
+  finer than the reference had keypoints of details the reference cannot show, and its small
+  footprint left most reference keypoints without a counterpart (166 of 5000 on a
+  PhiSat/Sentinel-2 pair); ECC, which only corrects a few pixels, could not recover a
+  georeferencing 5 km off either, and the highest ECC score then picked a -144° rotation from 5
+  RANSAC inliers. With a geotransform prior, matching now runs at the coarser resolution on the
+  reference cropped around the monitored footprint, a correlation search corrects the prior's
+  translation as an extra ECC start, implausible estimates are rejected, and the others compare
+  on common pixels. On that pair: 26/42 RANSAC inliers instead of 5/15, and `karios process` on
+  the output measures 794 key points with a 0.6-0.7 px spread and a 0.1 px mean shift, against
+  65 with 2.4-3.3 px for ECC from the georeferencing alone. The prior now also maps pixel
+  centers, as OpenCV does, instead of the geotransform's pixel corners.
+- **`karios align` keeps the monitored resolution**: the aligned monitored image was written on
+  the reference's grid, so a 4 m PhiSat image aligned on a 30 m Sentinel-2 tile came out at
+  30 m, downsampled 7x by bilinear interpolation. Both outputs now share a grid covering the
+  monitored image's valid footprint, nested in the reference's grid at the reference pixel
+  divided by the smallest integer keeping the monitored resolution (3.75 m for PhiSat). Unlike
+  the reverted attempt, which covered the whole reference footprint (26267 px square for
+  PhiSat), the grid spans the monitored data only (5904 x 6272 px). `karios align` now writes
+  that image only: the reference and the alternative ECC candidates are no longer written, and
+  the command prints the `gdalwarp` call that resamples the reference onto the output grid for
+  `karios process`.
+- **`karios align` keeps the monitored image's CRS**: the aligned monitored image was written in
+  the reference's CRS, so a WGS 84 scene aligned on a Sentinel-2 tile came out in UTM. It now
+  keeps its own CRS and grid: same pixel size and pixel edges, over its corrected footprint, so a
+  correction of whole pixels only moves the georeferencing. A rotated or mirrored grid becomes
+  north-up in the same CRS, at the same pixel area. Without georeferencing on both images, there
+  is no CRS to bring the correction back to, and the output stays on a grid nested in the
+  reference's, in its CRS. The printed `gdalwarp` call now gives the target CRS (`-t_srs`) and
+  the exact pixel size (`-tr` instead of `-ts`): from a size, gdalwarp divided the extent into a
+  pixel size a few ulps off in degrees, and `karios process` refused the two grids.
+- **`karios align` handles 10 m references**: OpenCV's brute-force matcher refuses more than
+  262143 descriptors, and a PhiSat scene on a 10 m Sentinel-2 crop has 484k; it would also have
+  compared all 62k x 484k pairs, about 36 min per direction. Above 10^8 pairs matching now uses a
+  FLANN KD-tree, approximate but absorbed by the Lowe ratio and cross-check filters.
+- **`karios align` rounds interpolated integer pixels**: the monitored image was warped in
+  float32 then cast to its integer type, which truncates: every pixel lost 0.5 DN on average
+  (0.37 DN measured on a smooth image shifted by half a pixel). Values are now rounded and
+  clipped to the type's range.
+- **Tiled SIFT keeps only each tile's strongest keypoints**: every tile computed the descriptors
+  of all its keypoints, 550k on a 10 m reference crop, for the 10000 strongest of the image to
+  be kept. A keypoint among the image's strongest is among its tile's, so tiles are now capped
+  at the same count before computing descriptors: the same keypoints and descriptors, sorted in
+  a tile-independent order, for half the SIFT time.
+- **`karios align` refines only the best starting point to convergence**: ECC ran its 200
+  iterations from every starting point (RANSAC, prior, translation search), and the ones that
+  lose ran them without converging, 51-69% of a 10 m PhiSat alignment. Every start now gets a
+  25-iteration probe; the probes are compared by gradient correlation and only the winner is
+  refined further.
+- **`karios align` widens its search window when the georeferencing is further off**: matching
+  only searched the reference around the monitored footprint, half its size wider on each side,
+  so a larger georeferencing error gave a wrong result silently. A result with no plausible
+  estimate, a gradient correlation under 0.2, or a shift beyond 75% of the margin now doubles the
+  margin, up to the whole reference, keeping the best result of the windows tried; doubts left
+  with the whole reference searched are logged. Only the window is read from the reference file.
+- **`karios align` peak memory down from 7.2 to 2.1 GB** on a PhiSat scene and a 10 m
+  Sentinel-2 tile, and 3 min 40 s instead of 6 min 20 s. OpenCV's SIFT doubles its input
+  before building the pyramid, about 200 bytes per pixel: 6 GB for the 28 Mpx reference crop.
+  Images wider than 2048 px are now detected by tiles read with a 128 px margin, keeping each
+  tile's core keypoints; the thresholds being absolute, 99.98% of the keypoints lie within
+  0.01 px of the whole image's. The reference is also stretched and equalized on its crop only,
+  instead of the whole 120 Mpx tile.
+- **ECC refinement in `karios align` corrected the wrong way**: ECC's warp maps the reference
+  onto the pre-warped monitored image, and was composed without inverting it, so every
+  refinement doubled its starting error instead of removing it (a start 2.5 px off ended 5 px
+  off on the other side). Its mask also reached the edge of the data, where the gradients see
+  the jump to the zero fill; eroding it raises the correlation of identical images from 0.77 to
+  0.999. ECC now also works on the reference around the monitored footprint only, 8x faster on
+  a footprint a quarter of the crop.
+- **`karios align` uses the georeferencing whatever the CRS and grid orientation**: the prior was
+  only built for two north-up images in the same CRS, so a PhiSat scene in WGS 84 on a rotated,
+  mirrored grid ran blind on a UTM Sentinel-2 tile, matching the whole images for 6 RANSAC inliers
+  of 841. The prior is now fitted on a grid of monitored pixels reprojected into the reference's
+  pixels (within 0.9 px over that 22 km scene), and the monitored image is straightened by it
+  into the reference's orientation before matching, as SIFT does not handle mirrored images.
+- **Images in a geographic CRS or on a rotated grid no longer crash `karios process`**: the first
+  geotransform term was taken as the pixel size in meters, so a PhiSat scene in WGS 84 on a
+  rotated grid got -5.6e-05 "m", which inverted the circular error histogram range. A metric
+  pixel size is now only read from a projected CRS on a north-up grid; other images are
+  measured in pixels, unless `--input-pixel-size` is given. Their EPSG code is read too (it only
+  was for projected CRS), so the key point GeoJSON is written, and the raster products copy the
+  reference's full geotransform instead of dropping its rotation terms.
+- **Laplacian output no longer clips to near-binary**: `cv2.Laplacian`'s 8 bit output was clipped,
+  and `laplacian_to_uint8` discarded sparse edges on flat tiles; one stray pixel could also break
+  the matching of float inputs. `--laplacian-power` restores the near-binary behaviour on request.
+- **Plots and report**: the overview plot no longer crashes on a perfect match, `$` in names is
+  drawn as text instead of mathtext, the mean dx/dy by column plot is corrected, `"auto"` pixel
+  size is displayed with its unit.
+- **`output_directory` is coerced to `Path`** in `RuntimeConfiguration`.
+- **Chips beyond the right or bottom image boundary are skipped**, and the boundary check of the
+  ZNCC/NMI chips is no longer off by one.
+- **DEM plots no longer crash on matplotlib 3.8**: the shift-by-altitude plot passed `label` to
+  `boxplot()`, which only accepts it from matplotlib 3.9, so every run with a DEM failed while
+  generating reports.
+- **`--no-value` now reaches the matching mask**: it previously only removed surviving key
+  points and tinted the overview plot, so a product declaring no-data `0` while actually filled
+  with another DN had features detected throughout the fill and reported an inflated valid-pixel
+  count (99.93% where the true overlap was 66.63%). The values are now excluded from the KLT
+  mask and from the valid-pixel statistic.
+- **Key points are no longer lost at tile seams**: tiles did not overlap, so the matching window
+  lacked support at every internal boundary. Tiles now read a margin of real neighbouring
+  pixels, sized from the pyramid depth. Synthetic padding was measured and rejected: reflected
+  or replicated content does not move consistently between the two images, so a window
+  overlapping it scores worse than a truncated one.
+
+- **`karios align` subcommand**: standalone command that aligns the monitored image on the reference and writes it in its own CRS and grid, keeping its resolution.
+- **Configurable SIFT keypoint limit** (`karios align --sift-nfeatures`, `10000` by default, `0` = unlimited): keeps only the N strongest SIFT keypoints per image, to bound the brute-force matching time and memory on large images.
 
 ### Improvements
 
@@ -13,6 +231,16 @@
   - is far more robust on cross-sensor pairs thanks to CLAHE preprocessing, SIFT descriptors, Lowe ratio + mutual cross-check, and ECC refinement on Sobel gradient magnitudes (sensor-invariant);
   - drops the equal-size input constraint;
   - renders the warped monitored image onto the reference's pixel grid so both outputs share a geotransform.
+- **Python 3.9+ is genuinely supported**, and a CI job checks the syntax floor with `vermin`.
+- **Faster runs**: `scipy.stats` and `skimage` are imported where used (quicker CLI start), the key
+  point GeoJSON is built column by column, integer images are equalized by histogram once for the
+  mosaic and the overlay, and the report banner is re-encoded as WebP.
+- **Less log noise**: per-point and debug-leftover messages are gone.
+- **The processing configuration is copied to the output directory before the run**, so it is kept
+  when the run fails.
+- **Rasterized and combined masks are written with the outputs.**
+- **Overview plots use adaptive contrast**, and apply the mask and `--no-value`.
+- Codebase reformatted with black 26.3.1.
 
 ## 2.1.1 [20260218]
 

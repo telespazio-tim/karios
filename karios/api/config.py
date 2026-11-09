@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -28,9 +28,14 @@ The configuration covers:
 - Optional inputs (mask files, DEM files)
 - Visualization options (title prefixes, DEM descriptions)
 """
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
+
+from karios.core.errors import ConfigurationError
 
 
 @dataclass
@@ -47,20 +52,65 @@ class RuntimeConfiguration:
         gen_delta_raster: Whether to generate intermediate products (dx/dy raster)
         generate_kp_chips: Whether to generate KP chip images
         enable_large_shift_detection: Whether to detect and correct large pixel shifts
+        enable_coarse_to_fine: Whether to match by descending the image pyramid explicitly
+                   instead of letting OpenCV recurse its own, which keeps key points near
+                   data edges. Incompatible with laplacian_kernel_size "auto".
+        mosaic_tile_size: Tile side in pixel of the checkerboard mosaic of the monitored
+                   and reference images, shown in the HTML report. 0 disables the mosaic.
+        generate_overlay: Whether to generate the overlay of the monitored image, in red,
+                   and the reference image, in green and blue, shown in the HTML report.
         no_values: Optional list of DN (Digital Number) values to filter out from key points.
+                   Accepts floats, since a float raster's fill value need not be a whole number.
                    Key points where reference or monitored image has these values will be excluded.
         pixel_size: Optional pixel size in meters. Ignored if image resolution
                    can be read from input images
         title_prefix: Optional prefix for chart titles (max 26 characters)
         dem_description: Optional DEM source description for plots
+        debug: Whether to also generate the key point density/quality coverage
+                   plot - a higher point count is not by itself evidence of a
+                   good registration, since points can cluster in the most
+                   textured regions and leave the rest of the scene unmatched
+        laplacian_power: Shape of the Laplacian rescale feeding the KLT tracker.
+                   0 keeps the percentile-normalized value as-is; 1 saturates it to a
+                   near-binary response, matching the historical CV_8U behaviour's
+                   cross-sensor matching robustness. Values in between interpolate
+                   via a signed power law. Defaults to 1.
     """
 
-    output_directory: Path
+    output_directory: Union[str, Path]
     gen_kp_mask: bool
     gen_delta_raster: bool
     generate_kp_chips: bool
     enable_large_shift_detection: bool
-    no_values: Optional[list[int]] = None
+    enable_coarse_to_fine: bool = False
+    mosaic_tile_size: int = 0
+    generate_overlay: bool = False
+    no_values: Optional[list[float]] = None
     pixel_size: Optional[float] = None
     title_prefix: Optional[str] = None
     dem_description: Optional[str] = None
+    debug: bool = False
+    laplacian_power: float = 1.0
+
+    def __post_init__(self):
+        if self.mosaic_tile_size < 0:
+            raise ConfigurationError(
+                f"mosaic_tile_size must be positive, or 0 to disable, got {self.mosaic_tile_size}"
+            )
+
+        if self.enable_large_shift_detection and self.enable_coarse_to_fine:
+            raise ConfigurationError(
+                "enable_large_shift_detection and enable_coarse_to_fine cannot be "
+                "combined: both remove a coarse displacement, large shift by "
+                "pre-shifting the monitored image and coarse-to-fine by seeding "
+                "the tracker, so applying them together corrects it twice."
+            )
+
+        if not 0.0 <= self.laplacian_power <= 1.0:
+            raise ConfigurationError(
+                f"laplacian_power must be between 0 and 1, got {self.laplacian_power}."
+            )
+
+        # Some call sites (e.g. plot path builders) join paths with the `/`
+        # operator, which requires a Path instance, not a str.
+        self.output_directory = Path(self.output_directory)

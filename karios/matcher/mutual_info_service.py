@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -18,6 +18,7 @@
 """
 This module contains class service for normalized mutual information computation
 """
+
 import logging
 
 import numpy as np
@@ -25,6 +26,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, Series
 
 from karios.core.image import GdalRasterImage
+from karios.matcher.patch_scores import compute_patch_scores
 
 logger = logging.getLogger(__name__)
 
@@ -84,17 +86,7 @@ class MutualInfoService:
             Series: mutual info score series, with same index as df, contains NaN where not computed
         """
         logger.info("Compute mutual information for %s points", len(df))
-
-        score = df.apply(
-            self._compute_mutual_info, axis=1, monitored=monitored, reference=reference
-        )
-
-        monitored.clear_cache()
-        reference.clear_cache()
-
-        logger.info("Mutual information computation finish")
-
-        return score
+        return compute_patch_scores(df, monitored, reference)["mutual_info_score"]
 
     def _compute_mutual_info(self, series: Series, monitored, reference):
         x0 = int(series["x0"])
@@ -112,12 +104,12 @@ class MutualInfoService:
         x1_max = monitored.x_size - self._chip_margin
         y1_max = monitored.y_size - self._chip_margin
 
+        # A point too close to either edge for a full chip is silently
+        # skipped (NaN) - normal for KP near the tile boundary, not worth a
+        # log line per point.
         if x0_offset < 0 or y0_offset < 0 or x1_offset < 0 or y1_offset < 0:
-            logger.warning("Point to close to image top or left boundaries, skip it")
             return np.nan
-
         if x0 >= x0_max or y0 >= y0_max or x1 >= x1_max or y1 >= y1_max:
-            logger.warning("Point to close to image bottom or right boundaries, skip it")
             return np.nan
 
         chip_ref = self._extract_chip(x0, y0, reference)

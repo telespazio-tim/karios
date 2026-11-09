@@ -59,6 +59,7 @@ Three Test Cases:
 Author: KARIOS Team
 Date: 2026
 """
+
 import os
 import shutil
 import tempfile
@@ -300,9 +301,9 @@ class TestKariosWithRasterio(unittest.TestCase):
             mon_crs = src.crs
 
             # Apply simple normalization (example preprocessing)
-            mon_normalized = ((mon_array - mon_array.min()) / (mon_array.max() - mon_array.min()) * 1000).astype(
-                np.uint16
-            )
+            mon_normalized = (
+                (mon_array - mon_array.min()) / (mon_array.max() - mon_array.min()) * 1000
+            ).astype(np.uint16)
 
             # Write preprocessed image
             with rasterio.open(

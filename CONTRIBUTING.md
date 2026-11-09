@@ -27,6 +27,10 @@ It installs:
 - `pycodestyle`: check docstring
 - `pre-commit`: pre commit hook engine : https://pre-commit.com/
 - `setuptools` : for packaging
+- `vermin`: detects the minimum Python version required by the code's actual syntax, checked
+  in CI against 3.9 (matches `requires-python` in `pyproject.toml`). Modules that use PEP
+  585/604 syntax (`list[...]`, `X | None`) in annotations carry `from __future__ import
+  annotations` to defer it; add that import if a new or edited file starts using that syntax
 
 ### Deploy pre-commit hook
 

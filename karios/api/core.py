@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -22,6 +22,7 @@ Provides the main entry point for the KARIOS API functionality.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass
@@ -33,18 +34,31 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from karios.accuracy_analysis.accuracy_statistics import GeometricStat
+from karios.accuracy_analysis.quality_control import (
+    DOUBTFUL,
+    UNRELIABLE,
+    QualityControl,
+    assess_quality,
+    percent,
+)
 from karios.api.config import RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.errors import KariosException
 from karios.core.image import GdalRasterImage, get_image_resolution, shift_image
+from karios.core.image_downsampling import downsample_raster
 from karios.core.utils import get_filename
 from karios.matcher.klt import KLT
 from karios.matcher.large_offset import LargeOffsetMatcher
-from karios.matcher.mutual_info_service import MutualInfoService
-from karios.matcher.zncc_service import ZNCCService
+from karios.matcher.patch_scores import compute_patch_scores
 from karios.report.chip_service import ChipService
 from karios.report.circular_error_plot import CircularErrorPlot
+from karios.report.coverage_plot import (
+    CoveragePlot,
+    compute_density_grid,
+    coverage_statistics,
+)
 from karios.report.html_report import HtmlReportGenerator
+from karios.report.mosaic import equalized_pair, generate_mosaic, generate_overlay
 from karios.report.overview_plot import OverviewPlot
 from karios.report.product_generator import ProductGenerator
 from karios.report.shift_by_alt_plot import MeanShiftByAltitudeGroupPlot
@@ -61,6 +75,8 @@ class MatchResult:
     reference_image: GdalRasterImage
     monitored_image: GdalRasterImage
     mask: Optional[GdalRasterImage] = None
+    detected_points: Optional[int] = None
+    """Corners KLT tracked, None when the key points were reloaded from the CSV"""
 
 
 @dataclass
@@ -86,8 +102,17 @@ class AccuracyAnalysis:
     std_y: float
     ce90: float
     ce95: float
+    rmse: float
+    min_error: float
+    max_error: float
+    std_dev: float
+    num_points: int
     valid_pixels: int
     total_pixels: int
+    quality: Optional[QualityControl] = None
+    """Confidence that the key points measure a real misregistration"""
+    summary_file: Optional[str] = None
+    """summary.json, the statistics and the confidence, machine readable"""
 
 
 @dataclass
@@ -101,6 +126,9 @@ class ReportPaths:
     dem_plots: list[str]
     products: list[str]
     html_report: Optional[str] = None
+    mosaic: Optional[str] = None
+    overlay: Optional[str] = None
+    coverage_plot: Optional[str] = None
 
 
 class KariosAPI:
@@ -147,13 +175,16 @@ class KariosAPI:
             self._processing_configuration.klt_configuration,
             self._runtime_configuration.gen_delta_raster,
             self._runtime_configuration.output_directory,
+            self._runtime_configuration.no_values,
+            self._runtime_configuration.enable_coarse_to_fine,
+            laplacian_power=self._runtime_configuration.laplacian_power,
         )
 
-        self._zncc_service = ZNCCService()
-        self._mutual_info_service = MutualInfoService()
 
         #
         self._large_shift_applied = False
+        # Corners KLT detected for the key points, None when reloaded from the CSV
+        self._detected_points: Optional[int] = None
 
         # Prepare output dir
         self._check_output_dir()
@@ -205,6 +236,7 @@ class KariosAPI:
         mask_file_path: Optional[Path] = None,
         resume: bool = False,
         vector_mask_path: Optional[Path] = None,
+        dem_file_path: Optional[Path] = None,
     ) -> MatchResult:
         """Match the monitored image against the reference image.
 
@@ -216,6 +248,8 @@ class KariosAPI:
             resume: Whether to resume from previous analysis
             vector_mask_path: Optional path to vector mask file (GeoJSON, Shapefile, etc.)
                 for excluding pixels from matching. Will be rasterized to match the monitored image.
+            dem_file_path: Optional path to DEM file. When provided, the DEM elevation at each
+                key point is added as an "alt" column in the output CSV.
 
         Returns:
             MatchResult: Object containing match points and statistics
@@ -229,6 +263,14 @@ class KariosAPI:
         # Load mask if provided (raster or vector)
         mask = self._load_mask(monitored_image, mask_file_path, vector_mask_path)
 
+        # Optionally downsample inputs before any further processing.
+        monitored_image, reference_image, mask = self._maybe_downsample(
+            monitored_image, reference_image, mask
+        )
+
+        # Load DEM if provided, to add elevation to the output CSV
+        dem = self._load_dem(reference_image, dem_file_path)
+
         # Handle large offset detection if enabled
         if self._runtime_configuration.enable_large_shift_detection:
             logger.warning("Large shift detection enable, this is an experimental feature.")
@@ -241,7 +283,7 @@ class KariosAPI:
                 self._large_shift_applied = True
 
                 logger.info("Switch monitored image to %s", monitored_image.filepath)
-                points = self._get_match_points(resume, monitored_image, reference_image, mask)
+                points = self._get_match_points(resume, monitored_image, reference_image, mask, dem)
 
                 # Apply offset to match results
                 logger.info("Apply offset to KLT matcher result")
@@ -249,9 +291,9 @@ class KariosAPI:
                 points["dy"] = points["dy"] + shifted_image.y_offset
             else:
                 logger.info("Large shift too tight to be applyed, do not apply")
-                points = self._get_match_points(resume, monitored_image, reference_image, mask)
+                points = self._get_match_points(resume, monitored_image, reference_image, mask, dem)
         else:
-            points = self._get_match_points(resume, monitored_image, reference_image, mask)
+            points = self._get_match_points(resume, monitored_image, reference_image, mask, dem)
 
         # Filter out key points with specified DN values
         points = self._filter_by_dn_values(
@@ -263,6 +305,7 @@ class KariosAPI:
             reference_image=reference_image,
             monitored_image=monitored_image,
             mask=mask,
+            detected_points=self._detected_points,
         )
 
     def analyze_accuracy(self, match_result: MatchResult) -> AccuracyAnalysis:
@@ -286,6 +329,12 @@ class KariosAPI:
         if match_result.mask is not None:
             masked_image = np.copy(match_result.monitored_image.array)
             masked_image[match_result.mask.array == 0] = 0
+
+        if self._runtime_configuration.no_values:
+            # the mask counts these as data otherwise, overstating the overlap
+            masked_image = np.where(
+                np.isin(masked_image, self._runtime_configuration.no_values), 0, masked_image
+            )
 
         nb_valid_pixel = np.count_nonzero(masked_image)
         logger.info("NB of valid px %s", nb_valid_pixel)
@@ -315,17 +364,79 @@ class KariosAPI:
         ce90 = stats.compute_percentile(0.9, img_res)
         ce95 = stats.compute_percentile(0.95, img_res)
 
-        return AccuracyAnalysis(
+        # Combined (x, y) error figures, for the QGIS plugin (undefined without any confident point)
+        if stats.valid:
+            rmse = np.sqrt(stats.mean_x**2 + stats.mean_y**2 + stats.std_x**2 + stats.std_y**2)
+            min_error = np.sqrt(stats.min_x**2 + stats.min_y**2)
+            max_error = np.sqrt(stats.max_x**2 + stats.max_y**2)
+            std_dev = np.sqrt(stats.std_x**2 + stats.std_y**2)
+        else:
+            rmse = min_error = max_error = std_dev = float("nan")
+
+        quality = assess_quality(
+            match_result.points, acc_config.confidence_threshold, match_result.detected_points
+        )
+        log = {UNRELIABLE: logger.error, DOUBTFUL: logger.warning}.get(quality.verdict, logger.info)
+        log(
+            "Matching confidence: %s (%s)%s",
+            quality.verdict,
+            percent(quality.confidence),
+            "".join(f"\n  - {reason}" for reason in quality.reasons),
+        )
+
+        # Without any confident point, the statistics are left undefined
+        nan = float("nan")
+        accuracy = AccuracyAnalysis(
             statistics=stats,
-            mean_x=stats.mean_x,
-            mean_y=stats.mean_y,
-            std_x=stats.std_x,
-            std_y=stats.std_y,
+            mean_x=stats.mean_x if stats.valid else nan,
+            mean_y=stats.mean_y if stats.valid else nan,
+            std_x=stats.std_x if stats.valid else nan,
+            std_y=stats.std_y if stats.valid else nan,
             ce90=ce90,
             ce95=ce95,
+            rmse=rmse,
+            min_error=min_error,
+            max_error=max_error,
+            std_dev=std_dev,
+            num_points=stats.sample_pixel if stats.valid else 0,
             valid_pixels=nb_valid_pixel,
             total_pixels=total_pixels,
+            quality=quality,
         )
+        accuracy.summary_file = str(
+            Path(self._runtime_configuration.output_directory) / "summary.json"
+        )
+        self._write_summary(match_result, accuracy, acc_config.confidence_threshold)
+        return accuracy
+
+    def _write_summary(
+        self, match_result: MatchResult, accuracy: AccuracyAnalysis, confidence_threshold: float
+    ) -> None:
+        """Write the statistics and the matching confidence to accuracy.summary_file as JSON."""
+
+        def number(value):
+            value = float(value)
+            return value if math.isfinite(value) else None
+
+        summary = {
+            "monitored_image": match_result.monitored_image.file_name,
+            "reference_image": match_result.reference_image.file_name,
+            "matched_points": len(match_result.points),
+            "valid_pixels": int(accuracy.valid_pixels),
+            "total_pixels": int(accuracy.total_pixels),
+            "confidence_threshold": confidence_threshold,
+            "statistics": {
+                "mean_x": number(accuracy.mean_x),
+                "mean_y": number(accuracy.mean_y),
+                "std_x": number(accuracy.std_x),
+                "std_y": number(accuracy.std_y),
+                "ce90": number(accuracy.ce90),
+                "ce95": number(accuracy.ce95),
+            },
+            "quality": accuracy.quality.to_dict(),
+        }
+        with open(accuracy.summary_file, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
 
     def generate_reports(
         self,
@@ -360,9 +471,35 @@ class KariosAPI:
         dx_plot_path = self._generate_dx_plot(match_result, output_dir)
         dy_plot_path = self._generate_dy_plot(match_result, output_dir)
         ce_plot_path = self._generate_ce_plot(match_result, accuracy_analysis, output_dir)
+        # Both images equalized once when the mosaic and the overlay use them
+        equalized = None
+        config = self._runtime_configuration
+        if config.mosaic_tile_size and config.generate_overlay:
+            equalized = equalized_pair(
+                match_result.monitored_image,
+                match_result.reference_image,
+                mask=match_result.mask,
+                no_values=self._runtime_configuration.no_values,
+            )
+        mosaic_path = (
+            self._generate_mosaic(match_result, output_dir, equalized)
+            if self._runtime_configuration.mosaic_tile_size
+            else None
+        )
+        overlay_path = (
+            self._generate_overlay(match_result, output_dir, equalized)
+            if self._runtime_configuration.generate_overlay
+            else None
+        )
 
         # Generate DEM plots if DEM is provided
         dem_plots = self._generate_dem_plots(match_result, output_dir, dem_file_path)
+
+        # Debug mode: also analyze how uniformly key points cover the scene,
+        # not just how many were found.
+        coverage_plot_path = None
+        if self._runtime_configuration.debug:
+            coverage_plot_path = self._generate_coverage_plot(match_result, output_dir)
 
         report_paths = ReportPaths(
             overview_plot=str(overview_path),
@@ -371,6 +508,9 @@ class KariosAPI:
             ce_plot=str(ce_plot_path),
             dem_plots=dem_plots,
             products=product_paths,
+            mosaic=str(mosaic_path) if mosaic_path else None,
+            overlay=str(overlay_path) if overlay_path else None,
+            coverage_plot=str(coverage_plot_path) if coverage_plot_path else None,
         )
 
         # Always generate HTML report
@@ -401,6 +541,7 @@ class KariosAPI:
             self._processing_configuration.accuracy_analysis_configuration.confidence_threshold,
             self._runtime_configuration.output_directory,
             laplacian_ksize=self._resolve_laplacian_ksize(),
+            laplacian_power=self._runtime_configuration.laplacian_power,
         )
 
     def _resolve_laplacian_ksize(self) -> dict[str, int] | None:
@@ -465,7 +606,12 @@ class KariosAPI:
         logger.info("Process %s", monitored_image_path)
 
         match_result = self.match_images(
-            monitored_image_path, reference_image_path, mask_file_path, resume, vector_mask_path
+            monitored_image_path,
+            reference_image_path,
+            mask_file_path,
+            resume,
+            vector_mask_path,
+            dem_file_path,
         )
 
         accuracy = self.analyze_accuracy(match_result)
@@ -497,13 +643,55 @@ class KariosAPI:
             reference_image (GdalRasterImage): reference image to check
         """
 
-        min_max = np.nanpercentile(monitored_image.array, [2, 98])
-        if min_max[1] - min_max[0] <= 10:
-            logger.warning("Low dynamic range detected for monitored, you could get poor results")
+        for label, image in (("monitored", monitored_image), ("reference", reference_image)):
+            if not self._has_low_dynamic_range(image.array):
+                continue
+            logger.warning("Low dynamic range detected for %s, you could get poor results", label)
 
-        min_max = np.nanpercentile(reference_image.array, [2, 98])
-        if min_max[1] - min_max[0] <= 10:
-            logger.warning("Low dynamic range detected for reference, you could get poor results")
+    @staticmethod
+    def _has_low_dynamic_range(array) -> bool:
+        """Whether the 2-98 percentile span is too narrow to match on.
+
+        The threshold only makes sense against integer digital numbers. A float
+        raster carrying reflectance in [0, 1] spans well under 10 by definition,
+        so the same test would flag every such product regardless of its quality.
+        Floats are judged against their own scale instead.
+        """
+        low, high = np.nanpercentile(array, [2, 98])
+        span = high - low
+        if np.issubdtype(array.dtype, np.floating):
+            return span <= 0.01 * abs(high) if high else True
+
+        return span <= 10
+
+    def _maybe_downsample(
+        self,
+        monitored_image: GdalRasterImage,
+        reference_image: GdalRasterImage,
+        mask: Optional[GdalRasterImage],
+    ) -> tuple[GdalRasterImage, GdalRasterImage, Optional[GdalRasterImage]]:
+        """Apply integer block_reduce downsampling when the config requests it.
+
+        Writes downsampled GeoTIFFs into the output directory so the rest of
+        the pipeline (chips, plots, products) works against the reduced
+        resolution. The mask is reduced with np.min so any masked sub-pixel
+        causes the resulting pixel to be masked.
+        """
+        ds_conf = self._processing_configuration.image_downsampling_configuration
+        ratio = ds_conf.ratio if ds_conf is not None else 1
+        if ratio <= 1:
+            return monitored_image, reference_image, mask
+
+        logger.info("Image downsampling enabled: ratio=%d", ratio)
+        out_dir = Path(self._runtime_configuration.output_directory)
+        mon_path = out_dir / f"downsampled_x{ratio}_{monitored_image.file_name}"
+        ref_path = out_dir / f"downsampled_x{ratio}_{reference_image.file_name}"
+        monitored_image = downsample_raster(monitored_image, ratio, mon_path)
+        reference_image = downsample_raster(reference_image, ratio, ref_path)
+        if mask is not None:
+            mask_path = out_dir / f"downsampled_x{ratio}_{mask.file_name}"
+            mask = downsample_raster(mask, ratio, mask_path)
+        return monitored_image, reference_image, mask
 
     def _load_images(
         self, ref_file_path: Path, mon_file_path: Path
@@ -526,17 +714,18 @@ class KariosAPI:
         self._check_quality(monitored_image, reference_image)
 
         if not monitored_image.is_compatible_with(reference_image):
-            raise KariosException(
-                f"""Monitored image geo info not compatible with reference image:
+            raise KariosException(f"""Monitored image geo info not compatible with reference image:
             * Monitored image : {monitored_image.image_information}
             * Reference image : {reference_image.image_information}
-            """
-            )
+            """)
 
         return reference_image, monitored_image
 
     def _load_mask(
-        self, monitored_image: GdalRasterImage, mask_file_path: Optional[Path], vector_mask_path: Optional[Path] = None
+        self,
+        monitored_image: GdalRasterImage,
+        mask_file_path: Optional[Path],
+        vector_mask_path: Optional[Path] = None,
     ) -> Optional[GdalRasterImage]:
         """Load mask as GdalRasterImage and check compatibility with monitored image.
 
@@ -555,7 +744,7 @@ class KariosAPI:
             Mask if compatible with monitored image, None if no mask provided
         """
         import numpy as np
-        
+
         raster_mask = None
         vector_mask = None
 
@@ -564,19 +753,23 @@ class KariosAPI:
             logger.info("Load raster mask file %s", mask_file_path)
             raster_mask = GdalRasterImage(mask_file_path)
             if not raster_mask.is_compatible_with(monitored_image):
-                raise KariosException(
-                    f"""Mask geo info not compatible with monitored image:
+                raise KariosException(f"""Mask geo info not compatible with monitored image:
             * Mask image : {raster_mask.image_information}
             * Monitored image : {monitored_image.image_information}
-            """
-                )
+            """)
             logger.info("Raster mask loaded")
 
         # Load vector mask if provided
         if vector_mask_path:
             logger.info("Load vector mask file %s", vector_mask_path)
             from karios.core.image import rasterize_vector_mask
-            vector_mask = rasterize_vector_mask(str(vector_mask_path), monitored_image)
+
+            # In the output directory rather than a temporary file: the mask is
+            # read again by the reports, and temporary files were never removed
+            output_dir = Path(self._runtime_configuration.output_directory)
+            vector_mask = rasterize_vector_mask(
+                str(vector_mask_path), monitored_image, str(output_dir / "vector_mask.tif")
+            )
             logger.info("Vector mask rasterized and loaded")
 
         # If no masks provided, return None
@@ -592,19 +785,15 @@ class KariosAPI:
 
         # Combine both masks with AND logic
         logger.info("Combining raster and vector masks with AND logic")
-        combined_array = np.logical_and(
-            raster_mask.array > 0,
-            vector_mask.array > 0
-        ).astype(np.uint8)
+        combined_array = np.logical_and(raster_mask.array > 0, vector_mask.array > 0).astype(
+            np.uint8
+        )
 
-        # Create combined mask
-        import tempfile
-        temp_file = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
-
-        raster_mask.to_raster(temp_path, combined_array)
-        combined_mask = GdalRasterImage(temp_path)
+        # Create combined mask, next to the other outputs
+        output_dir = Path(self._runtime_configuration.output_directory)
+        combined_path = str(output_dir / "combined_mask.tif")
+        raster_mask.to_raster(combined_path, combined_array)
+        combined_mask = GdalRasterImage(combined_path)
 
         # Log statistics
         raster_valid = np.sum(raster_mask.array > 0)
@@ -614,7 +803,7 @@ class KariosAPI:
             "Mask combination: raster=%d valid pixels, vector=%d valid pixels, combined=%d valid pixels (AND logic)",
             raster_valid,
             vector_valid,
-            combined_valid
+            combined_valid,
         )
 
         return combined_mask
@@ -652,7 +841,7 @@ class KariosAPI:
         points: pd.DataFrame,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
-        no_values: Optional[list[int]],
+        no_values: Optional[list[float]],
     ) -> pd.DataFrame:
         """Filter out key points where reference or monitored image has specified DN values.
 
@@ -791,6 +980,7 @@ class KariosAPI:
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
         mask: Optional[GdalRasterImage],
+        dem: Optional[GdalRasterImage] = None,
     ) -> pd.DataFrame:
         """Get match points either by running KLT or reading from CSV.
 
@@ -799,6 +989,7 @@ class KariosAPI:
             monitored_image: Monitored image
             reference_image: Reference image
             mask: Optional mask image
+            dem: Optional DEM, used to add an "alt" column to the CSV
 
         Returns:
             DataFrame containing match points
@@ -806,21 +997,28 @@ class KariosAPI:
 
         filename = f"KLT_matcher_{get_filename(monitored_image.filepath)}_{get_filename(reference_image.filepath)}"
         csv_file = Path(self._runtime_configuration.output_directory) / f"{filename}.csv"
+        self._detected_points = None
 
         if not resume:
             # Run matcher if not resuming
             if csv_file.exists():
                 logger.warning("CSV file exists, will overwrite it: %s", str(csv_file))
                 csv_file.unlink()
-            points = self._compute_matches(monitored_image, reference_image, mask, csv_file)
+            points = self._compute_matches(monitored_image, reference_image, mask, csv_file, dem)
+            self._detected_points = self._klt.detected_points
         elif not csv_file.exists():
             # Run matcher if resuming but CSV doesn't exist
             logger.warning("Cannot resume, CSV file missing, create it : %s", str(csv_file))
-            points = self._compute_matches(monitored_image, reference_image, mask, csv_file)
+            points = self._compute_matches(monitored_image, reference_image, mask, csv_file, dem)
+            self._detected_points = self._klt.detected_points
         else:
             # Load from CSV if resuming and CSV exists
             logger.info("Load CSV : %s", str(csv_file))
             points = pd.read_csv(csv_file, sep=";", index_col=False)
+            if dem is not None and "alt" not in points.columns:
+                logger.info("Add DEM elevation to CSV : %s", str(csv_file))
+                self._add_dem_altitude(points, dem)
+                points.to_csv(csv_file, sep=";", index=False)
 
         return points
 
@@ -830,6 +1028,7 @@ class KariosAPI:
         reference_image: GdalRasterImage,
         mask: Optional[GdalRasterImage],
         csv_file: Path,
+        dem: Optional[GdalRasterImage] = None,
     ) -> pd.DataFrame:
         """Compute matches using KLT tracker.
 
@@ -838,12 +1037,15 @@ class KariosAPI:
             reference_image: Reference image
             mask: Optional mask image
             csv_file: Path to save CSV results
+            dem: Optional DEM, used to add an "alt" column to the CSV
 
         Returns:
             DataFrame containing match points
         """
         dataframe_gen = self._klt.match(monitored_image, reference_image, mask)
-        return self._handle_klt_results(dataframe_gen, csv_file, monitored_image, reference_image)
+        return self._handle_klt_results(
+            dataframe_gen, csv_file, monitored_image, reference_image, dem
+        )
 
     def _handle_klt_results(
         self,
@@ -851,11 +1053,13 @@ class KariosAPI:
         csv_file: Path,
         monitored_image: GdalRasterImage,
         reference_image: GdalRasterImage,
+        dem: Optional[GdalRasterImage] = None,
     ) -> pd.DataFrame:
         """Process KLT results by:
         - computing radial error
         - computing angle error
         - computing zncc for relevant KP
+        - adding DEM elevation if a DEM is provided
         - save to CSV.
 
         Args:
@@ -863,6 +1067,7 @@ class KariosAPI:
             csv_file: Path to save CSV results
             monitored_image: Monitored image
             reference_image: Reference image
+            dem: Optional DEM, used to add an "alt" column
 
         Returns:
             Combined DataFrame with all results
@@ -883,31 +1088,19 @@ class KariosAPI:
 
                 zncc_candidates = dataframe[dataframe["score"] >= threshold]
 
-                # Initialize score columns with NaN values
-                dataframe["zncc_score"] = np.nan
-                dataframe["mutual_info_score"] = np.nan
-
-                # Compute ZNCC and mutual information scores only for the candidates
-                zncc_scores = self._zncc_service.compute_zncc(
-                    zncc_candidates, monitored_image, reference_image
-                )
-                mutual_info_scores = self._mutual_info_service.compute_mutual_info(
-                    zncc_candidates, monitored_image, reference_image
-                )
-
-                # Assign the computed scores back to the original dataframe using the same indices
-                dataframe.loc[zncc_candidates.index, "zncc_score"] = zncc_scores
-                dataframe.loc[zncc_candidates.index, "mutual_info_score"] = mutual_info_scores
-
-                # Compute NMI scores for the same candidates
-                dataframe["mi_score"] = np.nan
-                mi_scores = self._zncc_service.compute_mi(
-                    zncc_candidates, monitored_image, reference_image
-                )
-                dataframe.loc[zncc_candidates.index, "mi_score"] = mi_scores
+                # ZNCC, Studholme's and normalized mutual information of the
+                # candidates' patches, in one pass; NaN for the other points
+                logger.info("Compute patch scores for %s points", len(zncc_candidates))
+                scores = compute_patch_scores(zncc_candidates, monitored_image, reference_image)
+                for column in scores.columns:
+                    dataframe[column] = np.nan
+                    dataframe.loc[zncc_candidates.index, column] = scores[column]
 
             else:
                 logger.warning("Large shift applied, skip ZNCC")
+
+            if dem is not None:
+                self._add_dem_altitude(dataframe, dem)
 
             if not csv_file.exists():
                 logger.info("Write to csv %s", str(csv_file))
@@ -919,6 +1112,13 @@ class KariosAPI:
             all_frame = pd.concat([all_frame, dataframe])
 
         return all_frame
+
+    @staticmethod
+    def _add_dem_altitude(points: pd.DataFrame, dem: GdalRasterImage) -> None:
+        """Add an "alt" column with the DEM elevation at each key point (reference x0, y0)."""
+        x_index = points["x0"].to_numpy().astype(int)
+        y_index = points["y0"].to_numpy().astype(int)
+        points["alt"] = dem.array[y_index, x_index]
 
     def _generate_overview_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
         """Generate overview plot.
@@ -942,6 +1142,51 @@ class KariosAPI:
         overview_path = output_dir / "01_overview.png"
         overview_plot.plot(overview_path)
         return overview_path
+
+    def _generate_mosaic(
+        self, match_result: MatchResult, output_dir: Path, equalized=None
+    ) -> Path:
+        """Generate the checkerboard mosaic of the monitored and reference images.
+
+        Args:
+            match_result: Match result
+            output_dir: Output directory
+            equalized: equalized_pair() of the images, if already computed
+
+        Returns:
+            Path to the generated image
+        """
+        return generate_mosaic(
+            match_result.monitored_image,
+            match_result.reference_image,
+            output_dir / "05_mosaic",
+            self._runtime_configuration.mosaic_tile_size,
+            mask=match_result.mask,
+            no_values=self._runtime_configuration.no_values,
+            equalized=equalized,
+        )
+
+    def _generate_overlay(
+        self, match_result: MatchResult, output_dir: Path, equalized=None
+    ) -> Path:
+        """Generate the color overlay of the monitored and reference images.
+
+        Args:
+            match_result: Match result
+            output_dir: Output directory
+            equalized: equalized_pair() of the images, if already computed
+
+        Returns:
+            Path to the generated image
+        """
+        return generate_overlay(
+            match_result.monitored_image,
+            match_result.reference_image,
+            output_dir / "06_overlay",
+            mask=match_result.mask,
+            no_values=self._runtime_configuration.no_values,
+            equalized=equalized,
+        )
 
     def _generate_dx_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
         """Generate dx shift plot.
@@ -1022,6 +1267,43 @@ class KariosAPI:
         ce_plot.plot(ce_path)
         return ce_path
 
+    def _generate_coverage_plot(self, match_result: MatchResult, output_dir: Path) -> Path:
+        """Generate the key point density/quality coverage plot (debug mode only).
+
+        Args:
+            match_result: Match result
+            output_dir: Output directory
+
+        Returns:
+            Path to the generated plot
+        """
+        counts = compute_density_grid(
+            match_result.points,
+            match_result.monitored_image.x_size,
+            match_result.monitored_image.y_size,
+            self._processing_configuration.coverage_plot_configuration.grid_size,
+        )
+        stats = coverage_statistics(counts)
+        logger.info(
+            "KP coverage: %s points, %s/%s empty cells (%.1f%%), coefficient of variation %.2f "
+            "(lower = more uniform)",
+            stats["total_points"],
+            stats["empty_cells"],
+            stats["total_cells"],
+            100 * stats["empty_cell_ratio"],
+            stats["coefficient_of_variation"],
+        )
+
+        coverage_plot = CoveragePlot(
+            self._processing_configuration.coverage_plot_configuration,
+            match_result.monitored_image,
+            match_result.points,
+            self._runtime_configuration.title_prefix,
+        )
+        coverage_path = output_dir / "05_coverage.png"
+        coverage_plot.plot(coverage_path)
+        return coverage_path
+
     def _generate_dem_plots(
         self, match_result: MatchResult, output_dir: Path, dem_file_path: Optional[Path]
     ) -> list[str]:
@@ -1046,14 +1328,10 @@ class KariosAPI:
                 logger.info("No DEM file provided, will not plot deviation regarding DEM")
             return dem_paths
 
-        # Extract DEM values for each point
+        # Extract DEM values for each point, unless already done during matching
         points = match_result.points.copy()
-        x_index = points["x0"].to_numpy().astype(int)
-        y_index = points["y0"].to_numpy().astype(int)
-        points["alt"] = dem.array[y_index, x_index]
-
-        x_index = None
-        y_index = None
+        if "alt" not in points.columns:
+            self._add_dem_altitude(points, dem)
 
         # Configure plot parameters
         conf = self._processing_configuration.dem_plot_configuration

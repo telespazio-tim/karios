@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """End 2 end test module"""
+
 import difflib
 import filecmp
 import os

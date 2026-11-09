@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -18,6 +18,7 @@
 
 
 """Module for image classes."""
+
 from __future__ import annotations
 
 import logging
@@ -41,6 +42,43 @@ class GdalError(Exception):
     """
 
 
+# Drivers that read pixels or features from other files or the network on the
+# dataset's behalf. A ".tif" that is really a VRT can map any local file into
+# pixels (raw raster bands) or make requests (remote sources); inputs are
+# expected to hold their own data. Convert such datasets with gdal_translate or
+# ogr2ogr first.
+REFUSED_RASTER_DRIVERS = frozenset(
+    {"VRT", "GTI", "DERIVED", "WMS", "WMTS", "WCS", "HTTP", "EEDAI", "DAAS", "PLMOSAIC",
+     "OGCAPI", "STACIT", "STACTA"}
+)
+REFUSED_VECTOR_DRIVERS = frozenset(
+    {"OGR_VRT", "WFS", "OAPIF", "CSW", "Elasticsearch", "CouchDB", "MongoDBv3", "PostgreSQL",
+     "MySQL", "MSSQLSpatial", "OCI", "ODBC", "NGW", "Carto", "AmigoCloud", "EEDA", "PLSCENES",
+     "GPSBabel"}
+)
+NETWORK_PATHS = (
+    "/vsicurl", "/vsis3", "/vsigs", "/vsiaz", "/vsiadls", "/vsioss", "/vsiswift", "/vsihdfs",
+    "/vsiwebhdfs", "http://", "https://", "ftp://",
+)
+
+
+def check_dataset_path(path: str, kind: int = gdal.OF_RASTER) -> None:
+    """Refuse network paths and drivers that read other data, before opening anything.
+
+    `kind` is gdal.OF_RASTER or gdal.OF_VECTOR. Raises GdalError.
+    """
+    lowered = str(path).lower()
+    if any(prefix in lowered for prefix in NETWORK_PATHS):
+        raise GdalError(f"Network paths are not accepted as input: {path}")
+    driver = gdal.IdentifyDriverEx(str(path), kind)
+    refused = REFUSED_VECTOR_DRIVERS if kind == gdal.OF_VECTOR else REFUSED_RASTER_DRIVERS
+    if driver is not None and driver.ShortName in refused:
+        raise GdalError(
+            f"{path} is a {driver.ShortName} dataset, which reads other files or the network; "
+            "convert it to a self-contained file first (gdal_translate or ogr2ogr)"
+        )
+
+
 @contextmanager
 def open_gdal_dataset(dataset_path: str) -> Iterator[gdal.Dataset]:
     """
@@ -58,6 +96,7 @@ def open_gdal_dataset(dataset_path: str) -> Iterator[gdal.Dataset]:
     Raises:
         GdalError: If the dataset cannot be opened
     """
+    check_dataset_path(dataset_path)
     ds = gdal.Open(dataset_path)
     if ds is None:
         raise GdalError(f"Failed to open dataset: {dataset_path}")
@@ -124,6 +163,7 @@ def rasterize_vector_mask(
     logger.info("Rasterizing vector mask: %s", vector_path)
 
     # Open vector file
+    check_dataset_path(vector_path, gdal.OF_VECTOR)
     vector_ds = gdal.OpenEx(vector_path, gdal.OF_VECTOR)
     if vector_ds is None:
         raise GdalError(f"Failed to open vector file: {vector_path}")
@@ -136,7 +176,7 @@ def rasterize_vector_mask(
 
         # Create output raster
         driver = gdal.GetDriverByName("GTiff")
-        
+
         # Create temporary file if no output path provided
         if output_path is None:
             temp_file = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
@@ -171,7 +211,7 @@ def rasterize_vector_mask(
                 raster_ds,
                 [1],  # Bands to burn into
                 layer,
-                options=['BURN=1', 'ALL_TOUCHED=TRUE'],
+                options=["BURN=1", "ALL_TOUCHED=TRUE"],
             )
 
             # Flush cache to ensure data is written
@@ -330,12 +370,21 @@ class GdalRasterImage:
         return self._no_data_value
 
     def have_pixel_resolution(self) -> bool:
-        """Indicate if the image have a pixel size
+        """Indicate if the image has a pixel size in its CRS linear unit, usable as meters.
+
+        Only a projected CRS on a north-up grid gives one: in a geographic CRS the
+        geotransform steps are degrees, and on a rotated grid they are not the
+        pixel sides (a PhiSat scene in WGS 84 has 5.14 m by 4.57 m pixels, 16°
+        apart). Such images are measured in pixels, like unreferenced ones,
+        unless the user provides a pixel size.
 
         Returns:
             bool: 'True' if the image have a pixel size.
         """
-        return bool(self.projection)
+        if not self.projection or self.spatial_ref is None:
+            return False
+        north_up = self._geo[2] == 0 and self._geo[4] == 0
+        return bool(self.spatial_ref.IsProjected()) and north_up
 
     def get_epsg(self) -> str | None:
         """Return image EPSG code as
@@ -343,10 +392,11 @@ class GdalRasterImage:
         Returns:
             str|None: EPSG code as "EPSG: XXXX"
         """
-        if self.have_pixel_resolution():
-            srs = osr.SpatialReference(wkt=self.projection)
-            return srs.GetAttrValue("PROJCS|AUTHORITY", 1)
-        return None
+        if not self.projection:
+            return None
+        srs = osr.SpatialReference(wkt=self.projection)
+        # PROJCS|AUTHORITY only exists for projected CRS: a WGS 84 image has none
+        return srs.GetAuthorityCode(None)
 
     def read(self, band_id, x_off, y_off, x_size, y_size) -> NDArray:
         # pylint: disable=too-many-arguments
@@ -425,6 +475,19 @@ class GdalRasterImage:
         dataset.FlushCache()
         dataset = None
 
+    @staticmethod
+    def _same_crs(first, second) -> bool:
+        """Whether two spatial references are the same CRS.
+
+        IsSame compares the WKT definitions and reports a mismatch for the same
+        CRS written differently (e.g. an extra AUTHORITY tag), so equal EPSG
+        codes are accepted too. Two references without any code are not.
+        """
+        if first.IsSame(second):
+            return True
+        code = first.GetAuthorityCode(None)
+        return code is not None and code == second.GetAuthorityCode(None)
+
     def is_compatible_with(self, image: GdalRasterImage) -> bool:
         """Check that images have same geometric and geographic specifications
 
@@ -432,10 +495,15 @@ class GdalRasterImage:
             image (GdalRasterImage): image to compare with
 
         Returns:
-            bool: True images have same geometric and geographic specifications
+            bool: True images have same geometric and geographic specifications.
+                False (not an exception) when either image has no spatial
+                reference at all - e.g. a plain array saved as GeoTIFF without
+                ever being geocoded - since there is then nothing to compare.
         """
+        if self.spatial_ref is None or image.spatial_ref is None:
+            return False
         return (
-            self.spatial_ref.IsSame(image.spatial_ref)
+            self._same_crs(self.spatial_ref, image.spatial_ref)
             and (self._geo == image._geo)
             and (self.x_size == image.x_size)
             and (self.y_size == image.y_size)
@@ -447,7 +515,8 @@ class GdalRasterImage:
         Returns:
             str: Images geometric and geographic specifications info
         """
-        return f"""Projection: {self.projection}
+        projection = self.projection or "<none - image has no spatial reference>"
+        return f"""Projection: {projection}
         GetGeoTransform: {self._geo}
         X Size: {self.x_size}
         Y Size: {self.y_size}

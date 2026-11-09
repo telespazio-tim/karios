@@ -278,6 +278,71 @@ def test_is_compatible_with():
         assert image1.is_compatible_with(image2) is True
 
 
+def test_is_compatible_with_no_spatial_ref_on_other_image():
+    """A missing spatial reference (e.g. a plain array saved as GeoTIFF,
+    never geocoded) must return False, not raise - previously
+    `self.spatial_ref.IsSame(...)` crashed with AttributeError on None."""
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = "EPSG:4326"
+        mock_spatial_ref = Mock()
+        mock_dataset.GetSpatialRef.return_value = mock_spatial_ref
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image1 = GdalRasterImage("/fake/path/image1.tif")
+        image2 = GdalRasterImage("/fake/path/image2.tif")
+        image2.spatial_ref = None  # not georeferenced
+
+        assert image1.is_compatible_with(image2) is False
+
+
+def test_is_compatible_with_no_spatial_ref_on_self():
+    """Same as above, checked from the other side of the comparison."""
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = ""
+        mock_dataset.GetSpatialRef.return_value = None
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image1 = GdalRasterImage("/fake/path/image1.tif")
+        image2 = GdalRasterImage("/fake/path/image2.tif")
+
+        assert image1.spatial_ref is None
+        assert image1.is_compatible_with(image2) is False
+
+
+def test_image_information_reports_missing_spatial_reference():
+    """The diagnostic string shown in the raised KariosException must say
+    plainly that there is no spatial reference, not just an empty string."""
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = ""
+        mock_dataset.GetSpatialRef.return_value = None
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image = GdalRasterImage("/fake/path/image.tif")
+
+        assert "no spatial reference" in image.image_information
+
+
 if __name__ == "__main__":
     test_gdal_raster_image_initialization()
     test_gdal_raster_image_properties()
@@ -290,4 +355,142 @@ if __name__ == "__main__":
     test_open_gdal_dataset_context_manager()
     test_open_gdal_dataset_context_manager_failure()
     test_is_compatible_with()
+    test_is_compatible_with_no_spatial_ref_on_other_image()
+    test_is_compatible_with_no_spatial_ref_on_self()
+    test_image_information_reports_missing_spatial_reference()
     print("All GdalRasterImage tests passed!")
+
+
+def _geotiff(path, epsg, geo_transform):
+    """1-band 8x8 GeoTIFF in `epsg` (None: no CRS) with `geo_transform`."""
+    from osgeo import gdal, osr
+
+    dataset = gdal.GetDriverByName("GTiff").Create(str(path), 8, 8, 1, gdal.GDT_UInt16)
+    if epsg is not None:
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(epsg)
+        dataset.SetProjection(srs.ExportToWkt())
+    dataset.SetGeoTransform(geo_transform)
+    dataset = None
+    return GdalRasterImage(str(path))
+
+
+# PhiSat scene_0_BC_band_0.tiff: WGS 84 degrees on a rotated, skewed grid
+PHISAT_WGS84 = (5.0185, -5.63e-05, -1.22e-05, 43.5735, 2.16e-05, -4.04e-05)
+
+
+@pytest.mark.parametrize(
+    "epsg, geo_transform, metric, code",
+    [
+        (32631, (600000.0, 30.0, 0.0, 4900020.0, 0.0, -30.0), True, "32631"),
+        (4326, PHISAT_WGS84, False, "4326"),
+        (4326, (5.0, 1e-4, 0.0, 43.5, 0.0, -1e-4), False, "4326"),
+        (32631, (600000.0, 29.0, 7.8, 4900020.0, 7.8, -29.0), False, "32631"),
+        (None, (0.0, 1.0, 0.0, 0.0, 0.0, 1.0), False, None),
+    ],
+    ids=["utm-north-up", "wgs84-rotated", "wgs84-north-up", "utm-rotated", "no-crs"],
+)
+def test_metric_pixel_size_needs_a_projected_north_up_grid(
+    tmp_path, epsg, geo_transform, metric, code
+):
+    """Degrees and rotated grid steps are no pixel size in meters; the EPSG code is still read."""
+    image = _geotiff(tmp_path / "image.tif", epsg, geo_transform)
+
+    assert image.have_pixel_resolution() is metric
+    assert image.get_epsg() == code
+
+
+def test_image_resolution_is_in_pixels_on_a_wgs84_rotated_grid(tmp_path):
+    """The PhiSat case: no metric size, so pixels unless the user provides one."""
+    image = _geotiff(tmp_path / "image.tif", 4326, PHISAT_WGS84)
+
+    assert get_image_resolution(image, image) is None
+    assert get_image_resolution(image, image, 4.8) == 4.8
+
+
+def test_vrt_disguised_as_tif_is_refused(tmp_path):
+    """A VRT named .tif could read any local file as pixels: refused before being read."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("SECRET-TOKEN-1234567890")
+    disguised = tmp_path / "innocent.tif"
+    disguised.write_text(
+        f"""<VRTDataset rasterXSize="23" rasterYSize="1">
+  <VRTRasterBand dataType="Byte" band="1" subClass="VRTRawRasterBand">
+    <SourceFilename relativetoVRT="0">{secret}</SourceFilename>
+    <ImageOffset>0</ImageOffset><PixelOffset>1</PixelOffset><LineOffset>23</LineOffset>
+  </VRTRasterBand>
+</VRTDataset>"""
+    )
+
+    with pytest.raises(GdalError, match="VRT dataset"):
+        GdalRasterImage(str(disguised))
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/vsicurl/http://127.0.0.1:9/a.tif", "https://example.com/a.tif", "/vsizip//vsis3/b/a.zip"],
+)
+def test_network_paths_are_refused(path):
+    with pytest.raises(GdalError, match="Network paths"):
+        GdalRasterImage(path)
+
+
+def test_self_contained_geotiff_is_accepted(tmp_path):
+    image = _geotiff(tmp_path / "image.tif", 32631, (600000.0, 30.0, 0.0, 4900020.0, 0.0, -30.0))
+
+    assert image.array.shape == (8, 8)
+
+
+def test_ogr_vrt_vector_mask_is_refused(tmp_path):
+    from karios.core.image import rasterize_vector_mask
+
+    reference = _geotiff(tmp_path / "ref.tif", 32631, (600000.0, 30.0, 0.0, 4900020.0, 0.0, -30.0))
+    vrt = tmp_path / "mask.geojson"
+    vrt.write_text(
+        '<OGRVRTDataSource><OGRVRTLayer name="l"><SrcDataSource>/etc/hosts</SrcDataSource>'
+        "</OGRVRTLayer></OGRVRTDataSource>"
+    )
+
+    with pytest.raises(GdalError, match="OGR_VRT dataset"):
+        rasterize_vector_mask(str(vrt), reference, str(tmp_path / "out.tif"))
+
+
+def _images_with_crs(first_crs, second_crs):
+    with patch("karios.core.image.open_gdal_dataset") as mock_open_gdal:
+        mock_dataset = Mock()
+        mock_dataset.GetGeoTransform.return_value = (0, 1, 0, 0, 0, -1)
+        mock_dataset.RasterXSize = 100
+        mock_dataset.RasterYSize = 100
+        mock_dataset.GetProjection.return_value = "EPSG:4326"
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_dataset
+        mock_open_gdal.return_value = mock_context
+
+        image1 = GdalRasterImage("/fake/path/image1.tif")
+        image2 = GdalRasterImage("/fake/path/image2.tif")
+    image1.spatial_ref, image2.spatial_ref = first_crs, second_crs
+    return image1, image2
+
+
+def _crs(is_same, code):
+    crs = Mock()
+    crs.IsSame.return_value = is_same
+    crs.GetAuthorityCode.return_value = code
+    return crs
+
+
+def test_is_compatible_with_same_epsg_code_despite_different_wkt():
+    """IsSame rejects the same CRS written with different WKT details."""
+    image1, image2 = _images_with_crs(_crs(False, "32631"), _crs(False, "32631"))
+    assert image1.is_compatible_with(image2) is True
+
+
+def test_is_compatible_with_different_epsg_codes():
+    image1, image2 = _images_with_crs(_crs(False, "32631"), _crs(False, "32632"))
+    assert image1.is_compatible_with(image2) is False
+
+
+def test_is_compatible_with_no_epsg_code_is_not_a_match():
+    """Two references without any code must not compare equal (None == None)."""
+    image1, image2 = _images_with_crs(_crs(False, None), _crs(False, None))
+    assert image1.is_compatible_with(image2) is False

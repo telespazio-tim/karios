@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 Telespazio France.
+# Copyright (c) 2026 Telespazio France.
 #
 # This file is part of KARIOS.
 # See https://github.com/telespazio-tim/karios for further info.
@@ -20,9 +20,12 @@
 Provides command line interface for KARIOS functionality.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
+import shlex
 import shutil
 import sys
 from pathlib import Path, PurePath
@@ -32,11 +35,17 @@ import numpy as np
 import rich_click as click
 from osgeo import gdal
 
+from karios.accuracy_analysis.quality_control import percent
 from karios.api import KariosAPI, RuntimeConfiguration
 from karios.core.configuration import ProcessingConfiguration
 from karios.core.image import GdalRasterImage
 from karios.log import configure_logging
-from karios.matcher.global_align import apply_global_alignment
+from karios.matcher.global_align import (
+    SIFT_NFEATURES,
+    AlignmentTransform,
+    apply_alignment_transform,
+    apply_global_alignment,
+)
 from karios.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -63,13 +72,19 @@ click.rich_click.OPTION_GROUPS = {
                 "--generate-key-points-mask",
                 "--generate-intermediate-product",
                 "--generate-kp-chips",
+                "--mosaic-tile-size",
+                "--generate-overlay",
                 "--no-value",
                 "--dem-description",
             ],
         },
         {
             "name": "Advanced Options",
-            "options": ["--enable-large-shift-detection"],
+            "options": [
+                "--enable-large-shift-detection",
+                "--enable-coarse-to-fine",
+                "--laplacian-power",
+            ],
         },
         {
             "name": "Logging Options",
@@ -206,8 +221,22 @@ def cli() -> None:
     """,
 )
 @click.option(
+    "--mosaic-tile-size",
+    "-mts",
+    type=click.IntRange(min=0),
+    default=0,
+    help="Generate a checkerboard mosaic of the monitored and reference images with tiles of this size in pixel (e.g. 128), shown in the HTML report. 0 disables it",
+    show_default=True,
+)
+@click.option(
+    "--generate-overlay",
+    "-gov",
+    is_flag=True,
+    help="Generate an overlay of the monitored image, in red, and the reference image, in green and blue, shown in the HTML report. Aligned features are gray, shifted ones fringed in red and cyan",
+)
+@click.option(
     "--no-value",
-    type=int,
+    type=float,
     multiple=True,
     default=None,
     help="Filter out key points where reference or monitored image has this DN value. Can be used multiple times (e.g., --no-value 0 --no-value 255)",
@@ -224,6 +253,22 @@ def cli() -> None:
     "--enable-large-shift-detection",
     is_flag=True,
     help="Enable detection and correction of large pixel shifts",
+)
+@click.option(
+    "--enable-coarse-to-fine",
+    is_flag=True,
+    help="Match by descending the image pyramid explicitly, keeping key points near data edges",
+)
+@click.option(
+    "--laplacian-power",
+    type=click.FloatRange(0.0, 1.0),
+    default=1.0,
+    help=(
+        "Shape of the Laplacian rescale feeding the KLT tracker: 0 keeps it as-is, "
+        "1 saturates it to a near-binary response (the historical CV_8U behaviour's "
+        "cross-sensor robustness, made explicit and tunable)."
+    ),
+    show_default=True,
 )
 @click.option("--debug", "-d", is_flag=True, help="Enable Debug mode")
 @click.option("--no-log-file", is_flag=True, help="Do not log in file")
@@ -246,11 +291,15 @@ def process(
     generate_key_points_mask: bool,
     generate_intermediate_product: bool,
     generate_kp_chips: bool,
+    mosaic_tile_size: int,
+    generate_overlay: bool,
     vector_mask: Optional[Path],
-    no_value: tuple[int, ...],
+    no_value: tuple[float, ...],
     title_prefix: Optional[str],
     dem_description: Optional[str],
     enable_large_shift_detection: bool,
+    enable_coarse_to_fine: bool,
+    laplacian_power: float,
     no_log_file: bool,
     debug: bool,
     log_file_path: str,
@@ -304,6 +353,12 @@ def process(
         output_dir = out / f"{monitored_image.stem}_{reference_image.stem}"
         os.makedirs(output_dir, exist_ok=True)
 
+        # Copy the configuration as soon as we know where results will be
+        # written, so it is there even if processing fails partway through -
+        # useful to know exactly what was attempted. Overwritten below with
+        # resolved "auto" values once/if processing succeeds.
+        shutil.copy(conf, output_dir)
+
         # Create runtime configuration
         runtime_configuration = RuntimeConfiguration(
             output_directory=output_dir,
@@ -312,9 +367,14 @@ def process(
             gen_kp_mask=generate_key_points_mask,
             gen_delta_raster=generate_intermediate_product,
             generate_kp_chips=generate_kp_chips,
+            mosaic_tile_size=mosaic_tile_size,
+            generate_overlay=generate_overlay,
             dem_description=dem_description,
             enable_large_shift_detection=enable_large_shift_detection,
+            enable_coarse_to_fine=enable_coarse_to_fine,
             no_values=list(no_value) if no_value else None,
+            debug=debug,
+            laplacian_power=laplacian_power,
         )
 
         # Validate configuration
@@ -328,8 +388,8 @@ def process(
             monitored_image, reference_image, mask_file, dem_file, resume, vector_mask
         )
 
-        # Copy configuration to the output directory. When any klt_matching field was
-        # in "auto" mode, replace it with the resolved value so the output config
+        # When any klt_matching field was in "auto" mode, overwrite the config
+        # already copied above with the resolved value, so the output config
         # reflects what actually ran.
         klt_conf = processing_configuration.klt_configuration
         ksize_resolved = None
@@ -362,8 +422,6 @@ def process(
             out_conf_path = output_dir / Path(conf).name
             with open(out_conf_path, "w", encoding="utf-8") as f:
                 json.dump(conf_data, f, indent=4)
-        else:
-            shutil.copy(conf, output_dir)
 
         logger.info("Processing completed successfully")
         logger.info("Results written to %s", output_dir)
@@ -374,7 +432,8 @@ def process(
 
     except Exception as e:
         logger.error("Error during processing: %s", str(e), exc_info=debug)
-        return 1
+        # click ignores a command's return value: only an exit status tells scripts
+        sys.exit(1)
 
 
 @cli.command(
@@ -387,6 +446,7 @@ def process(
 )
 @click.argument(
     "reference_image",
+    required=False,
     type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
 )
 @click.option(
@@ -394,6 +454,29 @@ def process(
     type=click.Path(path_type=Path),
     default=Path("."),
     help="Output directory for aligned images",
+    show_default=True,
+)
+@click.option(
+    "--apply-to",
+    "apply_to",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    help="Another band of the monitored image's product, warped by the same alignment "
+    "instead of one estimated on it. Repeat it for several bands",
+)
+@click.option(
+    "--load-transform",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    help="Alignment saved by a previous run, <mon_stem>_global_alignment.json, applied "
+    "instead of estimating one: REFERENCE_IMAGE is then left out",
+)
+@click.option(
+    "--sift-nfeatures",
+    type=click.IntRange(min=0),
+    default=SIFT_NFEATURES,
+    help="Number of SIFT keypoints kept per image, the strongest ones (a few more "
+    "may be kept on ties). Limit it to reduce matching time and memory on large images. "
+    "0 = unlimited",
     show_default=True,
 )
 @click.option("--debug", "-d", is_flag=True, help="Enable Debug mode")
@@ -407,8 +490,11 @@ def process(
 )
 def align(
     monitored_image: Path,
-    reference_image: Path,
+    reference_image: Optional[Path],
     out: Path,
+    apply_to: tuple[Path, ...],
+    load_transform: Optional[Path],
+    sift_nfeatures: int,
     debug: bool,
     no_log_file: bool,
     log_file_path: str,
@@ -416,17 +502,32 @@ def align(
     """\b
     Align MONITORED_IMAGE to REFERENCE_IMAGE by estimating a 2D homography
     with SIFT feature matching + RANSAC, then refining with ECC on Sobel
-    gradient magnitudes. The warped mon is rendered onto ref's canvas so
-    both outputs share the same pixel grid.
+    gradient magnitudes. The warped mon keeps its CRS and grid, over its
+    corrected footprint. Without georeferencing on both images, it is rendered
+    over its footprint in ref instead, on a grid nested in ref's and fine
+    enough to keep mon's resolution, georeferenced in ref's CRS.
 
     \b
-    Outputs written to OUT:
-      <mon_stem>_global_aligned<ext>       — mon warped into ref's frame
-      <ref_stem>_global_aligned<ext>       — ref (unchanged)
-      <mon_stem>_global_aligned__<…>.tiff  — alternative candidates (one per
-                                             ECC-converged starting point) for
-                                             visual A/B in QGIS
+    The bands of one product share its georeferencing error, but the alignment
+    estimated on each differs slightly, and bands aligned one by one no longer
+    overlay. --apply-to warps other bands by the alignment estimated on
+    MONITORED_IMAGE; --load-transform warps MONITORED_IMAGE by an alignment
+    saved by a previous run. A band on the grid the alignment was estimated on
+    comes out on the same output grid, pixel for pixel; a band on another
+    grid, like a 20 m band of a 10 m product, keeps its own grid and CRS.
+
+    \b
+    Output written to OUT:
+      <mon_stem>_global_aligned<ext>       — mon aligned on ref
+      <mon_stem>_global_alignment.json     — the alignment estimated, to reuse
+                                             with --load-transform
+      <band_stem>_global_aligned<ext>      — each --apply-to band aligned
     """
+    if (reference_image is None) == (load_transform is None):
+        raise click.UsageError(
+            "Give either REFERENCE_IMAGE, to estimate the alignment, or --load-transform, "
+            "to apply a saved one"
+        )
     configure_logging(debug, not no_log_file, log_file_path)
     logger.info("Start align")
 
@@ -434,36 +535,102 @@ def align(
         os.makedirs(out, exist_ok=True)
 
         monitored = GdalRasterImage(str(monitored_image))
-        reference = GdalRasterImage(str(reference_image))
+        if load_transform is None:
+            transform_path = out / f"{monitored_image.stem}_global_alignment.json"
+            reference = GdalRasterImage(str(reference_image))
+            aligned_mon, _, alignment = apply_global_alignment(
+                monitored,
+                reference,
+                None,
+                out,
+                sift_nfeatures=sift_nfeatures,
+                transform_path=transform_path,
+            )
+            _print_alignment(alignment, aligned_mon, reference, reference_image)
+            click.echo(
+                f"\nAlignment saved to {transform_path}, apply it to other bands with:\n"
+                f"  karios align <band> --load-transform {shlex.quote(str(transform_path))}"
+            )
+        else:
+            transform_path = load_transform
+            aligned_mon = apply_alignment_transform(
+                monitored, AlignmentTransform.load(transform_path), out
+            )
+            _print_applied(monitored_image, aligned_mon)
 
-        aligned_mon, ref_out_img, _, alignment = apply_global_alignment(
-            monitored, reference, None, out
-        )
-
-        m = alignment.matrix
-        rot = float(np.degrees(np.arctan2(m[1, 0], m[0, 0])))
-        sx = float(np.hypot(m[0, 0], m[0, 1]))
-        sy = float(np.hypot(m[1, 0], m[1, 1]))
-        click.echo(f"rotation:    {rot:+.3f} deg")
-        click.echo(f"scale x/y:   {sx:.4f} / {sy:.4f}")
-        click.echo(f"translation: tx={float(m[0,2]):+.2f}  ty={float(m[1,2]):+.2f}")
-        click.echo(f"perspective: {float(m[2,0]):+.6f}  {float(m[2,1]):+.6f}")
-        click.echo(f"inliers:     {alignment.n_inliers}/{alignment.n_matches} ({alignment.score*100:.1f}%)")
-        click.echo("\nHomography (mon → ref):")
-        for row in m:
-            click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
-        click.echo("\nOutputs:")
-        click.echo(f"  monitored (aligned): {aligned_mon.file_name}")
-        click.echo(f"  reference:           {ref_out_img.file_name}")
+        if apply_to:
+            transform = AlignmentTransform.load(transform_path)
+            click.echo("")
+            for band_path in apply_to:
+                aligned = apply_alignment_transform(GdalRasterImage(str(band_path)), transform, out)
+                _print_applied(band_path, aligned)
 
         return 0
 
     except Exception as e:
         logger.error("Error during align: %s", str(e), exc_info=debug)
-        return 1
+        sys.exit(1)
 
 
-def _validate_configuration(config: RuntimeConfiguration, dem_file: Optional[Path], vector_mask: Optional[Path] = None) -> None:
+def _print_alignment(alignment, aligned_mon, reference, reference_image: Path) -> None:
+    """Print the estimated homography, the output grid and how to compare it with ref."""
+    m = alignment.matrix
+    rot = float(np.degrees(np.arctan2(m[1, 0], m[0, 0])))
+    sx = float(np.hypot(m[0, 0], m[0, 1]))
+    sy = float(np.hypot(m[1, 0], m[1, 1]))
+    click.echo(f"rotation:    {rot:+.3f} deg")
+    click.echo(f"scale x/y:   {sx:.4f} / {sy:.4f}")
+    click.echo(f"translation: tx={float(m[0,2]):+.2f}  ty={float(m[1,2]):+.2f}")
+    click.echo(f"perspective: {float(m[2,0]):+.6f}  {float(m[2,1]):+.6f}")
+    click.echo(
+        f"inliers:     {alignment.n_inliers}/{alignment.n_matches} ({alignment.score*100:.1f}%)"
+    )
+    click.echo("\nHomography (mon → ref):")
+    for row in m:
+        click.echo(f"  [{row[0]:+10.4f}  {row[1]:+10.4f}  {row[2]:+10.4f}]")
+    crs = aligned_mon.spatial_ref.GetName() if aligned_mon.spatial_ref else "no CRS"
+    click.echo(
+        f"\nOutput grid: {aligned_mon.x_size}x{aligned_mon.y_size} px of "
+        f"{aligned_mon.x_res:.6g} x {abs(aligned_mon.y_res):.6g} in {crs} "
+        f"(reference pixel {reference.x_res:.6g} x {abs(reference.y_res):.6g})"
+    )
+    click.echo(f"\nOutput: {aligned_mon.file_name}")
+    # karios process needs both images on one grid, geotransforms equal to
+    # the last bit: -ts would have gdalwarp divide the extent into a pixel
+    # size a few ulps off, as it does for the degrees of a WGS 84 grid
+    extent = (
+        f"{aligned_mon.x_min!r} {aligned_mon.y_max + aligned_mon.y_size * aligned_mon.y_res!r} "
+        f"{aligned_mon.x_min + aligned_mon.x_size * aligned_mon.x_res!r} {aligned_mon.y_max!r}"
+    )
+    click.echo(
+        "\nTo compare it with karios process, resample the reference onto its grid:\n"
+        f"  gdalwarp -r cubic{_target_srs_option(aligned_mon)} -te {extent} "
+        f"-tr {aligned_mon.x_res!r} {abs(aligned_mon.y_res)!r} "
+        f"{shlex.quote(str(reference_image))} <reference_on_grid>.tif"
+    )
+
+
+def _print_applied(image_path: Path, aligned: GdalRasterImage) -> None:
+    """Print where an image warped by a saved alignment was written, and on which grid."""
+    click.echo(
+        f"{image_path} -> {aligned.file_name}: {aligned.x_size}x{aligned.y_size} px of "
+        f"{aligned.x_res:.6g} x {abs(aligned.y_res):.6g}"
+    )
+
+
+def _target_srs_option(image: GdalRasterImage) -> str:
+    """gdalwarp's -t_srs option for `image`'s CRS, by its authority code when it has one."""
+    srs = image.spatial_ref
+    if srs is None:
+        return ""
+    name, code = srs.GetAuthorityName(None), srs.GetAuthorityCode(None)
+    definition = f"{name}:{code}" if name and code else srs.ExportToWkt()
+    return f" -t_srs {shlex.quote(definition)}"
+
+
+def _validate_configuration(
+    config: RuntimeConfiguration, dem_file: Optional[Path], vector_mask: Optional[Path] = None
+) -> None:
     """Validate configuration parameters and input files.
 
     Args:
@@ -516,11 +683,38 @@ def _print_summary(match_result, accuracy, reports) -> None:
     click.echo(f"  CE90: {accuracy.ce90:.3f}")
     click.echo(f"  CE95: {accuracy.ce95:.3f}")
 
+    quality = accuracy.quality
+    if quality is not None:
+        zncc = "n/a" if quality.median_zncc is None else f"{quality.median_zncc:.2f}"
+        detected = "n/a" if quality.detected_points is None else quality.detected_points
+
+        click.echo(
+            f"\nMatching confidence: {quality.verdict.upper()} ({percent(quality.confidence)})"
+        )
+        click.echo(f"  Median ZNCC: {zncc}")
+        click.echo(
+            f"  Coherent key points: {percent(quality.coherent_fraction)}"
+            " (within 1 px of neighbours)"
+        )
+        click.echo(
+            f"  Tracking ratio: {percent(quality.tracking_ratio, 1)}"
+            f" ({quality.tracked_points} / {detected} corners)"
+        )
+        click.echo(f"  Confident key points: {quality.confident_points} points")
+        for reason in quality.reasons:
+            click.echo(f"  - {reason}")
+
     click.echo("\nGenerated outputs:")
+    if accuracy.summary_file:
+        click.echo(f"  Summary: {accuracy.summary_file}")
     click.echo(f"  Overview plot: {reports.overview_plot}")
     click.echo(f"  DX plot: {reports.dx_plot}")
     click.echo(f"  DY plot: {reports.dy_plot}")
     click.echo(f"  CE plot: {reports.ce_plot}")
+    if reports.mosaic:
+        click.echo(f"  Mosaic: {reports.mosaic}")
+    if reports.overlay:
+        click.echo(f"  Overlay: {reports.overlay}")
 
     if reports.html_report:
         click.echo(f"  HTML report: {reports.html_report}")

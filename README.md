@@ -157,8 +157,14 @@ Requirements:
 
 Recommendation:
 
-- The user shall carefully check the dynamic range of the monitored and reference images, because KARIOS converts these input data into integers.  
-  For instance, providing float values between 0 and 1 will give very poor results. In that case, it is recommended to multiply the data by 100.
+- KARIOS converts input data to 8 bit internally, so the *shape* of the dynamic range
+  matters, not its scale. Rescaling a float image (for instance multiplying values in
+  [0, 1] by 100) makes no difference and is not needed.  
+  What does matter is extreme and non-finite pixels. For float rasters the conversion
+  takes its bounds from the 2nd and 98th percentile of the finite pixels, so a few
+  stray values are tolerated; for integer rasters it still uses the minimum and
+  maximum, where a single outlier compresses everything else. Mark such pixels as
+  no-data in the raster, or exclude them with `--no-value`.
 - Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.
 
 ## CLI Usage
@@ -261,6 +267,8 @@ karios process monitored.tif reference.tif mask.tif \
 | `--generate-key-points-mask`, `-kpm` | FLAG | Generate a tiff mask based on KP from KTL |
 | `--generate-intermediate-product`, `-gip` | FLAG | Generate a two-bands tiff based on KP with band 1 dx and band 2 dy |
 | `--generate-kp-chips`, `-gkc` | FLAG | Generate chip images centered on key points of monitored and reference products |
+| `--mosaic-tile-size`, `-mts` | INTEGER | Generate a checkerboard mosaic of the monitored and reference images with tiles of this size in pixel (e.g. 128), shown in the HTML report. 0 disables it [default: 0] |
+| `--generate-overlay`, `-gov` | FLAG | Generate an overlay of the monitored image, in red, and the reference image, in green and blue, shown in the HTML report. Aligned features are gray, shifted ones fringed in red and cyan |
 | `--no-value` | INTEGER | Filter out key points where reference or monitored image has this DN value. Can be used multiple times (e.g., `--no-value 0 --no-value 255`) |
 | `--dem-description` | TEXT | DEM source name. Added in generated DEM plots (example: "COPERNICUS DEM resampled to 10m") |
 
@@ -268,7 +276,9 @@ karios process monitored.tif reference.tif mask.tif \
 
 | Option | Type | Description |
 |--------|------|------------|
-| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts |
+| `--enable-large-shift-detection` | FLAG | Enable detection and correction of large pixel shifts. Mutually exclusive with `--enable-coarse-to-fine` |
+| `--enable-coarse-to-fine` | FLAG | Match by descending the image pyramid explicitly, keeping key points near data edges. Mutually exclusive with `--enable-large-shift-detection`, and not compatible with `laplacian_kernel_size: "auto"`. See [KLT param leverage](#maxlevel--coarse-to-fine-matching) |
+| `--laplacian-power` | FLOAT [0.0-1.0] | Shape of the Laplacian rescale feeding the KLT tracker. `0` keeps it as the plain percentile-normalized value; `1` (default) saturates it to a near-binary response, deliberately reproducing the historical behaviour's cross-sensor matching robustness; values in between interpolate via a signed power law. |
 
 #### Logging Options
 
@@ -335,6 +345,7 @@ match_result, accuracy, reports = api.process(
 print(f"CE90: {accuracy.ce90:.3f}")
 print(f"Mean shift X: {accuracy.mean_x:.3f} pixels")
 print(f"Generated reports: {reports.overview_plot}")
+print(f"Matching confidence: {accuracy.quality.verdict} ({accuracy.quality.confidence:.0%})")
 ```
 
 ### Batch Processing Example
@@ -404,9 +415,13 @@ runtime_config = RuntimeConfiguration(
     gen_kp_mask=True,             # Generate key point mask
     gen_delta_raster=True,        # Generate displacement raster
     generate_kp_chips=True,      # Enable chip generation
+    mosaic_tile_size=256,         # Optional: checkerboard mosaic tile size in pixel, 0 (default) disables it
+    generate_overlay=True,        # Optional: overlay of the monitored image in red and the reference in cyan
     dem_description="SRTM 30m",   # Optional DEM description for plots
     enable_large_shift_detection=False,
-    no_values=[0, 255]            # Optional: filter out key points with these DN values
+    no_values=[0, 255],           # Optional: filter out key points with these DN values
+    debug=True,                   # Also generate the key point coverage plot (05_coverage.png)
+    laplacian_power=1.0,          # 0 = plain percentile-normalized value, 1 = near-binary (default)
 )
 ```
 
@@ -432,6 +447,11 @@ reference image, as described by the OpenCV documentation goodFeaturesToTrack, a
 - `qualityLevel`: Minimum corner quality threshold
 - `matching_winsize`: Search window size during matching
 - `outliers_filtering`: Enable/disable outlier filtering
+- `maxLevel`: Pyramid depth used when matching. Deeper pyramids capture larger
+  displacements but, in the default matching mode, erode matching inward from every
+  data edge.
+  Matching mode itself is a runtime switch, not a configuration key: see
+  `--enable-coarse-to-fine`.
 
 Refer to section [KLT param leverage](#klt-param-leverage) for details
 
@@ -467,6 +487,16 @@ Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots con
 - `fig_size` : Height size of the generated figure in inches, width is 5/3 of the height
 - `ce_scatter_colormap` : matplotlib color map name for the KP shift density scatter plot
 
+#### `plot_configuration.coverage` (Key point coverage plot parameters, `--debug` only)
+- `fig_size` : Height size of the generated figure in inches
+- `grid_size` : number of grid cells along each axis used to bin key points for the
+  density and quality maps
+- `quality_colormap` : matplotlib color map name for the mean-score quality maps
+  (KLT score, ZNCC, NMI)
+- `zncc_threshold` : ZNCC value (conventionally ~0.8) above which a match is considered
+  trustworthy; shown as a contour line on the ZNCC map and as a "% of KP above threshold"
+  figure
+
 ### Outputs
 
 KARIOS generates several types of outputs:
@@ -475,6 +505,7 @@ KARIOS generates several types of outputs:
 
 - **CSV file**: Key points with dx/dy deviations and confidence scores (see [CSV Output section](#csv-output))
 - **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
+- **summary.json**: Statistics (mean, standard deviation, CE90, CE95, valid pixels) and the matching confidence, machine readable (see [Matching Confidence section](#matching-confidence))
 
 #### Visualizations
 
@@ -482,7 +513,18 @@ KARIOS generates several types of outputs:
 - **02_dx.png**: X-direction displacement analysis by row/column
 - **03_dy.png**: Y-direction displacement analysis by row/column  
 - **04_ce.png**: Circular error analysis with statistical summaries
+- **05_coverage.png**: Key point density, plus three independent quality maps (mean KLT
+  score, mean ZNCC, mean NMI - since a KP the tracker is confident about can still be a
+  poor radiometric match), with coverage statistics (empty cell ratio, coefficient of
+  variation) and a per-column overall mean - only with `--debug`. The ZNCC map also shows
+  a dashed contour at `zncc_threshold` (default 0.8) and the share of key points at or
+  above it, since that check is conventionally a statement about individual matches, not
+  a cell average. A high point count is not by itself evidence of a good registration:
+  points can cluster in the most textured regions and leave the rest of the scene
+  unmatched, which the CSV's aggregate statistics cannot reveal on their own.
 - **dem_*.png**: DEM-based altitude analysis (if DEM provided)
+- **05_mosaic.avif** (lossless `.png` if Pillow has no AVIF support): Color checkerboard mosaic at native resolution, alternating reference (blue) and monitored (red) image tiles, each image histogram equalized to 8 bit, to eyeball misregistration at tile edges. Shown in the *Mosaic* tab of the HTML report (if `--mosaic-tile-size` is not 0)
+- **06_overlay.avif** (lossless `.png` if Pillow has no AVIF support): Color overlay at native resolution, the monitored image in the red channel and the reference in the green and blue ones, each histogram equalized to 8 bit: aligned features are gray, shifted ones fringed in red and cyan. Shown in the *Overlay* tab of the HTML report (if `--generate-overlay`)
 
 #### Products (Optional)
 
@@ -495,7 +537,65 @@ KARIOS generates several types of outputs:
 
 - Copy of the processing configuration used
 
+### Matching Confidence
+
+KLT returns key points even between two unrelated images, and the statistics computed on them then look like a measurement. `karios process` therefore rates its confidence that the key points measure a real misregistration, from three indicators computed on the key points above the confidence threshold:
+
+| Indicator | Meaning | Related images | Unrelated images |
+|---|---|---|---|
+| Median ZNCC | Correlation of the key points' 57×57 patches in both images, from -1 to 1 | 0.85-0.88 | 0.03-0.06 |
+| Coherent key points | Share of key points whose shift is within 1 px of the median of their 8 nearest neighbours: a misregistration is smooth, false matches are random | 97 % | 5-6 % |
+| Tracking ratio | Share of the corners detected in the reference that pass KLT's forward-backward check | 36-39 % | 3.3-3.5 % |
+
+(Measured on 2000 and 3000 px crops of the Landsat-9 / Sentinel-2 test pair, against the same monitored crop on another area, offset, or flipped.)
+
+Each indicator is mapped linearly to [0, 1] between its unrelated level and its related one (0.1 to 0.5 for the ZNCC, 20 % to 70 % for the coherence, 5 % to 20 % for the tracking ratio), and the confidence, from 0 to 100 %, is their mean. The ZNCC is not available when a large shift was applied, nor the tracking ratio with `--resume`: the confidence then comes from the others. The verdict is:
+
+- **reliable**: confidence of 70 % or more
+- **doubtful**: confidence between 30 % and 70 %
+- **unreliable**: confidence below 30 %, or fewer than 30 key points above the confidence threshold
+
+An unreliable result means the images are unrelated, or misregistered beyond the matching range: the statistics are then meaningless. The verdict, the indicators and the reasons for a confidence below 1 are printed in the console summary, shown on the summary page of the HTML report, and written to `summary.json`. The exit status is not affected.
+
+A scene only partly related to the reference, half of it say, can still be rated reliable: key points rarely survive on the unrelated part, so the statistics come from the related one.
+
 ## Output File Formats
+
+### summary.json
+
+Written next to `correl_res.txt`, with the statistics of the console summary (mean and standard deviation in pixels, CE90 and CE95 in the image CRS unit when it has a pixel size, in pixels otherwise) and the [matching confidence](#matching-confidence):
+
+```json
+{
+  "monitored_image": "mon.tif",
+  "reference_image": "ref.tif",
+  "matched_points": 7813,
+  "valid_pixels": 8963138,
+  "total_pixels": 9000000,
+  "confidence_threshold": 0.4,
+  "statistics": {
+    "mean_x": -0.0587,
+    "mean_y": 0.1195,
+    "std_x": 0.3005,
+    "std_y": 0.3976,
+    "ce90": 5.7159,
+    "ce95": 8.5424
+  },
+  "quality": {
+    "confidence": 1.0,
+    "verdict": "reliable",
+    "detected_points": 20000,
+    "tracked_points": 7813,
+    "confident_points": 5329,
+    "tracking_ratio": 0.39065,
+    "median_zncc": 0.851,
+    "coherent_fraction": 0.973,
+    "reasons": []
+  }
+}
+```
+
+The confidence, the tracking ratio and the coherent fraction are fractions from 0 to 1 there, not percentages. Undefined values, the statistics without any key point above the confidence threshold or an indicator that is not available, are `null`.
 
 ### CSV Output
 
@@ -639,6 +739,36 @@ In order to avoid density differences in the final result, you can define a `til
 
 For example, for image of 20000 x 15000 pixels, you should consider a `tile_size` of 20000 (1 tile), or 5000 (12 equal tiles)
 
+### maxLevel & coarse-to-fine matching
+
+`cv2.calcOpticalFlowPyrLK` uses a window of the same pixel size at every pyramid
+level, so at level L that window spans `matching_winsize * 2**L` of the original
+image. Near a data edge the window hangs off the image, the coarse estimate is
+meaningless, and it seeds every finer level, which cannot recover. Matching
+therefore erodes inward from every edge as `maxLevel` grows — the lost band is
+roughly `(matching_winsize / 2) * 2**maxLevel`, about 400 px at the defaults with
+`maxLevel: 5`.
+
+This is a real trade-off, because a displacement of more than a few pixels needs
+those coarse levels to be found at all. On a SPOT5/BSG pair misregistered by
+~13.6 px, matched in the default mode:
+
+| `maxLevel` | key points | x extent (image is 2878 px wide) |
+|-----------|------------|----------------------------------|
+| 1         | 1578       | —                                |
+| 3         | 6794       | 173–2707                         |
+| 5         | 1850       | 606–2263                         |
+
+The `--enable-coarse-to-fine` switch removes the trade-off. It descends the pyramid
+one level at a time, running each level with no internal recursion, and hands
+down a displacement field fitted to that level's reliable points instead of each
+point's own result. A point near an edge inherits a usable starting guess from
+its neighbours, so only the finest level's `matching_winsize / 2` band is lost —
+and `maxLevel` can be raised for capture range without cost. On the same pair,
+`--enable-coarse-to-fine` with `maxLevel: 5` gives 8800 key points spanning x 24–2856,
+with roughly half the standard deviation, for about 1.4-1.6x the matching time
+and no additional memory.
+
 ## About shift by altitude plot
 
 This output uses box plot to show statistics of KP on altitudes groups.
@@ -705,6 +835,14 @@ KariosException: Mask geo info not compatible with monitored image
 
 **Solution**: Ensure mask has the same geometry as monitored image
 
+#### Unreliable Matching Confidence
+
+```
+Matching confidence: UNRELIABLE (0 %)
+```
+
+The key points do not measure a misregistration (see [Matching Confidence](#matching-confidence)). **Solution**: check that both images cover the same scene; if they do, the misregistration may exceed the matching range: try `--enable-large-shift-detection`, a larger `matching_winsize` or `maxLevel`, or align the images first with `karios align`.
+
 ### Performance Optimization
 
 #### For Large Images
@@ -739,35 +877,53 @@ karios process monitored.tif reference.tif --enable-large-shift-detection
 
 ### Global Alignment (`karios align`)
 
-`karios align` estimates and applies a global 2D homography to bring the monitored image onto the reference's pixel grid. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
+`karios align` estimates and applies a global 2D homography to align the monitored image on the reference, keeping its CRS, grid and resolution. It is exposed as a standalone command — run it before `karios process` (with the aligned monitored image as input) when the inputs have significant rotation, scale, or perspective differences:
 
 ```bash
 karios align monitored.tif reference.tif --out ./aligned
-karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_global_aligned.tiff
+# Optionally, keep the 20000 strongest SIFT keypoints per image instead of 10000 (0 keeps all)
+karios align monitored.tif reference.tif --out ./aligned --sift-nfeatures 20000
+# karios process needs both images on one grid: resample the reference onto the
+# aligned image's, with the gdalwarp command `karios align` prints, e.g.
+gdalwarp -r cubic -t_srs EPSG:32631 -te 637530.0 4805820.0 659670.0 4829340.0 -tr 3.75 3.75 reference.tif ./aligned/reference_on_grid.tif
+karios process ./aligned/monitored_global_aligned.tiff ./aligned/reference_on_grid.tif
 ```
 
 The pipeline:
 
 1. **Preprocess** both inputs to uint8 with a percentile stretch and CLAHE, which equalises radiometry between sensors.
-2. **Detect** SIFT keypoints and 128-dim descriptors on both images.
-3. **Match** descriptors with a brute-force L2 matcher, then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
-4. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC.
-5. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant), starting from both the RANSAC fit and — when available — a geotransform-derived prior. The highest ECC wins.
-6. **Warp** the monitored image with `cv2.warpPerspective` onto the reference's pixel grid. Reference is passed through unchanged. Both outputs share the reference's geotransform so they overlay directly in QGIS.
+2. **Work at a common resolution** when both images are georeferenced: their georeferencing gives a prior homography — directly from the geotransforms for two north-up images in the same CRS, otherwise fitted on a grid of monitored pixels reprojected into the reference's pixels, which takes any pair of CRS and rotated or mirrored grids (a PhiSat scene in WGS 84 fits a UTM Sentinel-2 tile within a pixel). The monitored image is straightened by the prior into the reference's orientation, since SIFT does not handle a mirrored image; the finer image is area-averaged down to the coarser one's pixel size, and the reference is cropped to the monitored footprint plus a search margin of half its size; only that window is read from disk. The georeferencing error has to fit in that margin: when the result looks cut short by the window (no plausible estimate, a gradient correlation under 0.2, or a shift beyond 75% of the margin), the margin is doubled, up to the whole reference, and the best result of the windows tried is kept. Otherwise a much finer monitored image has keypoints of details the reference cannot show, and a small footprint leaves most reference keypoints without a counterpart.
+3. **Search the translation** left by the georeferencing, by zero-mean correlation of a fully valid central block of the monitored image over the search window. ECC only corrects a few pixels, so a georeferencing kilometres off needs this coarse start.
+4. **Detect** SIFT keypoints and 128-dim descriptors on both images. By default the 10000 strongest per image are kept; `--sift-nfeatures N` keeps the N strongest, and `0` keeps them all, at the cost of a longer matching on large images.
+5. **Match** descriptors with a brute-force L2 matcher, or a FLANN KD-tree above 10⁸ descriptor pairs (a scene on a 10 m Sentinel-2 crop can have half a million reference keypoints), then filter with Lowe's ratio test and a mutual nearest-neighbour cross-check.
+6. **Fit** a 3×3 homography (8 DOF — translation, rotation, scale, shear, perspective) with `cv2.findHomography` + RANSAC. With a prior, a SIFT failure is not fatal: the other starting points remain.
+7. **Refine** with `cv2.findTransformECC(MOTION_HOMOGRAPHY)` on Sobel gradient magnitudes (sensor-invariant): a 25-iteration probe from every starting point (the RANSAC fit, the prior and the translation search), then up to 200 iterations from the probe that correlates best only.
+8. **Select**: with a prior, estimates too far from it to be a georeferencing correction are rejected (a reflection, a scale change beyond ×1.5, an anisotropy beyond 1.3, a rotation beyond 30°, or a move beyond the search window), and the gradient correlation of the others, computed on the pixels they all cover, picks the result. Without a prior, the RANSAC fit refined by ECC is kept.
+9. **Warp** the monitored image with `cv2.warpPerspective` by nearest neighbour, which keeps its original pixel values, onto its own grid, in its own CRS: same pixel size and pixel edges, extended or cropped by whole pixels to its corrected valid footprint, so a correction of whole pixels moves the georeferencing and leaves the pixels untouched. A rotated or mirrored grid becomes north-up in the same CRS, at the same pixel area. The output overlays the reference in QGIS, which reprojects on the fly. Without georeferencing on both images there is no CRS to bring the correction back to: the output then covers the monitored footprint in the reference on a grid nested in the reference's, its pixel the reference's divided by the smallest integer that keeps the monitored resolution (a 4.1 m image on a 30 m reference gets 30 / 8 = 3.75 m pixels; one coarser than the reference gets the reference's own pixels), georeferenced in the reference's CRS.
 
-The command writes:
+The command writes `<mon_stem>_global_aligned.tiff`, the monitored image aligned on the reference, and `<mon_stem>_global_alignment.json`, the alignment itself.
 
-- `<mon_stem>_global_aligned.tiff` — the monitored image warped into the reference frame
-- `<ref_stem>_global_aligned.tiff` — the reference, passed through unchanged
-- `<mon_stem>_global_aligned__<source>_ecc<score>.tiff` — one sibling per ECC-converged starting point (e.g. `__RANSAC_ecc0.221.tiff`, `__prior_ecc0.046.tiff`). On weakly-correlated cross-sensor imagery, ECC scores can be too low to discriminate reliably — opening every candidate in QGIS and overlaying on the reference lets you pick the visually best one by eye.
-
-The final 3×3 homography and an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio) are printed to stdout.
+The final 3×3 homography, an approximate decomposition (rotation, scale-x/y, translation, perspective magnitude, RANSAC inlier ratio), the output grid and the `gdalwarp` command resampling the reference onto it are printed to stdout.
 
 **Use cases**:
 
 - Cross-sensor pairs with significant rotation, scale, or perspective differences
 - Inputs with inaccurate geotransforms (one or both products mis-registered)
 - Removing systematic geometric error before fine KLT matching
+
+#### Applying one alignment to the other bands of a product
+
+The homography estimated on each band of one product differs slightly from band to band, so bands aligned separately no longer overlay. Align one band and apply its alignment to the others with `--apply-to`, repeated for each band, or later from the saved alignment with `--load-transform`, which takes no reference image:
+
+```bash
+karios align B04.tif reference.tif --out ./aligned --apply-to B02.tif --apply-to B03.tif
+# Later, without estimating it again
+karios align B08.tif --load-transform ./aligned/B04_global_alignment.json --out ./aligned
+```
+
+Each image is written as `<stem>_global_aligned<ext>`. A band on the aligned band's grid (same size, geotransform and CRS) comes out on its output grid, pixel for pixel, so the aligned bands stack. A band on another grid, like a 20 m band of a 10 m product, is placed on the aligned band by their georeferencing, corrected the same way, and keeps its own grid and CRS over its corrected footprint. Without georeferencing on the aligned band or the reference, the alignment only applies to images on the aligned band's grid.
+
+The JSON file holds the 3×3 homography from the monitored pixels to the reference pixels and the one the georeferencing implies (OpenCV pixel-center coordinates), the size, geotransform and CRS of both images, and the output grid.
 
 ### Resume Functionality
 
