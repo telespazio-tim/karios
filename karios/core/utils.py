@@ -16,15 +16,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import re
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize a filename to prevent path traversal and other security issues.
+    """
+    if not filename:
+        return "unnamed"
+
+    while re.search(r"\.\.[/\\]", filename):
+        filename = re.sub(r"\.\.[/\\]", "", filename)
+
+    filename = filename.strip()
+    filename = re.sub(r"[^\w\.\-]", "_", filename)
+
+    if not filename or filename.strip("_") == "":
+        return "unnamed"
+
+    reserved_names = {
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5",
+        "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4",
+        "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    }
+    if os.path.splitext(filename)[0].upper() in reserved_names:
+        filename = f"safe_{filename}"
+
+    return filename
 
 
 def get_filename(path: str) -> str:
-    """Extract path filename without extension
-
-    Args:
-        path (str): path to process
-
-    Returns:
-        str: filename without extension
-    """
-    return os.path.splitext(os.path.basename(path))[0]
+    """Extract path filename without extension and sanitize it."""
+    filename = os.path.splitext(os.path.basename(path))[0]
+    return sanitize_filename(filename)
