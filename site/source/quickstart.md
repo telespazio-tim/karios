@@ -101,6 +101,14 @@ Recommendation:
   For instance, providing float values between 0 and 1 will give very poor results. In that case, it is recommended to multiply the data by 100.
 - Input files shall contain only one layer (band) of data, and the format shall be recognized by GDAL library.
 
+### Breaking changes in 3.0.0
+
+- **Refused inputs**: images and masks that read other data are refused. That covers network paths (`/vsicurl`, `/vsis3`, `http://`...), VRT and web-service rasters, and OGR VRT, WFS, database and GPSBabel vector masks. Convert them to a plain file (e.g. GeoTIFF) first.
+- **Exit status**: `karios process` and `karios align` exit with status 1 on error (they always exited with 0). Scripts can now rely on it.
+- **Output folder names**: names derived from the input files are sanitized. Path traversal sequences are removed, characters other than letters, digits, `_`, `.` and `-` become `_`, and Windows reserved names get a `safe_` prefix. Inputs with spaces or special characters get differently named output folders.
+- **Pixel units**: images in a geographic CRS or on a rotated grid are measured in pixels, unless `--input-pixel-size` is given.
+- **API**: `AccuracyAnalysis` has the new required fields `rmse`, `min_error`, `max_error`, `std_dev` and `num_points`. They are NaN (`num_points` is 0) when no key point is confident. Code that builds it by hand must pass them.
+
 ## CLI Usage
 
 :::{important}
@@ -284,7 +292,7 @@ KARIOS generates several types of outputs:
 #### Statistical Files
 
 - **CSV file**: Key points with dx/dy deviations and confidence scores (see [CSV Output section](#csv-output))
-- **correl_res.txt**: Summary statistics (RMSE, CE90, etc.)
+- **correl_res.txt**: Summary statistics (RMSE, min/max error, standard deviation, CE90, CE95, number of key points)
 
 #### Visualizations
 
