@@ -209,12 +209,8 @@ class ProcessingConfiguration:
         self.accuracy_analysis_configuration = AccuracyAnalysisConfiguration(
             **config_dict["processing_configuration"]["accuracy_analysis"]
         )
-        downsampling_dict = config_dict["processing_configuration"].get(
-            "image_downsampling", {}
-        )
-        self.image_downsampling_configuration = ImageDownsamplingConfiguration(
-            **downsampling_dict
-        )
+        downsampling_dict = config_dict["processing_configuration"].get("image_downsampling", {})
+        self.image_downsampling_configuration = ImageDownsamplingConfiguration(**downsampling_dict)
         self.overview_plot_configuration = OverviewPlotConfiguration(
             **config_dict["plot_configuration"]["overview"]
         )

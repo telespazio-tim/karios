@@ -202,9 +202,7 @@ def test_generate_overlay_tab(generator, tmp_path):
     assert '<a href="overlay.html" class="active">Overlay</a>' in content
     assert "red and cyan fringes along the features" in content
     for page in ["report.html", "products.html", "mosaic.html", "chips.html"]:
-        assert '<a href="overlay.html">Overlay</a>' in (tmp_path / page).read_text(
-            encoding="utf-8"
-        )
+        assert '<a href="overlay.html">Overlay</a>' in (tmp_path / page).read_text(encoding="utf-8")
 
 
 def test_generate_without_mosaic(generator, tmp_path):
@@ -296,6 +294,8 @@ def test_summary_without_assessment_says_so(generator, tmp_path):
     generator.generate()
 
     assert "not assessed" in (tmp_path / "report.html").read_text(encoding="utf-8")
+
+
 def _klt_configuration(**overrides) -> KLTConfiguration:
     defaults = dict(
         minDistance=10,

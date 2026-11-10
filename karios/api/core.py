@@ -180,7 +180,6 @@ class KariosAPI:
             laplacian_power=self._runtime_configuration.laplacian_power,
         )
 
-
         #
         self._large_shift_applied = False
         # Corners KLT detected for the key points, None when reloaded from the CSV
@@ -1143,9 +1142,7 @@ class KariosAPI:
         overview_plot.plot(overview_path)
         return overview_path
 
-    def _generate_mosaic(
-        self, match_result: MatchResult, output_dir: Path, equalized=None
-    ) -> Path:
+    def _generate_mosaic(self, match_result: MatchResult, output_dir: Path, equalized=None) -> Path:
         """Generate the checkerboard mosaic of the monitored and reference images.
 
         Args:

@@ -463,9 +463,7 @@ def _plausibility(matrix: np.ndarray, prior: np.ndarray, frame: _WorkFrame) -> O
     return None
 
 
-def _gradient_correlation(
-    frame: _WorkFrame, matrices: list[np.ndarray]
-) -> tuple[list[float], int]:
+def _gradient_correlation(frame: _WorkFrame, matrices: list[np.ndarray]) -> tuple[list[float], int]:
     """Zero-mean correlation of Sobel magnitudes between ref and mon warped by each matrix.
 
     Computed on the pixels every warped mon covers, so the scores compare.
@@ -708,7 +706,9 @@ def detect_global_alignment(
     the brute-force matching on large images.
     """
     if sift_nfeatures < 0:
-        raise ValueError(f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}")
+        raise ValueError(
+            f"sift_nfeatures must be positive, or 0 for unlimited, got {sift_nfeatures}"
+        )
 
     if prior is None:
         return _align_without_prior(
@@ -780,9 +780,7 @@ class _WindowAlignment:
     doubts: list = field(default_factory=list)  # empty when the result looks right
 
 
-def _align_in_window(
-    frame: _WorkFrame, prior: np.ndarray, sift_nfeatures: int
-) -> _WindowAlignment:
+def _align_in_window(frame: _WorkFrame, prior: np.ndarray, sift_nfeatures: int) -> _WindowAlignment:
     """Align mon within `frame`: SIFT, translation search and ECC from each start, then select.
 
     The result is doubted when no estimate is plausible, when it correlates
@@ -1176,9 +1174,7 @@ def _valid_outline(valid: np.ndarray, step: int = 16) -> np.ndarray:
     return hull.reshape(-1, 2).astype(float)
 
 
-def _output_grid(
-    matrix: np.ndarray, mon_valid: np.ndarray, ref_shape: tuple
-) -> OutputGrid:
+def _output_grid(matrix: np.ndarray, mon_valid: np.ndarray, ref_shape: tuple) -> OutputGrid:
     """Grid over mon's valid footprint in ref, `factor` times finer than ref.
 
     `factor` is the smallest integer that does not coarsen mon beyond

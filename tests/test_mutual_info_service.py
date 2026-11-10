@@ -85,6 +85,7 @@ def test_mutual_info_service_compute_mutual_info():
     np.testing.assert_allclose(result.to_numpy(), expected.to_numpy(), rtol=1e-12)
     assert np.isnan(result.iloc[2])  # too close to the left edge
 
+
 def test_mutual_info_service_boundary_near_left():
     """Test _compute_mutual_info returns NaN for points too close to top/left boundary."""
     service = MutualInfoService()

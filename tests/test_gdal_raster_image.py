@@ -413,14 +413,12 @@ def test_vrt_disguised_as_tif_is_refused(tmp_path):
     secret = tmp_path / "secret.txt"
     secret.write_text("SECRET-TOKEN-1234567890")
     disguised = tmp_path / "innocent.tif"
-    disguised.write_text(
-        f"""<VRTDataset rasterXSize="23" rasterYSize="1">
+    disguised.write_text(f"""<VRTDataset rasterXSize="23" rasterYSize="1">
   <VRTRasterBand dataType="Byte" band="1" subClass="VRTRawRasterBand">
     <SourceFilename relativetoVRT="0">{secret}</SourceFilename>
     <ImageOffset>0</ImageOffset><PixelOffset>1</PixelOffset><LineOffset>23</LineOffset>
   </VRTRasterBand>
-</VRTDataset>"""
-    )
+</VRTDataset>""")
 
     with pytest.raises(GdalError, match="VRT dataset"):
         GdalRasterImage(str(disguised))

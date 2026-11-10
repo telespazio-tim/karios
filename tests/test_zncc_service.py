@@ -150,6 +150,7 @@ def test_zncc_service_compute_zncc():
         np.testing.assert_allclose(result.to_numpy(), expected.to_numpy(), rtol=1e-12)
     assert np.isnan(zncc.iloc[2])  # too close to the left edge
 
+
 def test_zncc_service_compute_zncc_boundary_conditions():
     """Points whose patch leaves the image get NaN."""
     service = ZNCCService()
@@ -171,6 +172,7 @@ def test_zncc_service_compute_zncc_boundary_conditions():
     assert len(result) == 2
     assert pd.isna(result.iloc[0])
     assert pd.isna(result.iloc[1])
+
 
 def test_zncc_service_extract_chip():
     """Test ZNCCService _extract_chip method."""

@@ -72,6 +72,7 @@ def test_zncc_service_edge_cases():
     expected = service._compute_zncc(single_point_df.iloc[0], monitored=image, reference=image)
     assert result.iloc[0] == pytest.approx(expected)
 
+
 def test_zncc_service_boundary_points():
     """Points exactly at the boundary: a 57 px patch fits from 28 to 971 in a 1000 px image."""
     service = ZNCCService()
@@ -90,6 +91,7 @@ def test_zncc_service_boundary_points():
 
     assert len(result) == 4
     assert result.isna().tolist() == [True, False, False, True]
+
 
 def test_klt_tracker_edge_cases():
     """Test KLT tracker with edge cases."""

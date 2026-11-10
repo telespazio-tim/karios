@@ -51,6 +51,7 @@ def _url(*segments) -> str:
     """Relative URL of path `segments`, each percent-encoded, escaped for an attribute."""
     return html.escape("/".join(quote(str(segment)) for segment in segments), quote=True)
 
+
 # Branding assets shipped alongside this module, inlined into the report pages
 # as data URIs so each page stands on its own without sidecar files.
 _ASSET_MIME_TYPES = {
@@ -694,6 +695,7 @@ class HtmlReportGenerator:
                 </table>
                 {f'<ul class="quality-reasons">{reasons}</ul>' if reasons else ""}
             </div>"""
+
     # Fields already shown, resolved, in the summary rows above (e.g. "auto"
     # is replaced there by the kernel size/polarity actually selected) - the
     # raw per-section dump below skips them so the same field doesn't appear
@@ -832,10 +834,7 @@ class HtmlReportGenerator:
 
         def sprite_col(src: str, sprite_idx: int, sublabel: str, ch_svg: str) -> str:
             offset = -sprite_idx * CHIP_DISPLAY
-            style = (
-                f"background-image:url({src});"
-                f"background-position:{offset}px 0px;"
-            )
+            style = f"background-image:url({src});" f"background-position:{offset}px 0px;"
             return (
                 f'<div class="chip-col">'
                 f'<div class="chip-sublabel">{sublabel}</div>'
@@ -939,9 +938,11 @@ class HtmlReportGenerator:
 
         def nav_links(active: str) -> str:
             return "\n        ".join(
-                f'<a href="{page}" class="active">{label}</a>'
-                if page == active
-                else f'<a href="{page}">{label}</a>'
+                (
+                    f'<a href="{page}" class="active">{label}</a>'
+                    if page == active
+                    else f'<a href="{page}">{label}</a>'
+                )
                 for page, label in tabs
             )
 

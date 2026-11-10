@@ -26,7 +26,7 @@ class _TextPlot(AbstractPlot):
 
 
 def test_dollar_signs_in_names_do_not_break_plots(tmp_path):
-    """"$" pairs in a file name or title prefix are plain text, not mathtext.
+    """ "$" pairs in a file name or title prefix are plain text, not mathtext.
 
     Read as mathtext, "a$^$b.tif" raised ValueError and aborted the report,
     and "band_$1$_$2$.tif" was drawn as a formula instead of its name.

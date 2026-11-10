@@ -48,17 +48,57 @@ class GdalError(Exception):
 # expected to hold their own data. Convert such datasets with gdal_translate or
 # ogr2ogr first.
 REFUSED_RASTER_DRIVERS = frozenset(
-    {"VRT", "GTI", "DERIVED", "WMS", "WMTS", "WCS", "HTTP", "EEDAI", "DAAS", "PLMOSAIC",
-     "OGCAPI", "STACIT", "STACTA"}
+    {
+        "VRT",
+        "GTI",
+        "DERIVED",
+        "WMS",
+        "WMTS",
+        "WCS",
+        "HTTP",
+        "EEDAI",
+        "DAAS",
+        "PLMOSAIC",
+        "OGCAPI",
+        "STACIT",
+        "STACTA",
+    }
 )
 REFUSED_VECTOR_DRIVERS = frozenset(
-    {"OGR_VRT", "WFS", "OAPIF", "CSW", "Elasticsearch", "CouchDB", "MongoDBv3", "PostgreSQL",
-     "MySQL", "MSSQLSpatial", "OCI", "ODBC", "NGW", "Carto", "AmigoCloud", "EEDA", "PLSCENES",
-     "GPSBabel"}
+    {
+        "OGR_VRT",
+        "WFS",
+        "OAPIF",
+        "CSW",
+        "Elasticsearch",
+        "CouchDB",
+        "MongoDBv3",
+        "PostgreSQL",
+        "MySQL",
+        "MSSQLSpatial",
+        "OCI",
+        "ODBC",
+        "NGW",
+        "Carto",
+        "AmigoCloud",
+        "EEDA",
+        "PLSCENES",
+        "GPSBabel",
+    }
 )
 NETWORK_PATHS = (
-    "/vsicurl", "/vsis3", "/vsigs", "/vsiaz", "/vsiadls", "/vsioss", "/vsiswift", "/vsihdfs",
-    "/vsiwebhdfs", "http://", "https://", "ftp://",
+    "/vsicurl",
+    "/vsis3",
+    "/vsigs",
+    "/vsiaz",
+    "/vsiadls",
+    "/vsioss",
+    "/vsiswift",
+    "/vsihdfs",
+    "/vsiwebhdfs",
+    "http://",
+    "https://",
+    "ftp://",
 )
 
 

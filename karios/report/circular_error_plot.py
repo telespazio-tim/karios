@@ -263,9 +263,7 @@ class CircularErrorPlot(AbstractPlot):
         v1 = np.max(np.abs(x))
         v2 = np.max(np.abs(y))
 
-        plot_limit = (
-            np.max([v1, v2]) if self._conf.ce_auto_limit else self._conf.ce_axes_limit
-        )
+        plot_limit = np.max([v1, v2]) if self._conf.ce_auto_limit else self._conf.ce_axes_limit
 
         bins = 10
         data, x_e, y_e = np.histogram2d(x, y, bins=bins)

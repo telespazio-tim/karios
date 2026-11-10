@@ -37,7 +37,6 @@ from karios.core.radiometry import laplacian_to_uint8, to_uint8
 logger = logging.getLogger(__name__)
 
 
-
 def chip_dir_names(monitored_name: str, reference_name: str) -> tuple[str, str]:
     """Directory names of the monitored and reference chips: their file names.
 
@@ -47,6 +46,7 @@ def chip_dir_names(monitored_name: str, reference_name: str) -> tuple[str, str]:
     if monitored_name == reference_name:
         return f"{monitored_name}_monitored", f"{reference_name}_reference"
     return monitored_name, reference_name
+
 
 class CenterAndQuarterCellPointSelector:
     """
@@ -508,12 +508,8 @@ class ChipService:
         logger.info("Chips generated in %s", chips_dir_path)
 
         # Pack the per-kind chips into single sprite PNGs.
-        self._write_sprite(
-            chips_dir_path / ref_dir / self.SPRITE_FILENAME, self._ref_chips
-        )
-        self._write_sprite(
-            chips_dir_path / mon_dir / self.SPRITE_FILENAME, self._mon_chips
-        )
+        self._write_sprite(chips_dir_path / ref_dir / self.SPRITE_FILENAME, self._ref_chips)
+        self._write_sprite(chips_dir_path / mon_dir / self.SPRITE_FILENAME, self._mon_chips)
         if laplacian_dir_path is not None:
             self._write_sprite(
                 laplacian_dir_path / ref_dir / self.SPRITE_FILENAME,

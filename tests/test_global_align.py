@@ -297,6 +297,7 @@ def test_translation_search_is_kept_when_ecc_does_not_converge(fine_pair, monkey
     mon, ref, truth = fine_pair
     caplog.set_level(logging.INFO, logger=global_align.__name__)
     monkeypatch.setattr(global_align, "_refine_with_ecc", lambda *args: (None, float("nan")))
+
     def no_sift(*args, **kwargs):
         raise RuntimeError("Too few good matches")
 

@@ -71,7 +71,6 @@ def _to_features(points: DataFrame, geo_transform: tuple, properties: list[str])
     ]
 
 
-
 class ProductGenerator:
     """Class to generate output products.
     Products are raster and vector files of Karios KP.

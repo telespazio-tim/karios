@@ -8,15 +8,17 @@ import unittest
 
 
 def load_utils():
-    module_name = 'karios.core.utils'
-    file_path = os.path.join(os.getcwd(), 'karios', 'core', 'utils.py')
+    module_name = "karios.core.utils"
+    file_path = os.path.join(os.getcwd(), "karios", "core", "utils.py")
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
+
 utils = load_utils()
 sanitize_filename = utils.sanitize_filename
+
 
 class TestSecurity(unittest.TestCase):
     def test_sanitize_filename(self):
@@ -33,6 +35,7 @@ class TestSecurity(unittest.TestCase):
         malicious_input = "<script>alert('xss')</script>"
         escaped = html.escape(malicious_input)
         self.assertIn("&lt;script&gt;", escaped)
+
 
 if __name__ == "__main__":
     unittest.main()
