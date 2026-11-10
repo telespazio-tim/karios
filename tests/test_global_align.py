@@ -9,7 +9,6 @@ import cv2
 import numpy as np
 import pytest
 from click.testing import CliRunner
-
 from osgeo import gdal, osr
 
 from karios.cli import commands

@@ -13,7 +13,6 @@ from karios.core.errors import ConfigurationError
 from karios.report import mosaic
 from karios.report.mosaic import checkerboard, generate_mosaic, generate_overlay
 
-
 AVIF_SUPPORTED = features.check("avif")
 DEFAULT_CHROMA = mosaic.MOSAIC_CHROMA
 

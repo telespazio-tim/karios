@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-import unittest
 import html
-import re
-import os
-import sys
 import importlib.util
+import os
+import re
+import sys
+import unittest
+
 
 def load_utils():
     module_name = 'karios.core.utils'
