@@ -5,7 +5,7 @@ isort==5.13.2
 black==26.3.1
 pre-commit==3.6.0
 pydocstyle==6.3.0
-pylint==3.0.3
+pylint==4.0.9
 pyment==0.3.3
 pytest-cov==4.1.0
 vermin==1.8.0
