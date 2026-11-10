@@ -69,6 +69,9 @@ class OverviewPlotConfiguration:
     shift_auto_axes_limit: bool
     shift_axes_limit: float
     theta_colormap: str
+    shift_axes_min_limit: float = 0.0
+    theta_min_limit: float = -180.0
+    theta_max_limit: float = 180.0
 
 
 @dataclass
@@ -98,6 +101,8 @@ class CEPlotConfiguration:
 
     fig_size: int
     ce_scatter_colormap: str
+    ce_auto_limit: bool = True
+    ce_axes_limit: float = 5.0
 
 
 @dataclass

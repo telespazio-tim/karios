@@ -27,8 +27,11 @@
       "fig_size": 12,
       "shift_colormap": "bone_r",
       "shift_auto_axes_limit": true,
+      "shift_axes_min_limit": 0.0,
       "shift_axes_limit": 2.0,
-      "theta_colormap": "twilight_shifted"
+      "theta_colormap": "twilight_shifted",
+      "theta_min_limit": -180.0,
+      "theta_max_limit": 180.0
     },
     "shift": {
       "fig_size": 12,
@@ -45,7 +48,9 @@
     },
     "ce": {
       "fig_size": 9,
-      "ce_scatter_colormap": "jet"
+      "ce_scatter_colormap": "jet",
+      "ce_auto_limit": true,
+      "ce_axes_limit": 5.0
     },
     "coverage": {
       "fig_size": 12,

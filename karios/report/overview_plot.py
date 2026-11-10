@@ -249,6 +249,7 @@ class OverviewPlot(AbstractPlot):
                 )
             }
         else:
+            lim_min = self._config.shift_axes_min_limit
             lim_max = self._config.shift_axes_limit
             kwargs = {"vmin": lim_min, "vmax": lim_max}
 
@@ -268,8 +269,8 @@ class OverviewPlot(AbstractPlot):
             angles,
             "Angle error (deg), East direction CC",
             self._config.theta_colormap,
-            vmin=-180,
-            vmax=180,
+            vmin=self._config.theta_min_limit,
+            vmax=self._config.theta_max_limit,
         )
 
         # Add colorbar

@@ -265,8 +265,10 @@ Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots con
   - `fig_size` : size of the generated figure
   - `shift_colormap` : matplotlib color map name for the KP shift error scatter plot.
   - `shift_auto_axes_limit` : auto compute KP shift error colorbar scale.
+  - `shift_axes_min_limit` : KP shift error colorbar minimum limit (default `0`), N/A if `shift_auto_axes_limit` is `true`.
   - `shift_axes_limit` : KP shift error colorbar maximum limit, N/A if `shift_auto_axes_limit` is `true`.
   - `theta_colormap` : matplotlib color map name for the KP theta error scatter plot.
+  - `theta_min_limit`, `theta_max_limit` : KP angle error colorbar limits in degrees (default `-180`, `180`).
 
 - `plot_configuration.shift` (shift by row/col group plot parameters)
   - `fig_size` : size of the generated figure.
@@ -284,6 +286,8 @@ Plot configuration parameters for `overview`, `shift`, `dem`, and `ce` plots con
 - `plot_configuration.ce` (Circular error plot parameters)
   - `fig_size` : height size of the generated figure, width is 5/3 of the height.
   - `ce_scatter_colormap` : matplotlib color map name for the KP shift density scatter plot.
+  - `ce_auto_limit` : auto compute the CE plot axis limits from the largest displacement (default `true`).
+  - `ce_axes_limit` : CE plot axis limit, the axes span `[-limit, limit]` (default `5.0`), N/A if `ce_auto_limit` is `true`.
 
 ### Outputs
 
