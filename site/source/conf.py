@@ -30,6 +30,7 @@ exclude_patterns = []
 todo_include_todos = True
 
 myst_enable_extensions = ["fieldlist", "colon_fence"]
+myst_heading_anchors = 3
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
@@ -62,6 +63,7 @@ html_css_files = [
 # Work around for : https://github.com/pydata/pydata-sphinx-theme/issues/1662
 html_sidebars = {
     "quickstart": [],
+    "usage": [],
     # "cookbook/index": [],
     # "cookbook/config": [],
     # "cookbook/output": [],

@@ -34,6 +34,7 @@ Welcome to Karios's documentation!
    :caption: Contents:
 
    quickstart
+   usage
    case_study/index
    cookbook/index
    references
