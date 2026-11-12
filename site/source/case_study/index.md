@@ -13,6 +13,7 @@ it works in MD with myst_parser by enabling myst extension fieldlist
 skysat
 proba
 mss
+phisat
 ccm
 edap
 
@@ -56,6 +57,18 @@ Landsat MSS geometric correction using TPS
 :::
 ::::
 <!-- EO item 3 -->
+
+<!-- item 21 -->
+::::{grid-item}
+:::{card} Phisat-2 Processing
+:link: phisat_cs
+:link-type: ref
+
+Phisat-2 geolocation correction using karios align
+
+:::
+::::
+<!-- EO item 21 -->
 
 <!-- item 4 -->
 ::::{grid-item}
