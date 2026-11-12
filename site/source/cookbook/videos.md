@@ -2,7 +2,17 @@
 
 # Videos
 
-Short screen recordings showing KARIOS at work: a tour of the HTML report, then six scenarios on real data.
+Short screen recordings showing KARIOS at work: a quickstart, a tour of the HTML report, then six scenarios on real data.
+
+## Quickstart
+
+First run: `karios process` on a pair of images, then the report.
+
+```{raw} html
+<video controls preload="none" width="100%" style="max-width: 960px;">
+  <source src="../_static/videos/karios-quickstart-demo.mp4" type="video/mp4">
+</video>
+```
 
 ## Understanding the KARIOS report
 
