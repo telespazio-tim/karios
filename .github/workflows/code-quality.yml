@@ -3,8 +3,12 @@ name: Code Quality
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'site/**'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'site/**'
 
 jobs:
   code-quality:
