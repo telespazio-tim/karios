@@ -249,7 +249,7 @@ When input images are georeferenced, KARIOS generates a GeoJSON file (`kp_delta.
 
 #### GeoJSON Structure
 
-```json
+```text
 {
   "type": "FeatureCollection",
   "crs": {

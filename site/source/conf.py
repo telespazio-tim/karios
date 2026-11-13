@@ -75,3 +75,11 @@ html_sidebars = {
 }
 
 html_show_sourcelink = False
+
+# -- Link check (make linkcheck) ---------------------------------------------
+linkcheck_timeout = 20
+linkcheck_retries = 2
+linkcheck_ignore = [
+    r"https?://localhost",
+    r"quickstart\.html#",  # card links in welcome.md: local pages, not resolvable by linkcheck
+]

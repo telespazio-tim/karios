@@ -1,6 +1,8 @@
 name: Build and deploy website
 
 on:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly external link check
   push:
     branches:
       - main
@@ -46,7 +48,18 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install setuptools==75.1.0
-      - name: Sphinx build
+      - name: Check media referenced in raw HTML
+        working-directory: ./site/source
+        run: |
+          # Sphinx does not check <video src>/<img src> inside {raw} html blocks
+          rc=0
+          for f in $(find . -name '*.md'); do
+            for s in $(grep -oP '(?<=src=")[^"]+' "$f" | grep -v '^http'); do
+              [ -f "$(dirname "$f")/$s" ] || { echo "missing: $f -> $s"; rc=1; }
+            done
+          done
+          exit $rc
+      - name: Sphinx build (warnings are errors)
         run: |
           make html
       - uses: actions/configure-pages@v5
@@ -55,6 +68,23 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           path: ./site/build/html
+
+  linkcheck:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          pip install -r requirements.txt
+          pip install setuptools==75.1.0
+      - name: Check external links
+        run: make linkcheck SPHINXOPTS="-n --keep-going"
 
   deploy:
     needs: build

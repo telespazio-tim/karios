@@ -18,10 +18,8 @@ edap
 
 ```
 
-<!-- Grid start herer -->
 
 :::::{grid} 2
-<!-- item 1 -->
 ::::{grid-item}
 :::{card} SKYSAT / LiDAR Processing
 :link: skysat
@@ -31,9 +29,7 @@ KARIOS matching process between Skysat and LiDAR high resolution images using do
 
 :::
 ::::
-<!-- EO item 1 -->
 
-<!-- item 2 -->
 ::::{grid-item}
 :::{card} PROBA/CHRIS Processing
 :link: proba
@@ -43,9 +39,7 @@ CHRIS images registration using template matching and TPS low/native resolution 
 
 :::
 ::::
-<!-- EO item 2 -->
 
-<!-- item 3 -->
 ::::{grid-item}
 :::{card} MSS Processing
 :link: mss_cs
@@ -55,9 +49,7 @@ Landsat MSS geometric correction using TPS
 
 :::
 ::::
-<!-- EO item 3 -->
 
-<!-- item 4 -->
 ::::{grid-item}
 :::{card} CCM Copernicus
 :link: ccm
@@ -69,9 +61,7 @@ Coming soon
 :::
 ::::
 
-<!-- EO item 4 -->
 
-<!-- item 5 -->
 ::::{grid-item}
 :::{card} EDAP Processing
 :link: edap
@@ -82,7 +72,5 @@ Coming soon
 ```
 :::
 ::::
-<!-- EO item 5 -->
 
-::::
-<!-- EO Grid -->
+:::::

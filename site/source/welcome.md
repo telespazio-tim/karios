@@ -72,7 +72,7 @@ This hypothesis is not obvious, when details on image grids are unknown.
 
 ::::{grid-item}
 :::{card} {fas}`check` Prerequisite
-:link: quickstart.html#prerequisite
+:link: quickstart.html#prerequisites
 
 Prepare your environment to install and run KARIOS.
 :::
