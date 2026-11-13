@@ -8,7 +8,7 @@
 
 KLT-based Algorithm for Registration of Images from Observing Systems (KARIOS)
 
-https://github.com/user-attachments/assets/65ec20e5-aea2-4e91-ab26-e55e5d756dd3
+https://github.com/user-attachments/assets/ae1c28ff-fe07-44b8-9548-ec22725a9573
 
 ## Introduction
 
