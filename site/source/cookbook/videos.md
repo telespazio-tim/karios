@@ -2,7 +2,17 @@
 
 # Videos
 
-Short screen recordings showing KARIOS at work: a quickstart, a tour of the HTML report, then six scenarios on real data.
+Short screen recordings showing KARIOS at work: an introduction, a quickstart, a tour of the HTML report, then six scenarios on real data.
+
+## What is KARIOS, what's new in 3.0
+
+Fast tour of the KARIOS features, then the new 3.0 features.
+
+```{raw} html
+<video controls preload="none" width="100%" style="max-width: 960px;">
+  <source src="../_static/videos/karios-3.0-intro.mp4" type="video/mp4">
+</video>
+```
 
 ## Quickstart
 

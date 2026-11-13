@@ -7,12 +7,14 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import re
 from datetime import datetime
+from pathlib import Path
 
 project = "KARIOS"
 copyright = f"2023-{datetime.now().year}, Telespazio"
 author = "telespazio-tim"
-release = "1.0.0"
+release = re.search(r'__version__ = "(.+?)"', (Path(__file__).parents[2] / "karios/version.py").read_text()).group(1)
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

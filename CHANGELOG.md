@@ -1,6 +1,6 @@
 # KARIOS CHANGELOG
 
-## 3.0.0 [unreleased]
+## 3.0.0 [20261113]
 
 ### breaking changes
 
