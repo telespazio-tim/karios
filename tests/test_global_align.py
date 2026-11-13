@@ -3,6 +3,7 @@
 """Unit tests for the SIFT keypoint limit of the global alignment."""
 
 import logging
+import shlex
 import re
 
 import cv2
@@ -1013,7 +1014,9 @@ def test_cli_applies_the_alignment_to_other_bands(tmp_path, monkeypatch):
     result = _invoke(mon.filepath, ref.filepath, "--apply-to", band.filepath, "--out", out)
 
     assert result.exit_code == 0, result.output
-    assert f"--load-transform {out / 'b04_global_alignment.json'}" in result.output
+    assert (
+        f"--load-transform {shlex.quote(str(out / 'b04_global_alignment.json'))}" in result.output
+    )
     aligned_mon = GdalRasterImage(str(out / "b04_global_aligned.tif"))
     aligned_band = GdalRasterImage(str(out / "b03_global_aligned.tif"))
     assert aligned_mon.geo_transform == (500040.0, 10.0, 0.0, 5000020.0, 0.0, -10.0)
