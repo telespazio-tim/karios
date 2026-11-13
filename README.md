@@ -22,7 +22,7 @@ Image matching process does not follow traditional approach because it is based 
 
 As shown in the following picture, KARIOS makes KLT algorithm compatible with remote sensing images embedding suitable pre-processing (image filtering) and post-processing (outlier filtering).
 
-![functional representation](docs/images/algorithm.PNG)
+![functional representation](docs/images/algorithm.png)
 
 > As an optional and experimental feature, KARIOS has the capability to detect large shifts between images. If a large shift is detected, the monitored image is shifted according to the offsets found, and the KLT matching is applied
 >
@@ -34,15 +34,15 @@ Furthermore, KARIOS analyses displacements between the two input image grids in 
 
 ### Geometric Error overview
 
-![Geometric Error overview](docs/images/error_overview.PNG)
+![Geometric Error overview](docs/images/error_overview.png)
 
 ### Geometric accuracy report
 
-![Geometric accuracy report](docs/images/statistical_report.PNG)
+![Geometric accuracy report](docs/images/statistical_report.png)
 
 ### Geometric distortion analysis report
 
-![Geometric distortion analysis report](docs/images/disparity_map.PNG)
+![Geometric distortion analysis report](docs/images/disparity_map.png)
 
 The geometric accuracy report includes the following accuracy metrics, in both directions when relevant:
 - Root Mean Square Error
