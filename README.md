@@ -8,6 +8,8 @@
 
 KLT-based Algorithm for Registration of Images from Observing Systems (KARIOS)
 
+https://github.com/user-attachments/assets/65ec20e5-aea2-4e91-ab26-e55e5d756dd3
+
 ## Introduction
 
 In general, quality assessment processes are fundamental to appreciate how well data is fit for Earth Observation application purposes. Those assessments dedicated to geometric accuracy are rarely open to community. As a consequence, it is difficult to inter compare data based on the same processes and to compare results based on harmonized mapping accuracy metrics.
