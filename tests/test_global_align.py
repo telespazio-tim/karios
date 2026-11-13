@@ -3,8 +3,8 @@
 """Unit tests for the SIFT keypoint limit of the global alignment."""
 
 import logging
-import shlex
 import re
+import shlex
 
 import cv2
 import numpy as np
